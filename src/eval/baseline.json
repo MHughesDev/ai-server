@@ -1,0 +1,5 @@
+[
+  {"id":"gold-ok-chat-1","input":{"request_id":"550e8400-e29b-41d4-a716-446655440001","caller":{"app_id":"eval-app","user_id":"eval-user","org_id":"eval-org"},"input":{"text":"Hello"},"contract_version":"v1"},"expected_status":"ok","max_latency_ms":5000,"expected_pipeline":"reactive_chat"},
+  {"id":"gold-ok-chat-2","input":{"request_id":"550e8400-e29b-41d4-a716-446655440002","caller":{"app_id":"eval-app","user_id":"eval-user","org_id":"eval-org"},"input":{"text":"What is 2+2?"},"contract_version":"v1"},"expected_status":"ok","max_latency_ms":5000},
+  {"id":"gold-ok-chat-3","input":{"request_id":"550e8400-e29b-41d4-a716-446655440003","caller":{"app_id":"eval-app","user_id":"eval-user","org_id":"eval-org"},"input":{"text":"Summarize in one word: flexibility"},"contract_version":"v1"},"expected_status":"ok","max_latency_ms":5000,"expected_pipeline":"reactive_chat"}
+]

@@ -1,0 +1,44 @@
+# L2-01: Required lint, type-check, unit tests, startup smoke.
+# CI runtime target: <= 8 minutes.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test:ci
+
+      # L2-01 §9.3: Dependency vulnerability scanning (fail on critical; high in devDeps is tracked)
+      - name: Audit dependencies
+        run: npm audit --audit-level=critical
+
+      # L2-01 §9.3: Secret scanning – fail if likely secrets in tracked files
+      - name: Check for secrets
+        run: node scripts/check-secrets.js
+
+      - name: Startup smoke
+        run: npm run build && node dist/bootstrap/index.js

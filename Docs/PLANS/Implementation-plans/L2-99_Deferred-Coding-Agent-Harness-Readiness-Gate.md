@@ -3,14 +3,23 @@
 ## 0) Document Control
 - Plan ID: L2-99
 - Plan Name: Deferred Coding Agent Harness Readiness Gate
-- Linked SPEC: `Docs/SPEC/19_Security_and_Isolation_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/19_Security_and_Isolation_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Program Lead, Security Lead
 - Contributors: Platform Lead, Runtime Lead, SRE Lead, QA Lead, Governance Board
-- Status: `draft`
+- Status: `in progress` (implementation complete; gate workflow operational)
 - Priority: `P0`
 - Created: 2026-02-18
 - Last Updated: 2026-02-18
 - Review Cadence: Daily during gate window + formal sign-off session
+
+### Implementation summary (code)
+- **Feature flag**: `governance_harness_readiness_gate_active` in `src/config/schema.ts`; env `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE` (default true).
+- **Governance module**: `src/governance/` — types (scorecard, evidence, risk, decision memo), scorecard calculator and threshold logic, evidence validation (completeness and freshness). See Section 7.1 unit coverage.
+- **Runbook**: `docs/Runbooks/Harness-Readiness-Gate.md` for gate workflow and exception handling.
+- **SPEC**: `docs/SPEC/20_Config_and_FeatureFlags.md` updated with L2-99 flag.
+- **Handoff**: `docs/PLANS/Implementation-plans/L2-99_Handoff.md` — checklist, usage, CI, references.
+- **Templates**: `L2-99_Evidence-Checklist.md` (evidence/owner matrix), `L2-99_Decision-Memo-Template.md` (Phase 3 memo).
+- **Workflow test**: `src/governance/readiness-workflow.test.ts` — evidence → validate → score (Section 7.2).
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose
@@ -62,8 +71,8 @@ Determine whether the platform has met objective readiness criteria to begin con
 
 ### 4.2 Constraints
 - Security constraints: No readiness approval without passing critical security thresholds.
-- Performance constraints: Reliability and SLO evidence must meet minimum maturity baseline.
-- Cost constraints: Projected harness pilot cost must fit approved budget envelope.
+- Performance constraints: Reliability/SLO evidence meets L2-08 Section 8.2 thresholds; gate workflow completes within planned window (see 8.2 here).
+- Cost constraints: Projected harness pilot cost stays within approved governance budget envelope.
 - Compliance constraints: Decision and exceptions must be auditable and time-bound.
 
 ### 4.3 Open Decisions
@@ -96,7 +105,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 - Knowledge transfer: Publish framework to stakeholders.
 
 **Task List**
-- [ ] Task P0-01: Define scoring categories and thresholds.
+- [x] Task P0-01: Define scoring categories and thresholds (implemented in `src/governance/`: dimensions, weights, `DEFAULT_THRESHOLDS`).
 - [ ] Task P0-02: Assign evidence owners for each category.
 - [ ] Task P0-03: Obtain pre-scoring approval from required signatories.
 
@@ -138,7 +147,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 
 **Task List**
 - [ ] Task P1-01: Collect evidence links from all prior plan gates.
-- [ ] Task P1-02: Validate evidence against checklist requirements.
+- [x] Task P1-02: Validate evidence against checklist requirements (implemented: `src/governance/evidence.ts` `validateEvidence`, `isEvidenceComplete`).
 - [ ] Task P1-03: Flag missing or stale artifacts and assign remediation owners.
 
 **Entry Criteria**
@@ -178,7 +187,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 - Knowledge transfer: Draft risk narrative and exception rationale.
 
 **Task List**
-- [ ] Task P2-01: Score each category using frozen thresholds.
+- [x] Task P2-01: Score each category using frozen thresholds (implemented: `src/governance/scorecard.ts` `computeScorecard`, `computeCategoryScore`).
 - [ ] Task P2-02: Review scoring disputes and resolve with evidence.
 - [ ] Task P2-03: Update risk register with owners and due dates.
 
@@ -283,10 +292,10 @@ Determine whether the platform has met objective readiness criteria to begin con
 ## 6) Detailed Backlog (Task Table)
 | Task ID | Description | Owner Role | Estimate | Priority | Dependencies | Definition of Done | Verification Method |
 |---|---|---|---|---|---|---|---|
-| HRG-001 | Define readiness scorecard dimensions and thresholds | Program Lead | 0.75d | P0 | L2-08 | Scorecard framework approved by signatories | Approval record |
+| HRG-001 | Define readiness scorecard dimensions and thresholds | Program Lead | 0.75d | P0 | L2-08 | Scorecard framework approved by signatories | Approval record (code: `src/governance/`) |
 | HRG-002 | Build evidence checklist and owner matrix | Program Lead | 0.5d | P0 | HRG-001 | All criteria have evidence owner assigned | Checklist review |
-| HRG-003 | Collect and validate upstream evidence artifacts | QA Lead | 1.25d | P0 | HRG-002 | Evidence completeness validated | Validation report |
-| HRG-004 | Score readiness and update risk register | Security Lead | 1d | P0 | HRG-003 | Weighted score and risk dispositions complete | Review package |
+| HRG-003 | Collect and validate upstream evidence artifacts | QA Lead | 1.25d | P0 | HRG-002 | Evidence completeness validated | Validation report (code: `validateEvidence`) |
+| HRG-004 | Score readiness and update risk register | Security Lead | 1d | P0 | HRG-003 | Weighted score and risk dispositions complete | Review package (code: `computeScorecard`) |
 | HRG-005 | Conduct formal go/no-go session and capture decision | Program Lead | 0.5d | P0 | HRG-004 | Signed decision memo published | Governance minutes |
 | HRG-006 | Document accepted exceptions and remediation SLAs | Security Lead | 0.5d | P1 | HRG-005 | Exceptions tracked with owners and dates | Exception register |
 | HRG-007 | Draft post-decision pilot/remediation plan | Platform Lead | 0.75d | P1 | HRG-005 | Action plan includes milestones, KPIs, owners | Plan review |
@@ -297,7 +306,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 - Required unit coverage: Scorecard calculators and threshold logic (if automated).
 
 ### 7.2 Integration
-- Required integration scenarios: Evidence ingestion, scoring, and reporting workflow.
+- Required integration scenarios: Evidence ingestion, scoring, and reporting workflow. Implemented: `src/governance/readiness-workflow.test.ts` (evidence → validate → score pass/fail).
 
 ### 7.3 End-to-End
 - Required e2e scenarios: End-to-end readiness workflow from criteria definition to decision memo.
@@ -321,8 +330,9 @@ Determine whether the platform has met objective readiness criteria to begin con
 - Cost targets: Gate process overhead remains within governance budget allocation.
 
 ### 8.3 Alerting and Dashboards
+This project is a UI-less API server; dashboard panels are out of scope and deferred to ops/external tooling (e.g. Grafana).
 - Alerts required: Missing critical evidence, overdue exception remediation, missed sign-off deadlines.
-- Dashboard panels required: Readiness category scores, evidence completeness, open critical risks.
+- Dashboard panels required (if ops provisions): Readiness category scores, evidence completeness, open critical risks.
 
 ## 9) Security and Policy Checks
 ### 9.1 Threats Introduced by This Scope
@@ -341,7 +351,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 
 ## 10) Rollout Strategy
 ### 10.1 Feature Flags
-- Flag name: `governance.harness_readiness_gate_active`
+- Flag name (conceptual): `governance.harness_readiness_gate_active`; **config key**: `governance_harness_readiness_gate_active` in `src/config/schema.ts`; env: `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE`.
 - Default state: true for gate workflow; harness execution flags remain false.
 - Rollout criteria: Not applicable (governance process artifact).
 

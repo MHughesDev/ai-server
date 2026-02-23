@@ -3,10 +3,10 @@
 ## 0) Document Control
 - Plan ID: L2-08
 - Plan Name: Rollout and Operational Readiness Implementation
-- Linked SPEC: `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Operations Lead
 - Contributors: SRE Lead, Platform Lead, Security Lead, Runtime Lead, QA Lead
-- Status: `draft`
+- Status: `in progress`
 - Priority: `P0`
 - Created: 2026-02-18
 - Last Updated: 2026-02-18
@@ -62,8 +62,8 @@ Operationalize all completed capabilities into a controlled production rollout w
 
 ### 4.2 Constraints
 - Security constraints: Production rollouts require approved controls and signed release artifacts.
-- Performance constraints: Canary must meet latency and error thresholds before expansion.
-- Cost constraints: Rollout progression must respect cost guardrails.
+- Performance constraints: Canary p95 within 10% of staging baseline and no sustained error budget burn (see 8.2).
+- Cost constraints: Production cost profile remains within approved guardrails (see 8.2).
 - Compliance constraints: Release and rollback actions must be auditable.
 
 ### 4.3 Open Decisions
@@ -96,9 +96,9 @@ Operationalize all completed capabilities into a controlled production rollout w
 - Knowledge transfer: Release operator guide.
 
 **Task List**
-- [ ] Task P0-01: Finalize CI/CD release workflows and artifact signing.
-- [ ] Task P0-02: Validate deployment manifests across all target environments.
-- [ ] Task P0-03: Add pre-release smoke and verification checks.
+- [ ] Task P0-01: Finalize CI/CD release workflows and artifact signing. *(Operational; pipeline tooling.)*
+- [ ] Task P0-02: Validate deployment manifests across all target environments. *(Operational; SRE.)*
+- [x] Task P0-03: Add pre-release smoke and verification checks. *(Done: runbook pre-deploy checklist, GET /v1/version integration test, bootstrap release-config warning.)*
 
 **Entry Criteria**
 - Criteria: Feature implementation plans complete and stable.
@@ -137,9 +137,9 @@ Operationalize all completed capabilities into a controlled production rollout w
 - Knowledge transfer: Rollback training materials.
 
 **Task List**
-- [ ] Task P1-01: Define canary cohorts and success/failure thresholds.
-- [ ] Task P1-02: Run rollback drills and capture recovery metrics.
-- [ ] Task P1-03: Validate kill-switch controls for major capabilities.
+- [x] Task P1-01: Define canary cohorts and success/failure thresholds. *(Done: `src/rollout/policy.ts` canary thresholds, defaults, parsing.)*
+- [ ] Task P1-02: Run rollback drills and capture recovery metrics. *(Operational.)*
+- [ ] Task P1-03: Validate kill-switch controls for major capabilities. *(Operational; kill-switch is `PLATFORM_PRODUCTION_ROLLOUT_ENABLED` per runbook.)*
 
 **Entry Criteria**
 - Criteria: Staging release pipeline validated.
@@ -178,9 +178,9 @@ Operationalize all completed capabilities into a controlled production rollout w
 - Knowledge transfer: Support handoff and training sessions.
 
 **Task List**
-- [ ] Task P2-01: Finalize critical runbooks and owner mappings.
-- [ ] Task P2-02: Execute incident simulation drills across scenarios.
-- [ ] Task P2-03: Document support escalation pathways and SLAs.
+- [x] Task P2-01: Finalize critical runbooks and owner mappings. *(Done: `docs/Runbooks/Release-and-Rollback.md`; escalation in runbook and SPEC 22.)*
+- [ ] Task P2-02: Execute incident simulation drills across scenarios. *(Operational.)*
+- [ ] Task P2-03: Document support escalation pathways and SLAs. *(Escalation path in runbook and §11.2; SLAs to be set by ops.)*
 
 **Entry Criteria**
 - Criteria: Rollout controls and dashboards functional.
@@ -321,8 +321,9 @@ Operationalize all completed capabilities into a controlled production rollout w
 - Cost targets: Production cost profile remains within approved guardrails.
 
 ### 8.3 Alerting and Dashboards
+This project is a UI-less API server; dashboard panels are out of scope and deferred to ops/external tooling (e.g. Grafana).
 - Alerts required: Canary failure, rollback trigger, health check degradation, release pipeline failure.
-- Dashboard panels required: Rollout stage health, service SLOs, MTTR trend, cost during rollout.
+- Dashboard panels required (if ops provisions): Rollout stage health, service SLOs, MTTR trend, cost during rollout.
 
 ## 9) Security and Policy Checks
 ### 9.1 Threats Introduced by This Scope
@@ -381,14 +382,24 @@ Operationalize all completed capabilities into a controlled production rollout w
 ### 12.4 Documentation Acceptance
 - Criterion: Runbooks, on-call ownership, and escalation paths are complete and approved.
 
-## 13) Post-Implementation Review
-### 13.1 Review Date
+## 13) Implementation Summary (Code and Docs)
+- **Config and feature flags:** `platform_production_rollout_enabled` (default false), env `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`; optional release metadata from `RELEASE_ID`/`BUILD_ID` in `src/config/schema.ts`. Unit tests in `src/config/schema.test.ts`.
+- **Rollout policy:** Canary thresholds and rollout policy parsing in `src/rollout/policy.ts` (parseRolloutPolicy, parseCanaryThresholds, validateReleaseConfig). Unit tests in `src/rollout/policy.test.ts`.
+- **Operational endpoints:** `GET /v1/version` extended with `version` (APP_VERSION), `release_id`, `build_id`, `env` from config for traceability. `GET /healthz`, `GET /readyz`, `GET /metrics` unchanged.
+- **Runbooks:** `docs/Runbooks/Release-and-Rollback.md` added (release execution, canary analysis, rollback operations, emergency mitigation, escalation).
+- **SPEC updates:** `Docs/SPEC/20_Config_and_FeatureFlags.md` (platform_production_rollout_enabled, release metadata, rollout policy reference); `Docs/SPEC/22_Runbooks_and_Operations.md` (Release and Rollback runbook reference).
+- **CI/CD and drills:** Pipeline artifact signing, deployment manifests, and rollback drills remain operational/process tasks; runbook and config support are in place.
+- **Bootstrap:** On startup, `validateReleaseConfig()` is called; production without RELEASE_ID/BUILD_ID logs a non-blocking warning.
+- **Handoff:** `docs/PLANS/Implementation-plans/L2-08_Handoff.md` for L2-99 and Operations (checklist, config, rollout policy, endpoints, runbooks, remaining operational phases).
+
+## 14) Post-Implementation Review
+### 14.1 Review Date
 - Date: 2 weeks after broad production rollout.
 
-### 13.2 Success Metrics Review
+### 14.2 Success Metrics Review
 - Metrics reviewed: Deployment success rate, MTTR, rollback frequency, incident count, canary pass rate.
 - Outcome: To be recorded after review.
 
-### 13.3 Deferred Work
+### 14.3 Deferred Work
 - Follow-up task: Improve deployment automation and predictive canary analysis.
 - Target phase: Post-L2-99 operational improvement backlog.

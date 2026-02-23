@@ -4,6 +4,7 @@
 - Plan ID: PLAN-00
 - Plan Name: Master Delivery Plan (Harness Deferred)
 - Linked SPEC: `Docs/Overview.md`, `Docs/Architecture.md`
+- All known gaps (consolidated by area): `Docs/PLANS/Implementation-plans/Known-Gaps-Consolidated.md`
 - Owner(s): Tech Lead, Platform Lead
 - Contributors: API, Runtime, Security, Ops, QA
 - Status: `draft`
@@ -131,7 +132,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 
 **Task List**
 - [ ] Task P1-01: Complete Plan 01 and verify acceptance criteria.
-- [ ] Task P1-02: Confirm interoperability with policy/routing placeholders.
+- [x] Task P1-02: Confirm interoperability with policy/routing placeholders.
 - [ ] Task P1-03: Publish MVP readiness report.
 
 **Entry Criteria**
@@ -310,8 +311,9 @@ Coordinate all non-harness platform work so the system is production-ready befor
 - Cost targets: Monthly token spend within approved budget envelope.
 
 ### 8.3 Alerting and Dashboards
+This project is a UI-less API server; dashboard panels are out of scope and deferred to ops/external tooling (e.g. Grafana).
 - Alerts required: Error budget burn, denial spikes, latency spikes, cost spikes.
-- Dashboard panels required: Request volume, route mix, policy outcomes, cost per caller.
+- Dashboard panels required (if ops provisions): Request volume, route mix, policy outcomes, cost per caller.
 
 ## 9) Security and Policy Checks
 ### 9.1 Threats Introduced by This Scope

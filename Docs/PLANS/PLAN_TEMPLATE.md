@@ -308,8 +308,9 @@ Describe why this plan exists and what gap it closes.
 - Cost targets:
 
 ### 8.3 Alerting and Dashboards
+This project is a UI-less API server; dashboard panels are out of scope and deferred to ops/external tooling (e.g. Grafana).
 - Alerts required:
-- Dashboard panels required:
+- Dashboard panels required (if ops provisions):
 
 ## 9) Security and Policy Checks
 ### 9.1 Threats Introduced by This Scope

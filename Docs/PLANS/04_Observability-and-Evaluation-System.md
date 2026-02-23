@@ -6,11 +6,12 @@
 - Linked SPEC: `Docs/Overview.md` sections `12`, `18`, `21`, `22`
 - Owner(s): Observability Lead
 - Contributors: Runtime, Control Plane, QA, Security, SRE
-- Status: `draft`
+- Status: `in_progress`
 - Priority: `P0`
 - Created: 2026-02-18
 - Last Updated: 2026-02-18
 - Review Cadence: Weekly
+- Implementation: L2-04 implementation plan in progress; event schema, redaction, trace context, metrics, eval harness and runbook in place. See `Docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` section 14.
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose

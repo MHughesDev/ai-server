@@ -1,0 +1,102 @@
+# Observability and Evaluation Runbook (L2-04)
+
+Runbook for telemetry, metrics, alerts, and evaluation regression. Owner: Observability Lead; escalation: SRE → Runtime → Security.
+
+---
+
+## Missing telemetry / required events
+
+### Symptom
+
+- Trace or event coverage below expected (if using external dashboards, they may show gaps).
+- Required events (SPEC 18): `ROUTE_DECISION`, `POLICY_DECISION`, `BUDGET_ASSIGN`, `PIPELINE_START`/`PIPELINE_END`, `ERROR`, `FINAL_SYNTH`.
+
+### Actions
+
+1. Confirm feature flag: `OBSERVABILITY_REQUIRED_EVENTS_V1` is not `false` in env (see `src/config/schema.ts`).
+2. Check that `setObservability()` is called at startup when the flag is true (`src/server/index.ts`).
+3. Run event coverage tests: `npm run test -- --testPathPattern=observability`.
+4. If a new code path was added, wire event emission at the appropriate boundary (policy, router, pipeline) using `getObservability()?.events.emit(...)`.
+
+### Verification
+
+- Trigger a request to `POST /v1/query` and confirm in logs (or captured events) that POLICY_DECISION, BUDGET_ASSIGN, ROUTE_DECISION, PIPELINE_START, PIPELINE_END, FINAL_SYNTH are present for success path.
+- Run the observability acceptance suite: `npm run acceptance:observability` (validates event taxonomy, redaction, trace context, metrics, eval baseline).
+
+---
+
+## Alert false positives / tuning
+
+### Symptom
+
+- Alerts fire frequently without real incidents; team fatigue.
+
+### Actions
+
+1. Review alert definitions (see **Alert definitions** below). Prefer burn-rate or sustained-window conditions over single-point thresholds.
+2. Add suppression windows for known maintenance or deployment windows if supported by your alert backend.
+3. Demote low-value rules to warning tier or disable until thresholds are recalibrated with baseline data.
+4. Document any threshold change in this runbook and in the L2-04 plan.
+
+### Escalation
+
+- Observability Lead for threshold and rule ownership.
+
+---
+
+## Eval regression triage
+
+### Symptom
+
+- `npm run eval` exits 1; or CI step `eval:ci` (eval harness tests) fails.
+
+### Actions
+
+1. Run locally: `npm run eval` (baseline) or `npm run test -- --testPathPattern=eval/runner`.
+2. Inspect output: which `case_id` failed and whether `status_match`, `latency_ok`, or `pipeline_match` is false.
+3. If a contract or routing change intentionally changes status or pipeline: update `src/eval/baseline.json` (or the failing case) to reflect new expected status/pipeline; add a short comment in the dataset.
+4. If latency regressed: increase `max_latency_ms` for that case only after confirming no real performance regression; otherwise fix the regression first.
+5. If failure is flaky: add retries or relax timing in the harness; avoid over-tight thresholds.
+
+### CI gate
+
+- To block PRs on eval regression: add a CI job that runs `npm run eval` (or `npm run eval:ci`) and fails the build on non-zero exit.
+
+### Verification
+
+- After changing baseline or code, run `npm run eval` and ensure 2/2 (or N/N) passed.
+
+---
+
+## Alert definitions (reference)
+
+Use these as a reference when configuring your alert backend (e.g. Prometheus/Grafana). Exact rule syntax is backend-specific.
+
+| Alert | Condition | Severity | Owner |
+|-------|-----------|----------|--------|
+| Error budget burn | Error rate or failed requests above threshold over window | High | SRE |
+| Latency degradation | p95 latency above SLO (e.g. 2x baseline) for 5m | High | SRE |
+| Missing required events | Event coverage rate below 95% over 15m | Medium | Observability |
+| Cost spike | Cost-by-route or total cost above budget threshold | Medium | SRE / Runtime |
+| Governance deny spike | POLICY_DECISION deny rate or ROUTE_DECISION deny rate spike | Medium | Control Plane |
+
+### SLO targets (L2-04)
+
+- Telemetry overhead: &lt; 5% p95 increase.
+- Telemetry pipeline drop rate: &lt; 0.1%.
+- Observability stack within approved monthly telemetry budget.
+
+---
+
+## GET /metrics
+
+- Endpoint: `GET /metrics` (JSON).
+- Returns: `counters` (key → number), `histograms` (key → `{ count, sum }`).
+- Metric names: `requests_total`, `errors_total`, `request_latency_ms`, `route_total`, etc. Labels are allowlisted to control cardinality.
+
+---
+
+## Escalation
+
+- **Alert owner:** SRE on-call, secondary Runtime.
+- **Path:** SRE → Runtime → Security (for data leakage or audit concerns).

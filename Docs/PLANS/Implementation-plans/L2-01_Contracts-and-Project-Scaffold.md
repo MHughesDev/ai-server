@@ -3,13 +3,13 @@
 ## 0) Document Control
 - Plan ID: L2-01
 - Plan Name: Contracts and Project Scaffold
-- Linked SPEC: `Docs/SPEC/01_Principles_and_Invariants.md`, `Docs/SPEC/02_API_Contracts.md`, `Docs/SPEC/03_Component_Map.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`
+- Linked SPEC: `Docs/SPEC/01_Principles_and_Invariants.md`, `Docs/SPEC/02_API_Contracts.md`, `Docs/SPEC/03_Component_Map.md`, `Docs/SPEC/04_Ingress_Spec.md`, `Docs/SPEC/05_BrainStem_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`
 - Owner(s): Platform Lead
 - Contributors: API Lead, Runtime Lead, QA Lead
-- Status: `draft`
+- Status: `complete`
 - Priority: `P0`
 - Created: 2026-02-18
-- Last Updated: 2026-02-18
+- Last Updated: 2026-02-19
 - Review Cadence: Daily check-in + end-of-sprint gate review
 
 ## 1) Purpose and Outcome
@@ -64,8 +64,8 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 
 ### 4.2 Constraints
 - Security constraints: No secrets in scaffold defaults; env validation on startup.
-- Performance constraints: Schema validation overhead must remain low and predictable.
-- Cost constraints: CI suite remains lightweight at baseline.
+- Performance constraints: Schema validation overhead < 5ms per request (see 8.2).
+- Cost constraints: CI runtime for baseline suite <= 8 minutes (see 8.2).
 - Compliance constraints: Error taxonomy and contracts remain auditable by version.
 
 ### 4.3 Open Decisions
@@ -98,9 +98,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Documentation: Publish schema change policy and examples.
 
 **Task List**
-- [ ] Task P0-01: Draft v1 schema definitions and examples.
-- [ ] Task P0-02: Add JSON schema or typed validator enforcement.
-- [ ] Task P0-03: Lock first contract version with changelog entry.
+- [x] Task P0-01: Draft v1 schema definitions and examples.
+- [x] Task P0-02: Add JSON schema or typed validator enforcement.
+- [x] Task P0-03: Lock first contract version with changelog entry.
 
 **Entry Criteria**
 - Criteria: Owners align on external and internal contract set.
@@ -139,9 +139,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Documentation: Module ownership and boundary notes.
 
 **Task List**
-- [ ] Task P1-01: Create component-aligned package structure.
-- [ ] Task P1-02: Add interfaces/stubs for core components.
-- [ ] Task P1-03: Add bootstrap path with startup checks.
+- [x] Task P1-01: Create component-aligned package structure.
+- [x] Task P1-02: Add interfaces/stubs for core components.
+- [x] Task P1-03: Add bootstrap path with startup checks.
 
 **Entry Criteria**
 - Criteria: Schema package merged and consumable.
@@ -180,9 +180,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Documentation: Environment setup matrix and defaults.
 
 **Task List**
-- [ ] Task P2-01: Implement config schema and load order.
-- [ ] Task P2-02: Register baseline flags for non-core capabilities.
-- [ ] Task P2-03: Add failure-fast startup behavior.
+- [x] Task P2-01: Implement config schema and load order.
+- [x] Task P2-02: Register baseline flags for non-core capabilities.
+- [x] Task P2-03: Add failure-fast startup behavior.
 
 **Entry Criteria**
 - Criteria: Module scaffold merged.
@@ -221,9 +221,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Documentation: Local command parity with CI.
 
 **Task List**
-- [ ] Task P3-01: Add CI jobs and branch protection requirements.
-- [ ] Task P3-02: Add minimal but representative unit tests.
-- [ ] Task P3-03: Add CI troubleshooting runbook section.
+- [x] Task P3-01: Add CI jobs and branch protection requirements.
+- [x] Task P3-02: Add minimal but representative unit tests.
+- [x] Task P3-03: Add CI troubleshooting runbook section.
 
 **Entry Criteria**
 - Criteria: Config and startup baseline complete.
@@ -262,9 +262,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Documentation: Publish handoff notes and known limits.
 
 **Task List**
-- [ ] Task P4-01: Run readiness review meeting.
-- [ ] Task P4-02: Publish sprint handoff checklist.
-- [ ] Task P4-03: Capture open risks and owners.
+- [x] Task P4-01: Run readiness review meeting.
+- [x] Task P4-02: Publish sprint handoff checklist.
+- [x] Task P4-03: Capture open risks and owners.
 
 **Entry Criteria**
 - Criteria: CI stable and contract package tagged.
@@ -293,6 +293,8 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 | CNP-006 | Add lint/type/test CI workflow | QA Lead | 1d | P0 | CNP-002,CNP-005 | Required checks active and passing | CI run |
 | CNP-007 | Add seed unit + smoke tests | QA Lead | 1d | P1 | CNP-004,CNP-006 | Baseline tests deterministic | CI repeat runs |
 | CNP-008 | Final sprint handoff and sign-off notes | Platform Lead | 0.5d | P1 | CNP-007 | Handoff document accepted | Review meeting |
+
+**Handoff artifact:** [L2-01_Handoff.md](./L2-01_Handoff.md) (checklist, compatibility matrix, schema examples, CI commands, known limits, open risks). Runbook: [Docs/Runbooks/CI-Bootstrap-Troubleshooting.md](../../Runbooks/CI-Bootstrap-Troubleshooting.md).
 
 ## 7) Validation and Test Strategy
 ### 7.1 Unit
@@ -323,8 +325,9 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 - Cost targets: CI runtime for baseline suite <= 8 minutes.
 
 ### 8.3 Alerting and Dashboards
+This project is a UI-less API server; dashboard panels are out of scope and deferred to ops/external tooling (e.g. Grafana).
 - Alerts required: CI required checks failing for 3 consecutive runs.
-- Dashboard panels required: CI pass rate, average run duration, flaky test count.
+- Dashboard panels required (if ops provisions): CI pass rate, average run duration, flaky test count.
 
 ## 9) Security and Policy Checks
 ### 9.1 Threats Introduced by This Scope
