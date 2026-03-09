@@ -1,6 +1,6 @@
 /**
  * PipelinePlan – internal Router output (concrete execution setup).
- * @see Docs/Overview.md, Docs/Architecture.md (6.4), SPEC 13
+ * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.4), SPEC 13
  */
 import { z } from "zod";
 declare const BudgetsSchema: z.ZodObject<{
@@ -22,7 +22,7 @@ declare const BudgetsSchema: z.ZodObject<{
 export declare const PipelinePlanSchema: z.ZodObject<{
     pipeline_type: z.ZodString;
     strategy_id: z.ZodOptional<z.ZodString>;
-    execution_mode: z.ZodDefault<z.ZodEnum<["sync_stream", "async_job"]>>;
+    execution_mode: z.ZodDefault<z.ZodLiteral<"sync_stream">>;
     budgets: z.ZodOptional<z.ZodObject<{
         token_budget: z.ZodOptional<z.ZodNumber>;
         tool_budget: z.ZodOptional<z.ZodNumber>;
@@ -59,6 +59,20 @@ export declare const PipelinePlanSchema: z.ZodObject<{
     }>>;
     /** Tools enabled for this run */
     tools_enabled: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
+    /** L2-05: Sandbox options for tool execution (Architecture §12). */
+    sandbox: z.ZodOptional<z.ZodObject<{
+        timeout_ms: z.ZodOptional<z.ZodNumber>;
+        network_access: z.ZodOptional<z.ZodBoolean>;
+        filesystem_access: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        timeout_ms?: number | undefined;
+        network_access?: boolean | undefined;
+        filesystem_access?: boolean | undefined;
+    }, {
+        timeout_ms?: number | undefined;
+        network_access?: boolean | undefined;
+        filesystem_access?: boolean | undefined;
+    }>>;
     /** Memory config */
     memory: z.ZodOptional<z.ZodObject<{
         retrieval: z.ZodOptional<z.ZodString>;
@@ -82,9 +96,13 @@ export declare const PipelinePlanSchema: z.ZodObject<{
     }>>;
 }, "strip", z.ZodTypeAny, {
     pipeline_type: string;
-    execution_mode: "sync_stream" | "async_job";
-    verification_level: "none" | "strict" | "basic";
+    execution_mode: "sync_stream";
+    verification_level: "strict" | "none" | "basic";
     tools_enabled: string[];
+    memory?: {
+        retrieval?: string | undefined;
+        top_k?: number | undefined;
+    } | undefined;
     strategy_id?: string | undefined;
     budgets?: {
         deadline_ms?: number | undefined;
@@ -99,9 +117,10 @@ export declare const PipelinePlanSchema: z.ZodObject<{
         executor?: string | undefined;
         vision?: string | undefined;
     } | undefined;
-    memory?: {
-        retrieval?: string | undefined;
-        top_k?: number | undefined;
+    sandbox?: {
+        timeout_ms?: number | undefined;
+        network_access?: boolean | undefined;
+        filesystem_access?: boolean | undefined;
     } | undefined;
     verification?: {
         enabled: boolean;
@@ -109,8 +128,12 @@ export declare const PipelinePlanSchema: z.ZodObject<{
     } | undefined;
 }, {
     pipeline_type: string;
+    memory?: {
+        retrieval?: string | undefined;
+        top_k?: number | undefined;
+    } | undefined;
     strategy_id?: string | undefined;
-    execution_mode?: "sync_stream" | "async_job" | undefined;
+    execution_mode?: "sync_stream" | undefined;
     budgets?: {
         deadline_ms?: number | undefined;
         token_budget?: number | undefined;
@@ -118,7 +141,7 @@ export declare const PipelinePlanSchema: z.ZodObject<{
         cost_budget_usd?: number | undefined;
     } | undefined;
     constraints?: Record<string, unknown> | undefined;
-    verification_level?: "none" | "strict" | "basic" | undefined;
+    verification_level?: "strict" | "none" | "basic" | undefined;
     fallback_plan?: Record<string, unknown> | undefined;
     models?: {
         planner?: string | undefined;
@@ -126,9 +149,10 @@ export declare const PipelinePlanSchema: z.ZodObject<{
         vision?: string | undefined;
     } | undefined;
     tools_enabled?: string[] | undefined;
-    memory?: {
-        retrieval?: string | undefined;
-        top_k?: number | undefined;
+    sandbox?: {
+        timeout_ms?: number | undefined;
+        network_access?: boolean | undefined;
+        filesystem_access?: boolean | undefined;
     } | undefined;
     verification?: {
         enabled: boolean;

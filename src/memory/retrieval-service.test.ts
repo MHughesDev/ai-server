@@ -4,6 +4,7 @@
 
 import { runRetrieval, scopeKeysFromCaller } from "./retrieval-service.js";
 import { InMemoryStore } from "./in-memory-store.js";
+import type { IMemoryStore } from "./memory-abstraction.js";
 
 describe("scopeKeysFromCaller", () => {
   it("maps caller to scope_keys", () => {
@@ -52,5 +53,44 @@ describe("runRetrieval", () => {
     expect(out.result.degraded).toBe(true);
     expect(out.contextText).toBe("");
     expect(out.citations).toEqual([]);
+  });
+
+  it("times out retrieval and returns deterministic degraded fallback", async () => {
+    const slowStore: IMemoryStore = {
+      async retrieve() {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { hits: [] };
+      },
+    };
+    const out = await runRetrieval(slowStore, {
+      query_text: "anything",
+      scope: "org",
+      caller: { org_id: "o1" },
+      retrieval_timeout_ms: 5,
+    });
+    expect(out.result.degraded).toBe(true);
+    expect(out.result.hits).toEqual([]);
+    expect(out.contextText).toBe("");
+    expect(out.citations).toEqual([]);
+  });
+
+  it("truncates contextText to configured max_context_chars", async () => {
+    const store = new InMemoryStore();
+    await store.ingest({
+      document_id: "doc1",
+      text: "alpha ".repeat(300),
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+      source_label: "long.txt",
+    });
+    const out = await runRetrieval(store, {
+      query_text: "alpha",
+      scope: "org",
+      caller: { org_id: "o1" },
+      top_k: 5,
+      max_context_chars: 120,
+    });
+    expect(out.contextText.length).toBeLessThanOrEqual(120);
+    expect(out.contextText.length).toBeGreaterThan(0);
   });
 });

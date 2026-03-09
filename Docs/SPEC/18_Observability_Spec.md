@@ -1,15 +1,41 @@
 # 18 Observability Spec
 
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Section 13 and Section 18.8).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (event retention, sink durability/backpressure, sampling, bounded cardinality).
+
 ## Purpose
-End-to-end visibility across routing, execution, verification, and cost.
+Provide end-to-end traceability for governance decisions, workflow execution, costs, and failures.
 
-## Required Events
-`ROUTE_DECISION`, `POLICY_DECISION`, `BUDGET_ASSIGN`, `PIPELINE_START/END`, `TOOL_START/END`, `MEMORY_QUERY/WRITE`, `VERIFY_RESULT`, `FINAL_SYNTH`, `ERROR`.
+## Required Event Taxonomy
+- `ROUTE_DECISION`
+- `POLICY_DECISION`
+- `BUDGET_ASSIGN`
+- `PIPELINE_START` / `PIPELINE_END`
+- `WORKFLOW_START` / `WORKFLOW_END`
+- `ENGINE_START` / `ENGINE_END`
+- `TOOL_START` / `TOOL_END`
+- `MEMORY_QUERY` / `MEMORY_WRITE`
+- `VERIFY_RESULT`
+- `FINAL_SYNTH`
+- `ERROR`
+- `HARNESS_ITERATION` (when autonomous harness loop is enabled)
 
-Implementation: Event schema and taxonomy are defined in `src/observability/events.ts`; emitters apply redaction per `src/observability/redact.ts`. See L2-04 Implementation Summary.
+## Signal Types
+- Tracing (trace_id continuity).
+- Metrics (latency, throughput, errors, cost).
+- Structured logs (redacted).
+- Event stream/sink for retention and replay use cases.
 
-## Signals
-Traces, metrics, structured logs, and optional event stream. Trace context (`trace_id`, `request_id`) is propagated via `src/observability/context.ts`. Metrics are exposed at `GET /metrics` with cardinality-controlled labels. **Long-term retention:** set an optional event sink via `setEventSink` (e.g. `createFileEventSink(path)`); enable with `OBSERVABILITY_EVENT_SINK_PATH`. Events are written after sampling and redaction (one JSON line per event, NDJSON). Custom sinks (e.g. OTEL exporter) can implement `IEventSink`.
+## `/metrics` Behavior
+- Default JSON response for counters/histograms.
+- Prometheus exposition when `Accept: text/plain` or `?format=prometheus`.
 
-## Privacy
-Policy-driven redaction and no raw secret logging. Redaction levels: none, minimal, full (allowlist in `src/observability/redact.ts`).
+## Privacy and Redaction
+- Redaction level is policy-driven and applied before log/event/audit sink writes.
+- Raw secrets are never emitted.
+
+## Production Requirements
+- Event/audit sinks are non-blocking and operationally bounded.
+- Sink settings are config-validated before serving production traffic.
+- Metrics/cardinality and in-memory capture buffers are bounded for long-running services.

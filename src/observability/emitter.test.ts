@@ -32,6 +32,21 @@ describe("createEmitter", () => {
     expect(captured[0].payload).not.toHaveProperty("password");
     expect((captured[0].payload as { token_budget: number }).token_budget).toBe(4096);
   });
+
+  it("bounds capture buffer size when maxCaptureSize is set", () => {
+    const captured: TelemetryEvent[] = [];
+    const emitter = createEmitter({ capture: captured, maxCaptureSize: 3 });
+    for (let i = 0; i < 5; i++) {
+      emitter.emit({
+        event_type: "POLICY_DECISION",
+        request_id: `req-${i}`,
+        payload: { idx: i },
+      });
+    }
+    expect(captured).toHaveLength(3);
+    expect(captured[0].request_id).toBe("req-2");
+    expect(captured[2].request_id).toBe("req-4");
+  });
 });
 
 describe("noopEmitter", () => {

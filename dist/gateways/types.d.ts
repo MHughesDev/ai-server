@@ -1,6 +1,6 @@
 /**
  * Gateways – Model, Tool, Memory abstractions.
- * @see Docs/SPEC/15_ModelGateway_Spec, 16_ToolGateway_Spec, 17_MemoryAbstraction
+ * @see docs/SPEC/15_ModelGateway_Spec, 16_ToolGateway_Spec, 17_MemoryAbstraction
  */
 /** Completion request for model gateway */
 export interface ModelCompletionRequest {
@@ -22,18 +22,37 @@ export interface IModelGateway {
     complete(request: ModelCompletionRequest): Promise<ModelCompletionResult>;
 }
 /** Tool invocation request (L2-05+ deny/stub only) */
+export interface ToolCallerIdentity {
+    org_id: string;
+    app_id: string;
+    user_id: string;
+    session_id?: string;
+    roles?: string[];
+    trace_id?: string;
+    invocation_id?: string;
+}
 export interface ToolInvokeRequest {
     tool_id: string;
     params?: Record<string, unknown>;
+    caller_identity?: ToolCallerIdentity;
 }
-/** Tool result – deny-only in L2-05 */
-export interface ToolInvokeResult {
+/** Tool result – deny case (L2-05) */
+export interface ToolInvokeResultDenied {
     allowed: false;
     reason: string;
     message: string;
     tool_id: string;
 }
-/** Tool gateway interface – L2-05 deny/stub-only; no real execution */
+/** Tool result – allowed case with structured result (M3, Architecture §12) */
+export interface ToolInvokeResultAllowed {
+    allowed: true;
+    tool_id: string;
+    result?: unknown;
+    duration_ms?: number;
+}
+/** Tool invocation result – discriminated union */
+export type ToolInvokeResult = ToolInvokeResultDenied | ToolInvokeResultAllowed;
+/** Tool gateway interface – L2-05 deny/stub; M3 allowlist + sandbox */
 export interface IToolGateway {
     invoke(request: ToolInvokeRequest): Promise<ToolInvokeResult>;
 }

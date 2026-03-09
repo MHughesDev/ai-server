@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-01
 - Plan Name: Platform Foundation and Contracts
-- Linked SPEC: `Docs/Overview.md` sections `00-03`, `20`; `Docs/Architecture.md` sections `5-7`
+- Linked SPEC: `docs/Overview.md` sections `00-03`, `20`; `docs/Architecture_document_Finalized.md` sections `5-7`
 - Owner(s): Platform Lead
 - Contributors: API Lead, Runtime Lead, QA Lead
 - Status: `draft`

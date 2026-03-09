@@ -1,5 +1,10 @@
 # Multimodal Input Path Runbook (L2-07)
 
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Sections 2, 9.1, 11, 18.2).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
 ## Overview
 When `MULTIMODAL_INPUT_PATH_ENABLED=true`, the server validates attachments (type, size, count, mime) at ingress and routes requests with image/file modality only to pipelines that support multimodal (e.g. `reactive_chat` when `ENABLE_MULTIMODAL_PIPELINE=true`).
 

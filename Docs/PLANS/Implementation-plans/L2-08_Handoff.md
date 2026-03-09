@@ -64,7 +64,7 @@ Config schema: `src/config/schema.ts`. Load order and validation: `loadConfigFro
 |---------|---------|
 | `GET /healthz` | Liveness; returns `{ status: "ok" }`. |
 | `GET /readyz` | Readiness; returns `{ ready: true }`. |
-| `GET /metrics` | JSON counters and histograms (see Observability spec). |
+| `GET /metrics` | JSON counters and histograms by default; Prometheus exposition text when `Accept: text/plain` or `?format=prometheus` (see SPEC 18 Observability). |
 | `GET /v1/version` | Version and traceability: `contract_version`, `api`, `version`, `env`; when set `release_id`, `build_id`. |
 
 Pre-deploy smoke (runbook): hit healthz, readyz, and version after deploy; confirm version/release_id/build_id and env.
@@ -73,12 +73,12 @@ Pre-deploy smoke (runbook): hit healthz, readyz, and version after deploy; confi
 
 ## 5) Runbooks and escalation
 
-- **Release and Rollback:** `docs/Runbooks/Release-and-Rollback.md`  
+- **Release and Rollback:** `docs/Runbooks/Release-and-Rollback.md` (or `docs/Runbooks/` — check both path forms)  
   Release execution, canary analysis, rollback steps, emergency mitigation, kill-switch, escalation path.
 
 - **Escalation (L2-08):** Operations on-call → SRE → Security → Leadership incident commander.
 
-- **Other runbooks:** Observability-and-Eval, CI-Bootstrap-Troubleshooting; see `Docs/SPEC/22_Runbooks_and_Operations.md`.
+- **Other runbooks:** Observability-and-Eval, CI-Bootstrap-Troubleshooting; see `docs/SPEC/22_Runbooks_and_Operations.md` or `docs/SPEC/22_Runbooks_and_Operations.md`.
 
 ---
 
@@ -107,9 +107,10 @@ Release config validation runs at bootstrap: in production, if neither RELEASE_I
 
 ## 8) References
 
-- Plan: `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
-- Config/feature flags: `Docs/SPEC/20_Config_and_FeatureFlags.md`
-- Runbooks: `Docs/SPEC/22_Runbooks_and_Operations.md`
-- Release runbook: `docs/Runbooks/Release-and-Rollback.md`
+- Plan: `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md` (or `docs/PLANS/`)
+- **SOW:** Segment L (L.2a–L.3b, L.5) verifies L2-08 endpoints, runbooks, rollout/on-call documentation; see `docs/PLANS/Scope-of-Work.md` §4.1, §9 Segment L.
+- Config/feature flags: `docs/SPEC/20_Config_and_FeatureFlags.md` or `docs/SPEC/20_Config_and_FeatureFlags.md`
+- Runbooks index: `docs/SPEC/22_Runbooks_and_Operations.md` or `docs/SPEC/22_Runbooks_and_Operations.md`. SOW L.2b: add sections to Release-and-Rollback or create **Query-and-Policy-Failures.md** (query failure, tool denied, budget exceeded).
+- Release runbook: `docs/Runbooks/Release-and-Rollback.md` or `docs/Runbooks/Release-and-Rollback.md`
 - Rollout module: `src/rollout/`
 - Config: `src/config/schema.ts`

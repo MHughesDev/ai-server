@@ -1,9 +1,9 @@
 /**
  * Ingress validation – deterministic envelope validation and rejection.
- * @see Docs/SPEC/04_Ingress_Spec.md, L2-02 Phase 0
+ * @see docs/SPEC/04_Ingress_Spec.md, L2-02 Phase 0
  */
 import { type ErrorCode, ERROR_CODES, getErrorMeta } from "../contracts/errors.js";
-import type { IngressResult } from "./types.js";
+import type { IngressResult, CallerContext } from "./types.js";
 import { type AttachmentValidationLimits } from "./attachments.js";
 export interface IngressValidateOptions {
     /** Max body size in bytes */
@@ -22,6 +22,10 @@ export interface IngressValidateOptions {
     multimodalInputPathEnabled?: boolean;
     /** L2-07: Attachment limits when multimodalInputPathEnabled; defaults from getDefaultAttachmentLimits() */
     attachmentLimits?: Partial<AttachmentValidationLimits>;
+    /** Verified caller context from auth token claims. */
+    verifiedCallerContext?: CallerContext;
+    /** When verified caller context exists, enforce body caller strict-match (default true). */
+    enforceCallerMatch?: boolean;
 }
 /**
  * Validate and normalize request envelope; returns IngressResult or throws IngressRejection.

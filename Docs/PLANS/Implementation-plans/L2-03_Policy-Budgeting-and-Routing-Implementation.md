@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: L2-03
 - Plan Name: Policy Budgeting and Routing Implementation
-- Linked SPEC: `Docs/SPEC/01_Principles_and_Invariants.md`, `Docs/SPEC/03_Component_Map.md`, `Docs/SPEC/06_ControlPlane_Spec.md`, `Docs/SPEC/07_PolicyEngine_Spec.md`, `Docs/SPEC/08_StrategyEngine_Spec.md`, `Docs/SPEC/09_ResourceManager_Spec.md`, `Docs/SPEC/13_Router_and_Dispatch_Spec.md`, `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/19_Security_and_Isolation_Spec.md`
+- Linked SPEC: `docs/SPEC/01_Principles_and_Invariants.md`, `docs/SPEC/03_Component_Map.md`, `docs/SPEC/06_ControlPlane_Spec.md`, `docs/SPEC/07_PolicyEngine_Spec.md`, `docs/SPEC/08_StrategyEngine_Spec.md`, `docs/SPEC/09_ResourceManager_Spec.md`, `docs/SPEC/13_Router_and_Dispatch_Spec.md`, `docs/SPEC/18_Observability_Spec.md`, `docs/SPEC/19_Security_and_Isolation_Spec.md`
 - Owner(s): Control Plane Lead
 - Contributors: Policy Lead, Router Lead, Runtime Lead, QA Lead
 - Status: `complete`
@@ -47,13 +47,13 @@ Implement enforceable governance controls so no request can execute without expl
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` complete.
+- `docs/PLANS/Implementation-plans/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` complete.
 - Contracts from L2-01 stable.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
 
 ### 3.3 External Dependencies
 - Stakeholder-approved baseline policies by role/org class.

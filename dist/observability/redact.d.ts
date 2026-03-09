@@ -1,6 +1,6 @@
 /**
  * Redaction utility for logs, events, and traces.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
  */
 export type RedactionLevel = "none" | "minimal" | "full";
 /**

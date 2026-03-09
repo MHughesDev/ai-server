@@ -15,7 +15,7 @@
 | Trace context propagation | Pass | `context.ts` + acceptance suite – request_id/trace_id on all events when context set |
 | Core metrics | Pass | `metrics.ts`; acceptance suite asserts request/latency metrics after query |
 | Eval regression | Pass | `npm run eval` / `eval:ci`; baseline gold dataset passes; acceptance suite runs baseline and asserts all pass |
-| Alert definitions documented | Pass | `docs/Runbooks/Observability-and-Eval.md` – reference definitions and escalation |
+| Alert definitions documented | Pass | `docs/Runbooks/Observability-and-Eval.md` or `docs/Runbooks/` – reference definitions and escalation |
 | Final acceptance suite | Pass | `npm run acceptance:observability` – 6 tests (event taxonomy, trace id, redaction, metrics, eval baseline, context propagation) |
 
 ---
@@ -50,6 +50,6 @@
 - Required event fields and redaction policy: `src/observability/events.ts`, `redact.ts`
 - Trace context: `getTraceContext()`, `runWithContextAsync()`; emit via `getObservability()?.events.emit(...)`
 - Eval: extend `src/eval/baseline.json` for new behaviors; run `npm run eval` before release
-- Runbook: `docs/Runbooks/Observability-and-Eval.md` – missing telemetry, alert tuning, eval triage, alert definitions reference
+- Runbook: `docs/Runbooks/Observability-and-Eval.md` or `docs/Runbooks/Observability-and-Eval.md` – missing telemetry, alert tuning, eval triage, alert definitions reference
 
 L2-05 and L2-06 can start with complete observability support; downstream teams consume governance event contracts and trace/metric hooks as documented in L2-04 Handoff.

@@ -1,15 +1,34 @@
 # 19 Security and Isolation Spec
 
-## Threats
-Prompt injection, cross-tenant leakage, tool-based exfiltration, unauthorized side effects, resource abuse.
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 12, 18.1, 18.2, 18.6, 18.7, 18.8).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (identity binding, endpoint exposure, secrets/audit hardening, tool sandbox enforcement).
 
-## Controls
-Sandboxed tools, scoped secrets, strict memory boundaries, content sanitization, policy-as-code checks, immutable security audit logs.
+## Threat Model
+- Cross-tenant impersonation or leakage.
+- Prompt/tool-assisted exfiltration.
+- Unauthorized side effects via tools.
+- Secret exposure in logs/events.
+- Governance bypass in execution paths.
 
-## Compliance
-Retention/deletion controls and incident evidence requirements.
+## Core Controls
+- Identity-bound auth and trust-token exchange.
+- Deterministic policy enforcement at dispatch and gateway boundaries.
+- Tool sandbox controls with deny-by-default allowlists.
+- Memory scope isolation and provenance.
+- Redacted observability and tamper-evident audit trails.
 
-## L2-05 Implementation Notes
-- **Audit:** Append-only tamper-evident audit log with hash chain (`sequence_id`, `previous_event_hash`, `event_hash`). Security-relevant events: SECURITY_POLICY_DECISION, SECURITY_ROUTE_DENY, SECURITY_ERROR.
-- **Secrets:** Scoped resolution by caller `orgId` and `scopes`; scope format `org_id` or `role:roleName`. Violations throw and are metered.
-- **Tool Gateway:** Deny/stub-only in this cycle; all `invoke()` return structured deny. No real tool execution until future controlled enablement.
+## Identity and Auth Target State
+- `POST /v1/query` requires server-issued AI JWT.
+- `POST /token/exchange` validates registered IdP token + app credentials before minting trust token.
+- Body `caller` fields must strict-match claims when present.
+- Unknown issuer/signature/audience/scope mismatch fail closed.
+
+## Audit and Compliance
+- Security events are append-only and integrity-protected.
+- Secrets are never written to logs/events/audit.
+- Retention and incident-evidence requirements must be operationally enforced.
+
+## Current-State Notes
+- Some auth and endpoint controls remain incomplete for production.
+- Tool execution and secrets integration still include stub/deferred paths in current implementation.

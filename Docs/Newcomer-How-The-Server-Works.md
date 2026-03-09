@@ -1,194 +1,226 @@
-# How the Server Works — A High-Level Guide
+# How the Server Works (Newcomer Guide)
 
-This document explains **how** the AI server works from end to end, in **strict processing order**. It is written for anyone who wants to understand the system conceptually, without implementation details.
+This is the practical onboarding guide for understanding how requests move through the AI server today.
 
----
+For the broader architecture map, read `World-Model-Codebase.md` first.
 
 ## What This Server Is
 
-The server is a **central AI endpoint** that applications call with a single request. The server’s job is to:
+This repository is a UI-less AI API server with one main runtime endpoint (`POST /v1/query`).
+
+The server's job is to:
+
+- validate and normalize incoming requests
+- determine intent and governance constraints
+- pick and execute the right pipeline
+- enforce policy/budget/tool/memory controls
+- return one response envelope with telemetry
+
+## Read Order (Fast Onboarding)
+
+1. `Docs/World-Model-Codebase.md` (mental map)
+2. `src/server/routes.ts` (HTTP endpoints)
+3. `src/server/query-handler.ts` (main orchestration)
+4. `src/controlplane` + `src/router` (governance and routing)
+5. `src/pipelines` + `src/engines` (execution behavior)
+6. `src/gateways` + `src/memory` (external and stateful boundaries)
+
+## Golden Boundary: Where Cognition Starts
+
+- Ingress (`src/ingress`) is deterministic validation and identity handling.
+- Brain Stem (`src/brainstem`) is where request meaning starts (canonicalization + intent hints).
+- Everything after Brain Stem is governance and execution under explicit controls.
+
+This boundary is the core safety/design invariant.
+
+## End-to-End Query Flow (Strict Order)
+
+For every `POST /v1/query`:
+
+1. **Route + body read**
+   - `routes.ts` reads JSON with size/time protections (`readJsonBody`).
+2. **Auth + ingress validation**
+   - AI JWT is verified (`verifyQueryCallerFromAuthHeader`).
+   - envelope and attachment validation runs (`validateIngress`).
+   - caller/body strict-match is enforced when token claims are present.
+3. **Rate limit**
+   - fixed-window query limiter runs (`checkQueryRateLimit`).
+4. **Canonicalize**
+   - `canonicalize(...)` produces `CanonicalRequest`.
+5. **Intent extraction**
+   - `extractIntent(...)` emits `IntentBundle` routing hints.
+6. **Control plane**
+   - policy evaluation -> budget checks -> route planning.
+7. **Dispatch gate**
+   - no execution unless allow + pipeline plan are present.
+8. **Optional retrieval**
+   - retrieval context can be assembled before pipeline for non-chat workflows.
+   - reactive chat can run retrieval through Memory Engine inside the pipeline.
+9. **Pipeline run**
+   - selected pipeline executes engines via gateways.
+   - run is wrapped in deadline enforcement.
+10. **Response + telemetry**
+    - envelope returned.
+    - metrics/events/audit/tenant usage updated.
 
-- Figure out **what** the user wants (intent).
-- Decide **how** to answer (which pipeline to use).
-- Use **models**, **tools**, and **memory** only when allowed and within limits.
-- Return one coherent response, with full traceability of what happened.
+## Runtime Endpoints
 
-**One entry point, many possible internal paths.** The server chooses the path; the client does not.
+Implemented in `src/server/routes.ts`:
 
----
+- `POST /v1/query`
+- `POST /token/exchange`
+- `GET /healthz`
+- `GET /readyz`
+- `GET /metrics`
+- `GET /v1/version`
 
-## The Golden Rule: Where Intelligence Starts
+Operational endpoints can require `OPERATIONAL_BEARER_TOKEN`.
 
-- **Before “Brain Stem”:** the server does **no** AI reasoning. It only checks identity, limits, and request shape. This is “mindless” by design.
-- **After “Brain Stem”:** the first place that interprets meaning and decides strategy is the Brain Stem. All cognition starts there.
+## Pipeline Types You Will See
 
-That split keeps security and policy enforcement predictable and independent of model behavior.
+Router and query handler currently wire these main paths:
 
----
+- `reactive_chat`
+  - execution -> synthesis
+  - optional memory retrieval via Memory Engine
+- `coding_agent`
+  - execution -> tool -> evaluation -> synthesis
+  - optional autonomous `(execution <-> tool)*` loop behind `harness_autonomous_execution_enabled`
+- `deep_research`
+  - execution -> evaluation -> synthesis
+  - returns structured research output
+- `decision`
+  - execution -> evaluation -> synthesis
+  - returns structured decision memo output
+- nested workflow pipelines (`tool_automation`, `extraction`, `verification`, `planning_only`, `batch_analysis`, `composite_example`)
+  - executed by workflow runner over workflow definitions
 
-## Query Processing Order (Step-by-Step)
+## Core Contracts to Understand
 
-The following steps happen **in this exact order** for every `POST /v1/query` request.
+External:
 
-| # | Stage | What happens | No AI? |
-|---|-------|----------------|--------|
-| 1 | [HTTP & Ingress](#1-http--ingress) | Request received, body read, validated; caller identity and envelope produced. | ✓ |
-| 2 | [Brain Stem — Canonicalize](#2-brain-stem--canonicalize) | Input normalized to a single internal form (text, attachments, modalities, token estimate). | ✓ |
-| 3 | [Brain Stem — Intent](#3-brain-stem--intent) | Intent and complexity extracted (first “understanding” of the request). | — |
-| 4 | [Control Plane — Policy](#4-control-plane--policy) | Policy evaluated: who may do what; allowed pipelines, memory scope, budgets. | ✓ |
-| 5 | [Control Plane — Budget](#5-control-plane--budget) | Request and tenant budgets checked; effective limits set. | ✓ |
-| 6 | [Control Plane — Router](#6-control-plane--router) | Strategy and pipeline chosen; pipeline plan produced (models, tools, memory, budgets). | ✓ |
-| 7 | [Dispatch Gate](#7-dispatch-gate) | Final check: only if policy allowed and a valid plan exists does execution proceed. | ✓ |
-| 8 | [Retrieval (optional)](#8-retrieval-optional) | If plan allows memory and scope is set, run retrieval; attach context and citations for pipeline. | ✓ |
-| 9 | [Pipeline Execution](#9-pipeline-execution) | Chosen pipeline runs (e.g. chat): model gateway, tools, synthesis; all through gateways. | — |
-| 10 | [Response & Observability](#10-response--observability) | Response envelope returned; metrics, audit, and telemetry recorded. | ✓ |
+- `RequestEnvelope`
+- `ResponseEnvelope`
 
----
+Internal spine:
 
-### 1. HTTP & Ingress
+- `CanonicalRequest`
+- `IntentBundle`
+- `PolicyDecision`
+- `PipelinePlan`
 
-**Where:** `POST /v1/query` → route handler → `validateIngress()`.
+Execution and workflow:
 
-- Request body is read (with size limit).
-- Payload is validated against the request contract (envelope shape, contract version, attachments).
-- Caller identity is derived (e.g. from headers): `app_id`, `user_id`, `org_id`, `session_id`, `scopes`.
-- A **request ID** is assigned or taken from header and passed through the rest of the flow.
+- `TypedArtifact`
+- `EngineInvocation`
+- `EngineResult`
+- `WorkflowDefinition`
+- `AgentHarnessInput` (single post-orchestration input shape for pipelines)
 
-**Output:** A **validated request envelope** plus **caller context**. No models, no tools, no understanding of content.
+All live under `src/contracts`.
 
----
+## Governance Model in Practice
 
-### 2. Brain Stem — Canonicalize
+`src/controlplane` is where non-bypass controls are applied:
 
-**Where:** First step inside `handleQuery()`: `canonicalize(ingressResult.envelope)`.
+- policy allow/deny and allowed pipelines
+- memory scope decisions
+- request budget checks
+- tenant budget checks
+- route planning
+- final dispatch assertion before execution
 
-- Text is normalized (trimmed, single string).
-- Attachments are preprocessed (mime, token estimates); modalities detected (text, image, file, structured).
-- A **token estimate** for the request is computed.
+If governance denies, pipeline execution does not happen.
 
-**Output:** A **canonical request** — one internal, normalized form the rest of the system uses.
+## Gateway Boundaries
 
----
+Pipelines/engines never directly call providers or external systems; they go through gateways:
 
-### 3. Brain Stem — Intent
+- model: `src/gateways/model-gateway.ts`
+- tool: `src/gateways/tool-gateway.ts`
+- memory: `src/memory/*` abstractions and adapters
 
-**Where:** Right after canonicalize: `extractIntent(canonical)`.
+This is where retries, timeout behavior, allowlists, sandbox checks, and provider selection are centralized.
 
-- **Intent** is extracted: what the user is likely asking for (e.g. chat, coding help, document search).
-- **Confidence** and **routing hints** are set (e.g. `reactive_chat`).
-- Optional: complexity or risk flags.
+## Observability and Audit
 
-**Output:** An **intent bundle** — “what this request is” and “how it might be handled.” This is the **first place the server “thinks”** about the request; it stays cheap (no long tool loops, no heavy retrieval).
+Key modules:
 
----
+- `src/observability/context.ts` (trace context propagation)
+- `src/observability/events.ts` (event taxonomy)
+- `src/observability/emitter.ts` (redaction + sampling + sink)
+- `src/observability/metrics.ts` (counters/histograms + Prometheus export)
+- `src/security/audit-logger.ts` (tamper-evident audit chain + sink)
 
-### 4. Control Plane — Policy
+Important point: redaction level flows from policy into emitted events/audit paths in query handling.
 
-**Where:** `createControlPlane().decide()` → `evaluatePolicy()`.
+## Configuration and Feature Flags
 
-- Policy is evaluated for this **caller** and **canonical + intent**.
-- Decision: **allowed** or **denied**; if denied, a **deny reason** (e.g. policy, pipeline not allowed).
-- If allowed: **allowed pipelines**, **memory scope**, **safety profile**, and **max budgets** (tokens, tools, time, cost) are set.
+Single source of truth: `src/config/schema.ts`.
 
-**Output:** A **policy decision**. No execution yet; only “what is permitted.”
+High-impact runtime flags include:
 
----
+- `runtime_mvp_query_chat_enabled`
+- `platform_production_rollout_enabled`
+- `memory_retrieval_enabled`
+- `multimodal_input_path_enabled`
+- `harness_autonomous_execution_enabled`
+- `observability_required_events_v1`
+- `security_hard_controls_enabled`
 
-### 5. Control Plane — Budget
+Bootstrap checks in `src/bootstrap/index.ts` enforce production constraints at startup.
 
-**Where:** Inside `decide()` after policy: `checkBudget()`, `checkTenantBudget()`.
+## What Is Mature vs Still Lightweight
 
-- **Request-level** budget is checked (tokens, cost, etc.) against policy limits.
-- **Tenant-level** budget (e.g. org) is checked so one tenant cannot exhaust shared resources.
-- **Effective budgets** are computed for the rest of the run.
+Mature/implemented today:
 
-**Output:** Budget allowed or denied. If denied, routing is not attempted; result is “blocked” with `BUDGET_EXCEEDED`.
+- token exchange and JWT query auth path
+- ingress caller matching and rate limiting
+- provider-backed model gateway routing
+- tool allowlist/sandbox policy checks with executable tools
+- bounded retrieval timeout/context handling
+- workflow definition validation (including dependency and cycle checks)
+- dependency-aware readiness/health responses
 
----
+Still intentionally lightweight in parts:
 
-### 6. Control Plane — Router
+- policy evaluator is deterministic and simple, not a full external policy system
+- sandbox controls are policy-level checks, not full process/container isolation
+- many deployments still use in-memory defaults unless configured for persistent backends
 
-**Where:** Inside `decide()` after policy and budget: `router.plan()`.
+Note: Evaluation and classification engines have model-based implementations available (not stubs). They use modelGateway for real evaluation/classification with heuristic fallbacks.
 
-- Given **canonical**, **intent**, **policy** (including effective budgets), and **multimodal-capable pipelines**, the router picks a **strategy** and **pipeline**.
-- It produces a **pipeline plan**: which pipeline runs, which models, tools, memory settings, and under which budgets.
+## If You Need To Change Something
 
-**Output:** A **route result** (allowed + pipeline plan, or denied + reason). The control plane returns **policy decision**, **route result**, and **pipeline plan** (if allowed).
+- API schema or error code: `src/contracts`
+- auth/token logic: `src/server/auth.ts`
+- request validation/attachments: `src/ingress`
+- route selection rules: `src/router/default-router.ts`
+- governance logic: `src/controlplane`
+- pipeline behavior: `src/pipelines`
+- workflow graph behavior: `src/workflows`
+- provider/tool execution: `src/gateways`
+- retrieval/memory behavior: `src/memory`
+- telemetry/audit behavior: `src/observability`, `src/security`
 
----
+## Local Verify Loop
 
-### 7. Dispatch Gate
+Typical local verification:
 
-**Where:** After `controlPlane.decide()`: `canDispatch(result)` / `assertCanDispatch(result)`.
+```bash
+npm run lint
+npm run typecheck
+npm run build
+npm test
+```
 
-- Checks that the control plane **allowed** the request and produced a **valid pipeline plan**.
-- If not allowed or no plan: **no pipeline runs**; a blocked response is returned with appropriate deny reason (policy, budget, or routing).
-- If allowed: code asserts and proceeds to execution.
+Server startup paths:
 
-**Purpose:** Final guard so that only explicitly allowed, planned work is executed (no bypass of policy or budgets).
+```bash
+npm run start:dev
+npm run start
+```
 
----
+## One-Line Mental Model
 
-### 8. Retrieval (optional)
-
-**Where:** After dispatch gate, before pipeline run; only if plan has memory retrieval and scope is not `none`.
-
-- **Retrieval** runs in the configured **memory scope** (e.g. user, project, org) with the canonical text and `top_k`.
-- Result is **context text** and **citations**.
-- On failure or degraded store, the server can proceed without context (fallback); metrics and events record the outcome.
-
-**Output:** **Retrieval context** (and optional citations) passed into the pipeline as part of the harness input.
-
----
-
-### 9. Pipeline Execution
-
-**Where:** `createChatPipeline(gateway).run(harnessInput)` (or other pipeline type from the plan).
-
-- The **pipeline** (e.g. reactive chat) receives: canonical request, intent, policy decision, pipeline plan, caller, and optional retrieval context.
-- It orchestrates **stages** (e.g. build prompt, call model, synthesize answer).
-- All **model** calls go through the **model gateway** (provider, fallbacks, token counting, cost).
-- Any **tool** or **memory** use would go through their gateways (sandboxing, scope, audit).
-
-**Output:** A **response envelope**: status, output (e.g. text, citations), and **telemetry** (pipeline, models used, tokens, cost, latency).
-
----
-
-### 10. Response & Observability
-
-**Where:** After pipeline returns; inside `handleQuery()`.
-
-- **Response envelope** is finalized (telemetry merged, tenant usage recorded).
-- **Metrics** are updated (request count, latency, route, errors, retrieval, security denials).
-- **Events** may be emitted (e.g. `POLICY_DECISION`, `ROUTE_DECISION`, `PIPELINE_START`, `PIPELINE_END`, `FINAL_SYNTH`, `ERROR`).
-- **Audit** may write security-relevant events (e.g. policy decision, route deny, errors) when hard controls are enabled.
-
-**Output:** JSON response sent back to the client; every request is **traceable** (routing, policy, budgets, pipeline steps, tool events).
-
----
-
-## Concepts in Short
-
-- **Ingress:** Mindless entry — auth, size, validation only; no AI.
-- **Brain Stem:** First cognition — canonicalize input, then intent; no heavy tools or retrieval.
-- **Control plane:** Governs only — policy → budget → router; no execution.
-- **Dispatch gate:** Ensures only allowed, planned work runs.
-- **Pipeline:** One execution harness per “way of working” (e.g. chat, coding, RAG).
-- **Gateways:** Single choke points for models, tools, and memory; enforce policy, budgets, and observability.
-- **Observability:** Every run can be traced and measured (routing, policy, costs, steps).
-
----
-
-## Why It’s Built This Way
-
-- **Single endpoint:** Clients get one stable API; the server decides how to fulfill each request.
-- **Strict boundary:** Ingress never “thinks”; cognition starts at the Brain Stem, so security and quotas don’t depend on AI.
-- **Policy and budgets:** Enforced in one place (control plane) and at gateways, so they can’t be bypassed by pipelines.
-- **Pluggable pipelines:** New ways of working (new “agent harnesses”) can be added without changing the entry point or the rules.
-- **Traceability:** Routing, policy, and execution are observable so you can debug, tune, and improve over time.
-
----
-
-## Summary
-
-The server receives a request at a single entry point (**HTTP & Ingress**), validates it without using AI, then uses the **Brain Stem** to canonicalize and extract intent. The **Control Plane** then evaluates policy, checks budgets, and routes to a pipeline plan; the **Dispatch Gate** ensures only that plan runs. Optional **Retrieval** adds context when allowed; the chosen **Pipeline** executes through gateways, and the **Response** is returned with full telemetry. **Ingress is mindless; cognition begins at the Brain Stem; policy and budgets govern everything; execution goes through pipelines and gateways; every run is traceable.**
+The server is a governed execution runtime: deterministic ingress and policy choose the path, pipelines execute through engine/gateway contracts, and every request is observable and auditable.

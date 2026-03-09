@@ -33,6 +33,22 @@ const REQUIRED_LIFECYCLE_EVENTS = [
   "FINAL_SYNTH",
 ];
 
+/** Event order for span hierarchy: pipeline → workflow → engines */
+const LIFECYCLE_ORDER = [
+  "POLICY_DECISION",
+  "BUDGET_ASSIGN",
+  "ROUTE_DECISION",
+  "PIPELINE_START",
+  "WORKFLOW_START",
+  "ENGINE_START",
+  "ENGINE_END",
+  "ENGINE_START",
+  "ENGINE_END",
+  "WORKFLOW_END",
+  "PIPELINE_END",
+  "FINAL_SYNTH",
+];
+
 const SENSITIVE_KEYS = new Set(["password", "secret", "token", "authorization", "cookie"]);
 
 function payloadHasSensitiveKeys(payload: unknown): boolean {
@@ -98,6 +114,26 @@ describe("L2-04 Observability Acceptance Suite", () => {
         expect(event.trace_id).toBeDefined();
       }
     });
+
+    it("event order reflects span hierarchy (pipeline → workflow → engines)", async () => {
+      const captured: TelemetryEvent[] = [];
+      const emitter = createEmitter({ capture: captured, redactionLevel: "minimal" });
+      setObservability({ events: emitter, getContext: getTraceContext });
+
+      const ingressResult = validateIngress(validEnvelope, {
+        maxBodyBytes: 1_000_000,
+        contractVersion: "v1",
+      });
+      await handleQuery(ingressResult);
+
+      const eventTypes = captured.map((e) => e.event_type);
+      let lastIndex = -1;
+      for (const expectedType of LIFECYCLE_ORDER) {
+        const idx = eventTypes.indexOf(expectedType, lastIndex + 1);
+        expect(idx).toBeGreaterThan(lastIndex);
+        lastIndex = idx;
+      }
+    });
   });
 
   describe("redaction", () => {
@@ -160,6 +196,7 @@ describe("L2-04 Observability Acceptance Suite", () => {
       const ctx = createContext("req-acceptance", "trace-acceptance");
       let received: ReturnType<typeof getTraceContext> = undefined;
       await runWithContextAsync(ctx, async () => {
+        await Promise.resolve();
         received = getTraceContext();
       });
       expect(received?.request_id).toBe("req-acceptance");

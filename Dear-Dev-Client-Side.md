@@ -62,14 +62,17 @@ Handle these in your client:
 - `CONTRACT_VERSION_UNSUPPORTED` — Upgrade client to match server contract.
 - `ATTACHMENT_REJECTED` — Attachment not accepted (e.g. type/size).
 - `MULTIMODAL_UNSUPPORTED` — Multimodal input not supported for this request.
+- `RETRIEVAL_UNAVAILABLE` — Memory/retrieval store unavailable; response may be degraded.
+
+**Full taxonomy** (HTTP status suggestion, retryable flag): `src/contracts/ERROR_CODES.md`.
 
 ---
 
 ## Where to Go Deeper
 
-- **Full API contracts and types:** `Docs/SPEC/02_API_Contracts.md`
-- **Overview and canonical types:** `Docs/Overview.md`
-- **Architecture:** `Docs/Architecture.md`
+- **Full API contracts and types:** `docs/SPEC/02_API_Contracts.md` or `Docs/SPEC/02_API_Contracts.md`
+- **Overview and canonical types:** `docs/Overview.md` or `Docs/Overview.md`
+- **Architecture:** `docs/Architecture.md` or `Docs/Architecture.md`
 - **Contract changelog and version policy:** `src/contracts/CHANGELOG.md`
 
 Use **`/v1/version`** at startup or in your build to confirm contract and API version compatibility with your client.

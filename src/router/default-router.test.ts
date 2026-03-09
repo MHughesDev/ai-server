@@ -40,6 +40,7 @@ describe("defaultRouter", () => {
     const result = await defaultRouter.plan(minimalInput());
     expect(result.allowed).toBe(true);
     expect(result.pipelinePlan?.pipeline_type).toBe("reactive_chat");
+    expect(result.pipelinePlan?.budgets?.cost_budget_usd).toBeDefined();
   });
 
   it("denies when policy.allowed is false", async () => {
@@ -89,5 +90,47 @@ describe("defaultRouter", () => {
     });
     const result = await defaultRouter.plan(input);
     expect(result.allowed).toBe(true);
+  });
+
+  it("sets tools_enabled from policy allow_tools minus deny_tools when coding_agent (L2-05)", async () => {
+    const input = minimalInput({
+      intent: {
+        ...minimalInput().intent,
+        primary_intent: "coding_agent",
+        complexity: { tool_likelihood: 0.8 },
+      },
+      policy: {
+        ...minimalInput().policy,
+        allowed_pipelines: ["reactive_chat", "coding_agent"],
+        allow_tools: ["stub_tool", "other_tool"],
+        deny_tools: ["other_tool"],
+      },
+    });
+    const result = await defaultRouter.plan(input);
+    expect(result.allowed).toBe(true);
+    expect(result.pipelinePlan?.pipeline_type).toBe("coding_agent");
+    expect(result.pipelinePlan?.tools_enabled).toEqual(["stub_tool"]);
+  });
+
+  it("propagates policy cost/tool budgets to pipeline plan", async () => {
+    const input = minimalInput({
+      policy: {
+        ...minimalInput().policy,
+        max_budgets: {
+          token_budget: 1000,
+          tool_budget: 7,
+          deadline_ms: 12_000,
+          cost_budget_usd: 0.25,
+        },
+      },
+    });
+    const result = await defaultRouter.plan(input);
+    expect(result.allowed).toBe(true);
+    expect(result.pipelinePlan?.budgets).toMatchObject({
+      token_budget: 1000,
+      tool_budget: 7,
+      deadline_ms: 12_000,
+      cost_budget_usd: 0.25,
+    });
   });
 });

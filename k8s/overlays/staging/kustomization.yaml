@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-server-staging
+
+namePrefix: staging-
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: Deployment
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Ingress
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api-staging.example.com
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+
+configMapGenerator:
+  - name: ai-server-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=info
+      - PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true
+      - MEMORY_BACKEND=vector

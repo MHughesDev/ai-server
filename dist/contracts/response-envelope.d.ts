@@ -1,6 +1,6 @@
 /**
  * ResponseEnvelope – external API contract for POST /v1/query response.
- * @see Docs/SPEC/02_API_Contracts.md, Docs/Architecture.md
+ * @see docs/SPEC/02_API_Contracts.md, docs/Architecture_document_Finalized.md
  */
 import { z } from "zod";
 declare const CitationSchema: z.ZodObject<{
@@ -15,6 +15,20 @@ declare const CitationSchema: z.ZodObject<{
     source: string;
     ref: string;
     span?: string | undefined;
+}>;
+/** Attachment reference in response output (M2 – Synthesis result_artifacts) */
+declare const OutputAttachmentSchema: z.ZodObject<{
+    artifact_uri: z.ZodOptional<z.ZodString>;
+    artifact_id: z.ZodOptional<z.ZodString>;
+    artifact_kind: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    artifact_uri?: string | undefined;
+    artifact_id?: string | undefined;
+    artifact_kind?: string | undefined;
+}, {
+    artifact_uri?: string | undefined;
+    artifact_id?: string | undefined;
+    artifact_kind?: string | undefined;
 }>;
 declare const OutputSchema: z.ZodObject<{
     text: z.ZodOptional<z.ZodString>;
@@ -32,7 +46,26 @@ declare const OutputSchema: z.ZodObject<{
         ref: string;
         span?: string | undefined;
     }>, "many">>;
+    /** M2: artifacts from Synthesis result_artifacts (artifact_uri, artifact_kind) */
+    attachments: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        artifact_uri: z.ZodOptional<z.ZodString>;
+        artifact_id: z.ZodOptional<z.ZodString>;
+        artifact_kind: z.ZodOptional<z.ZodString>;
+    }, "strip", z.ZodTypeAny, {
+        artifact_uri?: string | undefined;
+        artifact_id?: string | undefined;
+        artifact_kind?: string | undefined;
+    }, {
+        artifact_uri?: string | undefined;
+        artifact_id?: string | undefined;
+        artifact_kind?: string | undefined;
+    }>, "many">>;
 }, "strip", z.ZodTypeAny, {
+    attachments: {
+        artifact_uri?: string | undefined;
+        artifact_id?: string | undefined;
+        artifact_kind?: string | undefined;
+    }[];
     citations: {
         source: string;
         ref: string;
@@ -42,6 +75,11 @@ declare const OutputSchema: z.ZodObject<{
     structured?: Record<string, unknown> | undefined;
 }, {
     text?: string | undefined;
+    attachments?: {
+        artifact_uri?: string | undefined;
+        artifact_id?: string | undefined;
+        artifact_kind?: string | undefined;
+    }[] | undefined;
     structured?: Record<string, unknown> | undefined;
     citations?: {
         source: string;
@@ -57,7 +95,7 @@ declare const TelemetrySchema: z.ZodObject<{
     tokens_out: z.ZodDefault<z.ZodNumber>;
     cost_usd_est: z.ZodDefault<z.ZodNumber>;
     latency_ms: z.ZodDefault<z.ZodNumber>;
-}, "strip", z.ZodTypeAny, {
+}, "strict", z.ZodTypeAny, {
     models_used: string[];
     tool_calls: number;
     tokens_in: number;
@@ -78,7 +116,7 @@ declare const ErrorSchema: z.ZodObject<{
     code: z.ZodString;
     message: z.ZodString;
     detail: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-}, "strip", z.ZodTypeAny, {
+}, "strict", z.ZodTypeAny, {
     code: string;
     message: string;
     detail?: Record<string, unknown> | undefined;
@@ -89,7 +127,7 @@ declare const ErrorSchema: z.ZodObject<{
 }>;
 export declare const ResponseEnvelopeSchema: z.ZodObject<{
     request_id: z.ZodString;
-    status: z.ZodEnum<["ok", "blocked", "error", "accepted"]>;
+    status: z.ZodEnum<["ok", "blocked", "error"]>;
     output: z.ZodOptional<z.ZodObject<{
         text: z.ZodOptional<z.ZodString>;
         structured: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
@@ -106,7 +144,26 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
             ref: string;
             span?: string | undefined;
         }>, "many">>;
+        /** M2: artifacts from Synthesis result_artifacts (artifact_uri, artifact_kind) */
+        attachments: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            artifact_uri: z.ZodOptional<z.ZodString>;
+            artifact_id: z.ZodOptional<z.ZodString>;
+            artifact_kind: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }, {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }>, "many">>;
     }, "strip", z.ZodTypeAny, {
+        attachments: {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }[];
         citations: {
             source: string;
             ref: string;
@@ -116,6 +173,11 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         structured?: Record<string, unknown> | undefined;
     }, {
         text?: string | undefined;
+        attachments?: {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }[] | undefined;
         structured?: Record<string, unknown> | undefined;
         citations?: {
             source: string;
@@ -131,7 +193,7 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         tokens_out: z.ZodDefault<z.ZodNumber>;
         cost_usd_est: z.ZodDefault<z.ZodNumber>;
         latency_ms: z.ZodDefault<z.ZodNumber>;
-    }, "strip", z.ZodTypeAny, {
+    }, "strict", z.ZodTypeAny, {
         models_used: string[];
         tool_calls: number;
         tokens_in: number;
@@ -152,7 +214,7 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         code: z.ZodString;
         message: z.ZodString;
         detail: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-    }, "strip", z.ZodTypeAny, {
+    }, "strict", z.ZodTypeAny, {
         code: string;
         message: string;
         detail?: Record<string, unknown> | undefined;
@@ -161,20 +223,23 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         message: string;
         detail?: Record<string, unknown> | undefined;
     }>>;
-    /** For async mode */
-    job_id: z.ZodOptional<z.ZodString>;
-    /** Response mode */
-    mode: z.ZodOptional<z.ZodEnum<["sync", "stream", "async"]>>;
-}, "strip", z.ZodTypeAny, {
-    status: "error" | "ok" | "blocked" | "accepted";
+    /** Sync-only runtime: mode may only be "sync" when present. */
+    mode: z.ZodOptional<z.ZodLiteral<"sync">>;
+}, "strict", z.ZodTypeAny, {
+    status: "error" | "ok" | "blocked";
     request_id: string;
     error?: {
         code: string;
         message: string;
         detail?: Record<string, unknown> | undefined;
     } | undefined;
-    mode?: "stream" | "sync" | "async" | undefined;
+    mode?: "sync" | undefined;
     output?: {
+        attachments: {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }[];
         citations: {
             source: string;
             ref: string;
@@ -192,18 +257,22 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         latency_ms: number;
         pipeline?: string | undefined;
     } | undefined;
-    job_id?: string | undefined;
 }, {
-    status: "error" | "ok" | "blocked" | "accepted";
+    status: "error" | "ok" | "blocked";
     request_id: string;
     error?: {
         code: string;
         message: string;
         detail?: Record<string, unknown> | undefined;
     } | undefined;
-    mode?: "stream" | "sync" | "async" | undefined;
+    mode?: "sync" | undefined;
     output?: {
         text?: string | undefined;
+        attachments?: {
+            artifact_uri?: string | undefined;
+            artifact_id?: string | undefined;
+            artifact_kind?: string | undefined;
+        }[] | undefined;
         structured?: Record<string, unknown> | undefined;
         citations?: {
             source: string;
@@ -220,11 +289,11 @@ export declare const ResponseEnvelopeSchema: z.ZodObject<{
         cost_usd_est?: number | undefined;
         latency_ms?: number | undefined;
     } | undefined;
-    job_id?: string | undefined;
 }>;
 export type ResponseEnvelope = z.infer<typeof ResponseEnvelopeSchema>;
 export type Citation = z.infer<typeof CitationSchema>;
 export type ResponseOutput = z.infer<typeof OutputSchema>;
+export type OutputAttachment = z.infer<typeof OutputAttachmentSchema>;
 export type Telemetry = z.infer<typeof TelemetrySchema>;
 export type ResponseError = z.infer<typeof ErrorSchema>;
 export {};

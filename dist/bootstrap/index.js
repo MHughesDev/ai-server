@@ -13,6 +13,17 @@ export function bootstrap() {
     if (config)
         return config;
     config = loadConfigFromEnv();
+    if (config.env === "production" && !config.operationalBearerToken) {
+        throw new Error("OPERATIONAL_BEARER_TOKEN is required in production to protect operational endpoints");
+    }
+    if (config.env === "production" && config.flags.platform_production_rollout_enabled) {
+        const syntheticProviders = config.model_gateway.providers
+            .filter((p) => p.kind === "stub" || p.kind === "framed_echo")
+            .map((p) => `${p.id}:${p.kind}`);
+        if (syntheticProviders.length > 0) {
+            throw new Error(`Production rollout requires non-synthetic model providers; found ${syntheticProviders.join(", ")}`);
+        }
+    }
     // L2-08: Release config validation – warn in production without traceability
     const releaseValidation = validateReleaseConfig({
         env: config.env,

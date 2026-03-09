@@ -1,6 +1,6 @@
 /**
  * Telemetry event emitter – emits canonical events with redaction.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
  */
 import { createHash } from "node:crypto";
 import { getEventSink } from "./event-sink.js";
@@ -16,7 +16,8 @@ function shouldSampleTrace(traceId, sampleRate) {
 export function createEmitter(options) {
     const redactionLevel = options?.redactionLevel ?? "minimal";
     const logToConsole = options?.logToConsole ?? false;
-    const capture = options?.capture ?? [];
+    const capture = options?.capture;
+    const maxCaptureSize = options?.maxCaptureSize ?? 1_000;
     const sampleRate = options?.sampleRate ?? 1;
     return {
         emit(event) {
@@ -34,7 +35,12 @@ export function createEmitter(options) {
                 payload: event.payload ? redact(event.payload, level) : undefined,
             };
             const out = redact(redacted, level);
-            capture.push(out);
+            if (capture) {
+                if (capture.length >= maxCaptureSize) {
+                    capture.shift();
+                }
+                capture.push(out);
+            }
             if (logToConsole) {
                 console.debug("[observability]", JSON.stringify(out));
             }

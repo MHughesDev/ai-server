@@ -2,6 +2,11 @@
 
 Runbook for CI failures and local bootstrap issues introduced by L2-01 (Contracts and Project Scaffold).
 
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Sections 18.9, 18.11, 18.12).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
 ---
 
 ## CI job fails

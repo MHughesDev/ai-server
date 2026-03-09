@@ -9,7 +9,7 @@
  * data foundation and can rely on canonical request, intent, policy, plan, caller,
  * and optional retrieval context without re-deriving from raw request.
  *
- * @see Docs/SPEC/02_API_Contracts.md, Docs/Architecture.md (orchestration flow)
+ * @see docs/SPEC/02_API_Contracts.md, docs/Architecture_document_Finalized.md (orchestration flow)
  * @see L2-99 Deferred Coding Agent Harness Readiness Gate
  */
 import { z } from "zod";
@@ -21,15 +21,15 @@ export declare const HarnessCallerContextSchema: z.ZodObject<{
     session_id: z.ZodOptional<z.ZodString>;
     scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
+    org_id: string;
     app_id: string;
     user_id: string;
-    org_id: string;
     scopes: string[];
     session_id?: string | undefined;
 }, {
+    org_id: string;
     app_id: string;
     user_id: string;
-    org_id: string;
     session_id?: string | undefined;
     scopes?: string[] | undefined;
 }>;
@@ -256,8 +256,8 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         allowed: boolean;
         allow_tools: string[];
         deny_tools: string[];
-        memory_scope: "user" | "project" | "org" | "none";
-        safety_profile: "standard" | "strict" | "internal";
+        memory_scope: "org" | "user" | "project" | "none";
+        safety_profile: "strict" | "standard" | "internal";
         redaction_level: "none" | "minimal" | "full";
         audit_level: "none" | "full" | "summary";
         allowed_pipelines: string[];
@@ -274,14 +274,14 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         deny_reason?: string | undefined;
         allow_tools?: string[] | undefined;
         deny_tools?: string[] | undefined;
-        memory_scope?: "user" | "project" | "org" | "none" | undefined;
+        memory_scope?: "org" | "user" | "project" | "none" | undefined;
         max_budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
             tool_budget?: number | undefined;
             cost_budget_usd?: number | undefined;
         } | undefined;
-        safety_profile?: "standard" | "strict" | "internal" | undefined;
+        safety_profile?: "strict" | "standard" | "internal" | undefined;
         redaction_level?: "none" | "minimal" | "full" | undefined;
         audit_level?: "none" | "full" | "summary" | undefined;
         allowed_pipelines?: string[] | undefined;
@@ -291,7 +291,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
     plan: z.ZodObject<{
         pipeline_type: z.ZodString;
         strategy_id: z.ZodOptional<z.ZodString>;
-        execution_mode: z.ZodDefault<z.ZodEnum<["sync_stream", "async_job"]>>;
+        execution_mode: z.ZodDefault<z.ZodLiteral<"sync_stream">>;
         budgets: z.ZodOptional<z.ZodObject<{
             token_budget: z.ZodOptional<z.ZodNumber>;
             tool_budget: z.ZodOptional<z.ZodNumber>;
@@ -325,6 +325,19 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             vision?: string | undefined;
         }>>;
         tools_enabled: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
+        sandbox: z.ZodOptional<z.ZodObject<{
+            timeout_ms: z.ZodOptional<z.ZodNumber>;
+            network_access: z.ZodOptional<z.ZodBoolean>;
+            filesystem_access: z.ZodOptional<z.ZodBoolean>;
+        }, "strip", z.ZodTypeAny, {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
+        }, {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
+        }>>;
         memory: z.ZodOptional<z.ZodObject<{
             retrieval: z.ZodOptional<z.ZodString>;
             top_k: z.ZodOptional<z.ZodNumber>;
@@ -347,9 +360,13 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         }>>;
     }, "strip", z.ZodTypeAny, {
         pipeline_type: string;
-        execution_mode: "sync_stream" | "async_job";
-        verification_level: "none" | "strict" | "basic";
+        execution_mode: "sync_stream";
+        verification_level: "strict" | "none" | "basic";
         tools_enabled: string[];
+        memory?: {
+            retrieval?: string | undefined;
+            top_k?: number | undefined;
+        } | undefined;
         strategy_id?: string | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
@@ -364,9 +381,10 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             executor?: string | undefined;
             vision?: string | undefined;
         } | undefined;
-        memory?: {
-            retrieval?: string | undefined;
-            top_k?: number | undefined;
+        sandbox?: {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
         } | undefined;
         verification?: {
             enabled: boolean;
@@ -374,8 +392,12 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         } | undefined;
     }, {
         pipeline_type: string;
+        memory?: {
+            retrieval?: string | undefined;
+            top_k?: number | undefined;
+        } | undefined;
         strategy_id?: string | undefined;
-        execution_mode?: "sync_stream" | "async_job" | undefined;
+        execution_mode?: "sync_stream" | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
@@ -383,7 +405,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             cost_budget_usd?: number | undefined;
         } | undefined;
         constraints?: Record<string, unknown> | undefined;
-        verification_level?: "none" | "strict" | "basic" | undefined;
+        verification_level?: "strict" | "none" | "basic" | undefined;
         fallback_plan?: Record<string, unknown> | undefined;
         models?: {
             planner?: string | undefined;
@@ -391,9 +413,10 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             vision?: string | undefined;
         } | undefined;
         tools_enabled?: string[] | undefined;
-        memory?: {
-            retrieval?: string | undefined;
-            top_k?: number | undefined;
+        sandbox?: {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
         } | undefined;
         verification?: {
             enabled: boolean;
@@ -408,15 +431,15 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         session_id: z.ZodOptional<z.ZodString>;
         scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     }, "strip", z.ZodTypeAny, {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         scopes: string[];
         session_id?: string | undefined;
     }, {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         session_id?: string | undefined;
         scopes?: string[] | undefined;
     }>;
@@ -453,9 +476,9 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
     }>>;
 }, "strip", z.ZodTypeAny, {
     caller: {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         scopes: string[];
         session_id?: string | undefined;
     };
@@ -500,8 +523,8 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         allowed: boolean;
         allow_tools: string[];
         deny_tools: string[];
-        memory_scope: "user" | "project" | "org" | "none";
-        safety_profile: "standard" | "strict" | "internal";
+        memory_scope: "org" | "user" | "project" | "none";
+        safety_profile: "strict" | "standard" | "internal";
         redaction_level: "none" | "minimal" | "full";
         audit_level: "none" | "full" | "summary";
         allowed_pipelines: string[];
@@ -516,9 +539,13 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
     };
     plan: {
         pipeline_type: string;
-        execution_mode: "sync_stream" | "async_job";
-        verification_level: "none" | "strict" | "basic";
+        execution_mode: "sync_stream";
+        verification_level: "strict" | "none" | "basic";
         tools_enabled: string[];
+        memory?: {
+            retrieval?: string | undefined;
+            top_k?: number | undefined;
+        } | undefined;
         strategy_id?: string | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
@@ -533,9 +560,10 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             executor?: string | undefined;
             vision?: string | undefined;
         } | undefined;
-        memory?: {
-            retrieval?: string | undefined;
-            top_k?: number | undefined;
+        sandbox?: {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
         } | undefined;
         verification?: {
             enabled: boolean;
@@ -552,9 +580,9 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
     } | undefined;
 }, {
     caller: {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         session_id?: string | undefined;
         scopes?: string[] | undefined;
     };
@@ -600,14 +628,14 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         deny_reason?: string | undefined;
         allow_tools?: string[] | undefined;
         deny_tools?: string[] | undefined;
-        memory_scope?: "user" | "project" | "org" | "none" | undefined;
+        memory_scope?: "org" | "user" | "project" | "none" | undefined;
         max_budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
             tool_budget?: number | undefined;
             cost_budget_usd?: number | undefined;
         } | undefined;
-        safety_profile?: "standard" | "strict" | "internal" | undefined;
+        safety_profile?: "strict" | "standard" | "internal" | undefined;
         redaction_level?: "none" | "minimal" | "full" | undefined;
         audit_level?: "none" | "full" | "summary" | undefined;
         allowed_pipelines?: string[] | undefined;
@@ -615,8 +643,12 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
     };
     plan: {
         pipeline_type: string;
+        memory?: {
+            retrieval?: string | undefined;
+            top_k?: number | undefined;
+        } | undefined;
         strategy_id?: string | undefined;
-        execution_mode?: "sync_stream" | "async_job" | undefined;
+        execution_mode?: "sync_stream" | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
@@ -624,7 +656,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             cost_budget_usd?: number | undefined;
         } | undefined;
         constraints?: Record<string, unknown> | undefined;
-        verification_level?: "none" | "strict" | "basic" | undefined;
+        verification_level?: "strict" | "none" | "basic" | undefined;
         fallback_plan?: Record<string, unknown> | undefined;
         models?: {
             planner?: string | undefined;
@@ -632,9 +664,10 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             vision?: string | undefined;
         } | undefined;
         tools_enabled?: string[] | undefined;
-        memory?: {
-            retrieval?: string | undefined;
-            top_k?: number | undefined;
+        sandbox?: {
+            timeout_ms?: number | undefined;
+            network_access?: boolean | undefined;
+            filesystem_access?: boolean | undefined;
         } | undefined;
         verification?: {
             enabled: boolean;

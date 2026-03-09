@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: L2-04
 - Plan Name: Observability and Evaluation Implementation
-- Linked SPEC: `Docs/SPEC/12_EvaluationEngine_Spec.md`, `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/12_EvaluationEngine_Spec.md`, `docs/SPEC/18_Observability_Spec.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Observability Lead
 - Contributors: SRE Lead, Runtime Lead, QA Lead, Security Lead
 - Status: `complete`
@@ -46,12 +46,12 @@ Deliver complete traceability and measurable quality signals so runtime behavior
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md` complete.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
 
 ### 3.3 External Dependencies
 - Telemetry infrastructure provisioning and credentials.
@@ -403,26 +403,39 @@ This project is a UI-less API server; dashboard panels are out of scope and defe
 The following was implemented for L2-04 (observability and evaluation).
 
 ### Code and artifacts
-- **Event schema and emitter** (`src/observability/events.ts`, `emitter.ts`): Canonical event types (ROUTE_DECISION, POLICY_DECISION, BUDGET_ASSIGN, PIPELINE_START/END, ERROR, FINAL_SYNTH, etc.), `TelemetryEvent` schema, and emitter with redaction.
-- **Redaction** (`src/observability/redact.ts`): Allowlist-based redaction (minimal/full), sensitive key stripping; integrated in emitter.
+- **Event schema and emitter** (`src/observability/events.ts`, `emitter.ts`): Canonical event types (ROUTE_DECISION, POLICY_DECISION, BUDGET_ASSIGN, PIPELINE_START/END, WORKFLOW_START/END, ENGINE_START/END, TOOL_*, MEMORY_*, VERIFY_RESULT, FINAL_SYNTH, ERROR), `TelemetryEvent` schema, and emitter with redaction.
+- **Redaction** (`src/observability/redact.ts`): Allowlist-based redaction (minimal/full), sensitive key stripping; allowlist includes cost_estimate_usd, tokens_used, workflow_id, engine_type, invocation_id, hit_count, latency_ms, scope for telemetry payloads; integrated in emitter.
 - **Trace context** (`src/observability/context.ts`): `trace_id`/`request_id` via AsyncLocalStorage; `runWithContext` / `runWithContextAsync` / `getTraceContext`.
-- **Metrics** (`src/observability/metrics.ts`): In-memory counters and histograms with label allowlist; `GET /metrics` returns counters and histograms.
+- **Metrics** (`src/observability/metrics.ts`): In-memory counters and histograms with label allowlist; `getPrometheusText()` for Prometheus exposition format; `GET /metrics` returns JSON by default, or Prometheus text when `Accept: text/plain` or `?format=prometheus` (`src/server/routes.ts`).
+- **Pipeline observability** (`src/pipelines/chat-pipeline.ts`): Emits WORKFLOW_START at run start and WORKFLOW_END at run end (with duration_ms, status); ENGINE_START/ENGINE_END for each engine call with duration_ms, cost_estimate_usd, tokens_used when available.
 - **Query flow wiring** (`src/server/query-handler.ts`): End-to-end flow (ingress → canonicalize → intent → policy → router → response) with event emission and metrics; observability set at server startup when `observability_required_events_v1` is true.
 - **Config** (`src/config/schema.ts`): Feature flag `observability_required_events_v1` (default true).
 - **Evaluation harness** (`src/eval/`): `runner.ts` (run gold cases through query path), `baseline.json` (2 gold cases), `run-eval.ts` CLI; `npm run eval` and `npm run eval:ci` (Jest `eval/runner.test`).
+- **Production Evaluation Engine** (`src/engines/evaluation_engine.ts`) (Agent 3, 2026-03-06):
+  - Model-based evaluation using Model Gateway for quality scoring
+  - Multi-criteria scoring: correctness, completeness, safety, performance (0-1 scale)
+  - Heuristic fallback when model gateway unavailable
+  - Pass/fail threshold configuration (default 0.7)
+  - Detailed evaluation reports with issue lists
+- **Production Classification Engine** (`src/engines/classification_engine.ts`) (Agent 3, 2026-03-06):
+  - Model-based classification using Model Gateway for intent detection
+  - Classification dimensions: intent, complexity, urgency, domain, risk
+  - Heuristic fallback with keyword-based detection
+  - Proposed next action for complex workflows (request_replan)
 
 ### Tests
 - Event schema and taxonomy: `src/observability/events.test.ts`.
 - Redaction: `src/observability/redact.test.ts`.
 - Emitter and required event presence: `src/observability/emitter.test.ts`.
-- Metrics and cardinality: `src/observability/metrics.test.ts`.
+- Metrics and cardinality, Prometheus export: `src/observability/metrics.test.ts`.
 - Eval harness: `src/eval/runner.test.ts`.
+- **Observability acceptance suite** (`src/observability/observability-acceptance.test.ts`): Validates event taxonomy, redaction, trace context (request_id/trace_id on every event), metrics, event order / span hierarchy (POLICY_DECISION → BUDGET_ASSIGN → ROUTE_DECISION → PIPELINE_START → WORKFLOW_START → ENGINE_START → ENGINE_END ×2 → WORKFLOW_END → PIPELINE_END → FINAL_SYNTH), eval baseline, context propagation. Run: `npm run acceptance:observability`.
 
 ### Documentation
-- **Runbook** (`docs/Runbooks/Observability-and-Eval.md`): Missing telemetry triage, alert tuning, eval regression triage, alert definitions reference, GET /metrics, escalation.
+- **Runbook** (`docs/Runbooks/Observability-and-Eval.md` or `docs/Runbooks/`): Missing telemetry triage, alert tuning, eval regression triage, alert definitions reference, GET /metrics, escalation.
 
 ### Phase 4 – Gate and handoff
-- **Observability acceptance suite** (`src/observability/observability-acceptance.test.ts`): Validates event taxonomy, redaction, trace context, metrics, eval baseline, context propagation. Run: `npm run acceptance:observability`.
+- **Observability acceptance suite** (`src/observability/observability-acceptance.test.ts`): Validates event taxonomy, redaction, trace context, metrics, **event order / span hierarchy**, eval baseline, context propagation. Run: `npm run acceptance:observability`.
 - **Gate report and known gaps** (`docs/PLANS/Implementation-plans/L2-04_Gate-Report-and-Known-Gaps.md`): Gate summary, known gaps, verification commands.
 - **Handoff** (`docs/PLANS/Implementation-plans/L2-04_Handoff.md`): Checklist, event/metric contracts, config, CI commands for L2-05 / L2-06.
 

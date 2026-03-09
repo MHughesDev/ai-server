@@ -1,6 +1,6 @@
 /**
  * Ingress module – deterministic entrypoint and validation.
- * @see Docs/SPEC/04_Ingress_Spec.md
+ * @see docs/SPEC/04_Ingress_Spec.md
  */
 
 export * from "./types.js";

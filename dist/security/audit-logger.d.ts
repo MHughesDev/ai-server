@@ -1,7 +1,7 @@
 /**
  * Tamper-evident audit logger – append-only with integrity markers (hash chain).
- * @see Docs/SPEC/19_Security_and_Isolation_Spec.md, L2-05 Phase 1
- * L2-05 gap: optional persistent sink (e.g. AUDIT_LOG_PATH) for production.
+ * @see docs/SPEC/19_Security_and_Isolation_Spec.md, L2-05 Phase 1
+ * L2-04: Backpressure handling and atomic hash-chain for concurrent callers.
  */
 import type { AuditEvent } from "./types.js";
 export interface AuditLogEntry extends AuditEvent {
@@ -9,12 +9,36 @@ export interface AuditLogEntry extends AuditEvent {
     previous_event_hash: string;
     event_hash: string;
 }
-export declare function setAuditSink(sink: ((entry: AuditLogEntry) => void) | null): void;
-/** Create a file sink that appends one JSON line per entry (L2-05 production persistence) */
-export declare function createFileAuditSink(filePath: string): (entry: AuditLogEntry) => void;
+export interface AuditSinkStatus {
+    queueDepth: number;
+    maxQueueSize: number;
+    droppedEntries: number;
+    isDraining: boolean;
+    lastError: string | null;
+    /** L2-04: Backpressure indicator - true when queue is at 80% capacity */
+    backpressureActive: boolean;
+}
+export interface FileAuditSinkOptions {
+    maxQueueSize?: number;
+    maxFileSizeBytes?: number;
+    maxRotatedFiles?: number;
+    /** L2-04: Backpressure threshold percentage (0-1), default 0.8 */
+    backpressureThreshold?: number;
+}
+export declare function setAuditSink(sink: ((entry: AuditLogEntry) => void | Promise<void>) | null): void;
+/** L2-04: Set callback for backpressure events */
+export declare function setBackpressureCallback(callback: (() => void) | null): void;
+/** Create a non-blocking file sink with bounded queue and rotation for audit entries. */
+export declare function createFileAuditSink(filePath: string, options?: FileAuditSinkOptions): (entry: AuditLogEntry) => void;
+export declare function getAuditSinkStatus(): AuditSinkStatus | null;
 /**
- * Append a single audit event. Assigns sequence_id and previous_event_hash, computes event_hash.
- * Events are immutable once written.
+ * Append a single audit event with atomic hash-chain integrity.
+ * L2-04: Uses async lock to ensure sequence_id and hash chain consistency for concurrent callers.
+ */
+export declare function writeAuditEventAsync(event: AuditEvent): Promise<AuditLogEntry>;
+/**
+ * Synchronous version for backward compatibility.
+ * For concurrent scenarios, use writeAuditEventAsync.
  */
 export declare function writeAuditEvent(event: AuditEvent): void;
 /**

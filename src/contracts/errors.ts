@@ -1,6 +1,6 @@
 /**
  * Error taxonomy – deterministic ingress and runtime error codes.
- * @see Docs/SPEC/02_API_Contracts.md, L2-01 error model
+ * @see docs/SPEC/02_API_Contracts.md, L2-01 error model
  */
 
 export const ERROR_CODES = [

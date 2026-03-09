@@ -1,10 +1,64 @@
-# 16 ToolGateway Spec
+# 16 Tool Gateway Spec
+
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 10.4, 12, 16, 18.6).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (stub delegate and sandbox control completeness).
 
 ## Purpose
-Secure, sandboxed, policy-gated tool execution.
+Secure, policy-gated, sandboxed tool execution boundary used only by Tool Engine.
 
 ## Responsibilities
-Tool schema validation, sandbox execution, network/filesystem restrictions, scoped secret injection, timeout/retry/circuit breakers, result normalization.
+- Validate tool invocation schema and identity context.
+- Enforce allowlist/denylist policy and sandbox settings.
+- Apply timeout/retry/circuit behavior with deterministic deny reasons.
+- Emit auditable and redacted tool events.
 
-## Observability
-Emit start/end/error events with duration, status, and sanitized artifacts.
+## Policy Binding
+- `PipelinePlan.tools_enabled` is derived from `PolicyDecision` (`allow_tools` minus `deny_tools`).
+- Tool gateway must deny by default when allowlist is empty or missing.
+
+## Current Runtime Shape
+- `DenyOnlyToolGateway` default deny mode.
+- `AllowlistToolGateway` enforces allowlist and timeout.
+- `StubAllowedToolGateway` supports test/stub runs.
+
+## Production Target State
+- Replace stub delegate with real side-effecting tool execution under sandbox controls.
+- Enforce network/filesystem controls at runtime boundary (not metadata-only).
+- Bind invocation identity to audit payloads for attributable actions.
+
+## Observability and Audit
+- Emit `TOOL_START` and `TOOL_END` with duration/status.
+- Emit `TOOL_ACCESS` security audit when audit level requires it.
+- Apply redaction policy before sink write.
+
+## Production Implementation Details (Agent 3, 2026-03-06)
+
+### Caller Identity Context
+Tool invocations include full caller identity for audit and attribution:
+```typescript
+{
+  org_id: string;           // Organization identifier
+  app_id: string;           // Application identifier  
+  user_id: string;          // User identifier
+  session_id?: string;      // Session/trace correlation
+  roles?: string[];         // Caller roles/permissions
+  trace_id?: string;        // Distributed trace ID
+  invocation_id?: string;   // Request invocation ID
+}
+```
+
+**Implementation**: `src/engines/tool_engine.ts` passes identity from `EngineInvocation.actor_context` to `ToolInvokeRequest.caller_identity`.
+
+### Sandbox Enforcement
+The `AllowlistToolGateway` enforces sandbox controls:
+- **Timeout**: `timeout_ms` per tool invocation via `Promise.race()`
+- **Network Access**: Enforced for tools with `requires_network: true` metadata
+- **Filesystem Access**: Enforced for tools with `requires_filesystem: true` metadata
+- **Path Resolution**: `TOOL_FILESYSTEM_ROOT` env var restricts filesystem operations
+
+### Built-in Tools
+The `ExecutableToolGateway` provides production-ready tools:
+- **stub_tool**: Test/diagnostic tool returning caller identity
+- **web_search**: DuckDuckGo search (requires network)
+- **file_write_preview**: Sandboxed file write (requires filesystem)

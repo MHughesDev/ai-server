@@ -2,6 +2,13 @@
 
 Runbook for release execution, canary analysis, rollback operations, and emergency mitigation. Owner: Operations Lead; escalation: SRE → Security → Leadership incident commander.
 
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Section 18).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
+Treat architecture Section 18 as the release gate baseline; use the gaps report to identify required remediation before enabling broad production rollout.
+
 ---
 
 ## Release execution
@@ -11,7 +18,7 @@ Runbook for release execution, canary analysis, rollback operations, and emergen
 1. **Artifacts:** Ensure CI/CD has produced signed, traceable artifacts for the release. Version and build identity must be set (`RELEASE_ID` and/or `BUILD_ID` in deployment env).
 2. **Config:** Feature flags and rollout gate:
    - `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` only after production readiness gate is passed.
-   - See `Docs/SPEC/20_Config_and_FeatureFlags.md` for all flags.
+   - See `docs/SPEC/20_Config_and_FeatureFlags.md` for all flags.
 3. **Health gates:** Pre-deploy run `GET /healthz` and `GET /readyz` against current staging; confirm `GET /v1/version` returns expected `version`, `release_id`, `build_id`, and `env`.
 
 ### Deploy steps
@@ -32,7 +39,7 @@ Runbook for release execution, canary analysis, rollback operations, and emergen
 
 ### Success/failure thresholds (L2-08)
 
-Configured via rollout policy (see `src/rollout/policy.ts` and env or config):
+Configured via rollout policy. **Implementation:** `src/rollout/policy.ts` — `parseRolloutPolicy()` reads canary thresholds (`max_error_rate_promotion`, `abort_error_rate`, `max_p95_latency_ratio`, `observation_window_minutes`), `rollback_allowed`. Env or config overlay as per L2-08 Phase 1. See `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`.
 
 | Criterion | Default | Meaning |
 |-----------|--------|---------|
@@ -61,7 +68,7 @@ Configured via rollout policy (see `src/rollout/policy.ts` and env or config):
 1. **Kill switch / gate:** Set `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=false` (or equivalent) to stop new production traffic if the rollout gate is used to control traffic.
 2. **Revert to last known good release:** Deploy the previous stable artifact (same process as release; use last signed release_id/build_id).
 3. **Verify:** `GET /healthz`, `GET /readyz`, `GET /v1/version` on reverted instances; confirm metrics and logs show recovery.
-4. **Incident protocol:** Open incident, notify on-call, and run postmortem per **Incident workflow** in `Docs/SPEC/22_Runbooks_and_Operations.md`.
+4. **Incident protocol:** Open incident, notify on-call, and run postmortem per **Incident workflow** in `docs/SPEC/22_Runbooks_and_Operations.md`.
 
 ### Recovery time
 
@@ -99,7 +106,8 @@ Kill switch: Use `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=false` (and/or routing/loa
 
 ## References
 
-- `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
-- `Docs/SPEC/20_Config_and_FeatureFlags.md`
-- `Docs/SPEC/22_Runbooks_and_Operations.md`
-- `Docs/Runbooks/Observability-and-Eval.md`
+- **Query and policy triage:** For query failure, tool denied, or budget exceeded (non-rollback), see `docs/Runbooks/Query-and-Policy-Failures.md`.
+- `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
+- `docs/SPEC/20_Config_and_FeatureFlags.md`
+- `docs/SPEC/22_Runbooks_and_Operations.md`
+- `docs/Runbooks/Observability-and-Eval.md`

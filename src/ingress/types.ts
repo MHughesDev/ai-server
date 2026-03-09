@@ -1,6 +1,6 @@
 /**
  * Ingress – deterministic entrypoint; no AI cognition.
- * @see Docs/SPEC/04_Ingress_Spec.md
+ * @see docs/SPEC/04_Ingress_Spec.md
  */
 
 import type { RequestEnvelope } from "../contracts/index.js";

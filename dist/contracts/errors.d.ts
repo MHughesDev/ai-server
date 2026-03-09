@@ -1,6 +1,6 @@
 /**
  * Error taxonomy – deterministic ingress and runtime error codes.
- * @see Docs/SPEC/02_API_Contracts.md, L2-01 error model
+ * @see docs/SPEC/02_API_Contracts.md, L2-01 error model
  */
 export declare const ERROR_CODES: readonly ["AUTH_INVALID", "RATE_LIMITED", "POLICY_BLOCKED", "BUDGET_EXCEEDED", "TOOL_TIMEOUT", "MODEL_FAILURE", "INTERNAL_ERROR", "INVALID_PAYLOAD", "CONTRACT_VERSION_UNSUPPORTED", "RETRIEVAL_UNAVAILABLE", "ATTACHMENT_REJECTED", "MULTIMODAL_UNSUPPORTED"];
 export type ErrorCode = (typeof ERROR_CODES)[number];

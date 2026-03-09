@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-server
+  labels:
+    name: ai-server
+    app.kubernetes.io/name: ai-server
+    app.kubernetes.io/component: namespace

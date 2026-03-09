@@ -3,13 +3,13 @@
 ## 0) Document Control
 - Plan ID: L2-08
 - Plan Name: Rollout and Operational Readiness Implementation
-- Linked SPEC: `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/18_Observability_Spec.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Operations Lead
 - Contributors: SRE Lead, Platform Lead, Security Lead, Runtime Lead, QA Lead
-- Status: `in progress`
+- Status: `in progress` (SOW Segment L complete: runbooks and SPEC 22 updated)
 - Priority: `P0`
 - Created: 2026-02-18
-- Last Updated: 2026-02-18
+- Last Updated: 2026-02-27
 - Review Cadence: Daily release readiness sync + formal gate review weekly
 
 ## 1) Purpose and Outcome
@@ -45,11 +45,11 @@ Operationalize all completed capabilities into a controlled production rollout w
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md` complete.
 - All L2-01 through L2-07 exit gates accepted.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`
+- `docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`
 
 ### 3.3 External Dependencies
 - Production environment approvals and credentials.
@@ -360,6 +360,7 @@ This project is a UI-less API server; dashboard panels are out of scope and defe
 ## 11) Operational Readiness
 ### 11.1 Runbook Changes
 - Runbook updates required: Release execution, rollback operations, canary analysis, emergency mitigation.
+- **SOW Segment L (2026-02-27):** Runbooks completed and linked: `docs/Runbooks/Query-and-Policy-Failures.md` (query failure, tool denied, budget exceeded triage), `Release-and-Rollback.md` (with `src/rollout/policy.ts` reference), `Multimodal-Input-Path.md`, and others. Runbook index and on-call/escalation path in `docs/SPEC/22_Runbooks_and_Operations.md`. L2-99 gate documented in `Harness-Readiness-Gate.md`.
 
 ### 11.2 On-Call Readiness
 - Alert owner: Operations on-call with SRE as first escalation.
@@ -386,8 +387,8 @@ This project is a UI-less API server; dashboard panels are out of scope and defe
 - **Config and feature flags:** `platform_production_rollout_enabled` (default false), env `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`; optional release metadata from `RELEASE_ID`/`BUILD_ID` in `src/config/schema.ts`. Unit tests in `src/config/schema.test.ts`.
 - **Rollout policy:** Canary thresholds and rollout policy parsing in `src/rollout/policy.ts` (parseRolloutPolicy, parseCanaryThresholds, validateReleaseConfig). Unit tests in `src/rollout/policy.test.ts`.
 - **Operational endpoints:** `GET /v1/version` extended with `version` (APP_VERSION), `release_id`, `build_id`, `env` from config for traceability. `GET /healthz`, `GET /readyz`, `GET /metrics` unchanged.
-- **Runbooks:** `docs/Runbooks/Release-and-Rollback.md` added (release execution, canary analysis, rollback operations, emergency mitigation, escalation).
-- **SPEC updates:** `Docs/SPEC/20_Config_and_FeatureFlags.md` (platform_production_rollout_enabled, release metadata, rollout policy reference); `Docs/SPEC/22_Runbooks_and_Operations.md` (Release and Rollback runbook reference).
+- **Runbooks:** `docs/Runbooks/Query-and-Policy-Failures.md` (query failure, tool denied, budget exceeded triage); `Release-and-Rollback.md` (release execution, canary analysis, rollback, emergency mitigation, escalation; references `src/rollout/policy.ts`); `Multimodal-Input-Path.md`, `Memory-Retrieval-Outage.md`, `Harness-Readiness-Gate.md`, `Observability-and-Eval.md`, `CI-Bootstrap-Troubleshooting.md`.
+- **SPEC updates:** `docs/SPEC/22_Runbooks_and_Operations.md` — runbook index (all runbooks linked), on-call owner and escalation path (Operations → SRE → Security → Leadership incident commander). `docs/SPEC/20_Config_and_FeatureFlags.md` (platform_production_rollout_enabled, release metadata, rollout policy reference).
 - **CI/CD and drills:** Pipeline artifact signing, deployment manifests, and rollback drills remain operational/process tasks; runbook and config support are in place.
 - **Bootstrap:** On startup, `validateReleaseConfig()` is called; production without RELEASE_ID/BUILD_ID logs a non-blocking warning.
 - **Handoff:** `docs/PLANS/Implementation-plans/L2-08_Handoff.md` for L2-99 and Operations (checklist, config, rollout policy, endpoints, runbooks, remaining operational phases).

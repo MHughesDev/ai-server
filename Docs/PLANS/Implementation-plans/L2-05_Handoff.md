@@ -11,7 +11,7 @@
 - [x] Tamper-evident audit logger (append-only, hash chain integrity)
 - [x] Scoped secret resolution by caller role/org/env; scope violation throws and is metered
 - [x] Tool Gateway deny/stub-only: `IToolGateway.invoke()` always returns structured deny
-- [x] Security audit events written on POLICY_DECISION, ROUTE_DENY, ERROR when `security_hard_controls_enabled`
+- [x] Security audit events written on POLICY_DECISION, ROUTE_DENY, ERROR, **TOOL_ACCESS** (when audit_level !== "none") when `security_hard_controls_enabled`
 - [x] Metrics: `security_deny_total`, `secret_scope_violations_total`, `audit_write_latency_ms`
 - [x] Abuse/misuse tests: scope escalation, tool bypass, audit integrity under load
 - [x] Feature flag: `security_hard_controls_enabled` (default true in dev/staging)
@@ -31,8 +31,9 @@ When `security_hard_controls_enabled` is true, the following audit event types a
 | SECURITY_POLICY_DECISION  | After policy evaluation          | `allowed`, `deny_reason`, `memory_scope` |
 | SECURITY_ROUTE_DENY       | When request is blocked (route)   | `deny_reason`, `stage`               |
 | SECURITY_ERROR            | On query path error              | `code`, `stage`, `message_redacted`  |
+| TOOL_ACCESS               | After tool invoke (coding agent) when audit_level !== "none" | `tool_id`, `allowed`, `status`, `duration_ms` (redacted per policy) |
 
-Each audit entry has: `sequence_id`, `previous_event_hash`, `event_hash` (SHA-256 over payload + chain). Use `verifyAuditIntegrity()` to detect tampering. Snapshot via `getAuditLogSnapshot()` (read-only).
+Each audit entry has: `sequence_id`, `previous_event_hash`, `event_hash` (SHA-256 over payload + chain). Use `verifyAuditIntegrity()` to detect tampering. Snapshot via `getAuditLogSnapshot()` (read-only). **All audit payloads are redacted** per **policy.redaction_level** before write (no raw secrets in audit log). Telemetry events also use policy.redaction_level.
 
 ---
 
@@ -45,9 +46,10 @@ Each audit entry has: `sequence_id`, `previous_event_hash`, `event_hash` (SHA-25
 - Stub implementation returns `"[REDACTED]"` when allowed; production should integrate a secrets manager.
 
 **Tool Gateway:**  
-- `getDefaultToolGateway()` returns a deny-only implementation.  
-- Every `invoke(request)` returns `{ allowed: false, reason: "TOOL_GATEWAY_DENY_STUB", message, tool_id }`.  
-- No real tool execution; all invocations must go through this gateway for future policy hooks.
+- Allowlist and sandbox are sourced from **PolicyDecision** via **PipelinePlan**: router sets `tools_enabled` = `policy.allow_tools` minus `policy.deny_tools`; optional `plan.sandbox` (e.g. timeout_ms) when tools are enabled. Query-handler builds **AllowlistToolGateway** when plan has non-empty `tools_enabled` (delegate: StubAllowedToolGateway for stub path).
+- `getDefaultToolGateway()` returns a deny-only implementation when no tools are enabled.
+- Every `invoke(request)` through the default gateway returns `{ allowed: false, reason: "TOOL_GATEWAY_DENY_STUB", message, tool_id }`. When AllowlistToolGateway is used, tool not in allowlist returns `TOOL_NOT_IN_ALLOWLIST`; allowed calls are delegated to the configured delegate.
+- No real tool execution in production until controlled enablement; stub path allows configured tools for testing.
 
 ---
 

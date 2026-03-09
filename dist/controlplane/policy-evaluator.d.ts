@@ -1,6 +1,6 @@
 /**
  * Policy evaluator – deterministic allow/deny and reason codes (L2-03 Phase 0).
- * @see Docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
+ * @see docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
  */
 import type { PolicyDecision } from "../contracts/policy-decision.js";
 import type { PolicyInput } from "./policy-input.js";

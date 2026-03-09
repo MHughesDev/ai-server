@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: L2-06
 - Plan Name: Memory and Retrieval Implementation
-- Linked SPEC: `Docs/SPEC/07_PolicyEngine_Spec.md`, `Docs/SPEC/11_FailureManager_Spec.md`, `Docs/SPEC/14_Pipelines_Catalog.md`, `Docs/SPEC/17_MemoryAbstraction_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/07_PolicyEngine_Spec.md`, `docs/SPEC/11_FailureManager_Spec.md`, `docs/SPEC/14_Pipelines_Catalog.md`, `docs/SPEC/17_MemoryAbstraction_Spec.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Retrieval Lead
 - Contributors: Data Lead, Runtime Lead, Security Lead, QA Lead
 - Status: `implemented`
@@ -45,12 +45,12 @@ Introduce governed memory and retrieval capabilities with citation grounding whi
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md` complete.
-- `Docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` complete.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
 
 ### 3.3 External Dependencies
 - Vector store provisioning and operational backup strategy.

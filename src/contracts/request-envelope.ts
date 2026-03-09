@@ -1,6 +1,6 @@
 /**
  * RequestEnvelope – external API contract for POST /v1/query.
- * @see Docs/SPEC/02_API_Contracts.md, Docs/Overview.md
+ * @see docs/SPEC/02_API_Contracts.md, docs/Overview.md
  */
 
 import { z } from "zod";
@@ -32,26 +32,28 @@ const InputSchema = z.object({
   structured: z.record(z.unknown()).optional(),
 });
 
-const PreferencesSchema = z.object({
-  response_format: z.enum(["text", "json", "markdown"]).default("text"),
-  verbosity: z.enum(["low", "medium", "high"]).default("medium"),
-  stream: z.boolean().default(false),
-});
+const PreferencesSchema = z
+  .object({
+    response_format: z.enum(["text", "json", "markdown"]).default("text"),
+    verbosity: z.enum(["low", "medium", "high"]).default("medium"),
+    stream: z.boolean().default(false),
+  })
+  .strict();
 
-export const RequestEnvelopeSchema = z.object({
-  request_id: z.string().uuid(),
-  caller: CallerSchema,
-  input: InputSchema.default({}),
-  preferences: PreferencesSchema.default({}),
-  /** Optional: "auto" | "sync" | "async" – defaults to sync for MVP */
-  mode: z.enum(["auto", "sync", "async"]).optional(),
-  /** Wall-clock deadline in ms */
-  deadline_ms: z.number().int().positive().optional(),
-  /** Idempotency key for safe retries */
-  idempotency_key: z.string().optional(),
-  /** Contract version for compatibility; only v1 supported (enforced at ingress) */
-  contract_version: z.string().default("v1"),
-});
+export const RequestEnvelopeSchema = z
+  .object({
+    request_id: z.string().uuid(),
+    caller: CallerSchema,
+    input: InputSchema.default({}),
+    preferences: PreferencesSchema.default({}),
+    /** Sync-only API: mode is optional but may only be "sync" when provided. */
+    mode: z.literal("sync").optional(),
+    /** Wall-clock deadline in ms */
+    deadline_ms: z.number().int().positive().optional(),
+    /** Contract version for compatibility; only v1 supported (enforced at ingress) */
+    contract_version: z.string().default("v1"),
+  })
+  .strict();
 
 export type RequestEnvelope = z.infer<typeof RequestEnvelopeSchema>;
 export type Caller = z.infer<typeof CallerSchema>;

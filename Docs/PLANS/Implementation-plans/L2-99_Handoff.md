@@ -98,7 +98,7 @@ const result = validateEvidence(evidence, { maxStaleDays: 30, requireAllDimensio
 - Plan: `docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`
 - Governance code: `src/governance/` (types, scorecard, evidence, index)
 - Config: `src/config/schema.ts` (flag `governance_harness_readiness_gate_active`)
-- Runbook: `docs/Runbooks/Harness-Readiness-Gate.md`
+- Runbook: `docs/Runbooks/Harness-Readiness-Gate.md` or `docs/Runbooks/Harness-Readiness-Gate.md`
 - Evidence checklist template: `docs/PLANS/Implementation-plans/L2-99_Evidence-Checklist.md`
 - Decision memo template: `docs/PLANS/Implementation-plans/L2-99_Decision-Memo-Template.md`
-- SPEC: `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
+- SPEC: `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/22_Runbooks_and_Operations.md` (or `docs/SPEC/` — check both path forms)

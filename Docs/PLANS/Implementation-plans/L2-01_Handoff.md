@@ -9,9 +9,9 @@
 ## 1) Sprint 1 (L2-02) start checklist
 
 - [x] Contract package merged and versioned (v1)
-- [x] All required contracts implemented and validated (RequestEnvelope, ResponseEnvelope, CanonicalRequest, IntentBundle, PolicyDecision, PipelinePlan)
+- [x] All required contracts implemented and validated (RequestEnvelope, ResponseEnvelope, CanonicalRequest, IntentBundle, PolicyDecision, PipelinePlan, TypedArtifact, Task, EngineInvocation, EngineResult, WorkflowDefinition)
 - [x] Error taxonomy defined and linked to contract package
-- [x] Module scaffold in place (ingress, brainstem, controlplane, router, gateways, pipelines, observability)
+- [x] Module scaffold in place (ingress, brainstem, controlplane, router, gateways, pipelines, workflows, engines, observability)
 - [x] Bootstrap loads config and validates on startup
 - [x] Config schema and feature flags with safe defaults
 - [x] CI workflow: lint, typecheck, test, startup smoke
@@ -33,6 +33,9 @@
 | IntentBundle           | (internal) | Yes          | Brain Stem produces this; chat path uses primary_intent |
 | PolicyDecision         | (internal) | Placeholder   | L2-03 implements; MVP can return allow-all placeholder |
 | PipelinePlan           | (internal) | Placeholder   | Router stub; MVP uses single chat pipeline |
+| TypedArtifact, Task    | (internal) | Yes          | Engine I/O; see `src/contracts/typed-artifact.ts`, `task.ts` |
+| EngineInvocation, EngineResult | (internal) | Yes | Engine boundary; see `src/contracts/engine-invocation.ts`, `engine-result.ts` |
+| WorkflowDefinition     | (internal) | Yes          | Workflow registry; see `src/contracts/workflow-definition.ts`, `src/workflows/registry.ts` |
 | Error codes            | —       | Yes             | Use ERROR_TAXONOMY; INVALID_PAYLOAD for envelope validation failures |
 
 **MVP endpoint:** `POST /v1/query` – accept RequestEnvelope (v1), return ResponseEnvelope. Ingress validates envelope; Brain Stem produces CanonicalRequest + IntentBundle; chat pipeline returns ResponseEnvelope.
@@ -45,10 +48,10 @@
 
 ```json
 {
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "caller": { "app_id": "a1", "user_id": "u1", "org_id": "o1", "scopes": [] },
-  "input": { "text": "Hello", "attachments": [] },
-  "preferences": { "response_format": "text", "verbosity": "medium", "stream": false },
+  "request_id": "<uuid>",
+  "caller": { "app_id": "<app_id>", "user_id": "<user_id>", "org_id": "<org_id>", "scopes": [] },
+  "input": { "text": "<user_input_text_optional>", "attachments": [] },
+  "preferences": { "response_format": "text", "verbosity": "<low|medium|high>", "stream": false },
   "contract_version": "v1"
 }
 ```
@@ -57,10 +60,10 @@
 
 ```json
 {
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "request_id": "<uuid>",
   "status": "ok",
-  "output": { "text": "Hi there.", "citations": [] },
-  "telemetry": { "tokens_in": 10, "tokens_out": 5, "cost_usd_est": 0, "latency_ms": 100 }
+  "output": { "text": "<model_output_text_optional>", "citations": [] },
+  "telemetry": { "tokens_in": "<int>", "tokens_out": "<int>", "cost_usd_est": "<float>", "latency_ms": "<int>" }
 }
 ```
 
@@ -88,8 +91,8 @@ Full CI: `.github/workflows/ci.yml` runs on push/PR to `main`.
 
 ## 5) Known limits
 
-- **Contracts:** Only v1 supported; no streaming schema yet.
-- **Scaffold:** All component modules are interfaces/stubs only; no real routing, policy, or pipeline execution.
+- **Contracts:** Only v1 supported; no streaming schema yet. All engine/workflow contracts (TypedArtifact, Task, EngineInvocation, EngineResult, WorkflowDefinition) are implemented and exported from `src/contracts/index.ts`.
+- **Scaffold:** Workflow registry (`src/workflows/registry.ts`) and definitions (`src/workflows/definitions/reactive_chat.json`) exist; reactive_chat is loaded by registry. All component modules have interfaces/stubs; routing, policy, and pipeline execution use engines per SOW M1.
 - **Config:** Env-based only; no central config service.
 - **CI:** No dependency or secret scanning yet (plan §9.3 calls for it in follow-up).
 
@@ -107,8 +110,9 @@ Full CI: `.github/workflows/ci.yml` runs on push/PR to `main`.
 
 ## 7) References
 
-- Contract package: `src/contracts/` (schemas, validators, errors)
+- Contract package: `src/contracts/` (schemas, validators, errors; includes WorkflowDefinition, TypedArtifact, Task, EngineInvocation, EngineResult)
+- Workflow registry: `src/workflows/registry.ts`; definitions: `src/workflows/definitions/*.json`
 - Config: `src/config/schema.ts`; feature flags in config.flags
 - Bootstrap: `src/bootstrap/index.ts`
 - CI: `.github/workflows/ci.yml`
-- Runbook: `Docs/Runbooks/CI-Bootstrap-Troubleshooting.md`
+- Runbook: `docs/Runbooks/CI-Bootstrap-Troubleshooting.md` or `docs/Runbooks/CI-Bootstrap-Troubleshooting.md`

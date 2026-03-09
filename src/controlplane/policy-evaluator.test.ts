@@ -4,6 +4,7 @@
 
 import { evaluatePolicy } from "./policy-evaluator.js";
 import type { PolicyInput } from "./policy-input.js";
+import { listRegisteredWorkflowIds } from "../workflows/registry.js";
 
 function makeInput(overrides: Partial<PolicyInput> = {}): PolicyInput {
   return {
@@ -37,8 +38,13 @@ describe("policy evaluator", () => {
     const decision = evaluatePolicy(makeInput());
     expect(decision.allowed).toBe(true);
     expect(decision.deny_reason).toBeUndefined();
-    expect(decision.allowed_pipelines).toContain("chat");
+    expect(decision.allowed_pipelines).toContain("reactive_chat");
     expect(decision.max_budgets?.token_budget).toBe(8192);
+  });
+
+  it("keeps allowed_pipelines aligned with workflow registry", () => {
+    const decision = evaluatePolicy(makeInput());
+    expect(decision.allowed_pipelines).toEqual(listRegisteredWorkflowIds());
   });
 
   it("returns deterministic result for same input", () => {
@@ -78,7 +84,7 @@ describe("policy evaluator", () => {
     const prev = process.env.POLICY_DENY_ORG_IDS;
     process.env.POLICY_DENY_ORG_IDS = "org1,other";
     try {
-      const decision = evaluatePolicy(makeInput({ caller: { ...makeInput().caller!, orgId: "org1" } }));
+      const decision = evaluatePolicy(makeInput({ caller: { ...makeInput().caller, orgId: "org1" } }));
       expect(decision.allowed).toBe(false);
       expect(decision.deny_reason).toBe("POLICY_BLOCKED");
     } finally {
@@ -91,7 +97,7 @@ describe("policy evaluator", () => {
     const prev = process.env.POLICY_DENY_APP_IDS;
     process.env.POLICY_DENY_APP_IDS = "blocked-app";
     try {
-      const decision = evaluatePolicy(makeInput({ caller: { ...makeInput().caller!, appId: "blocked-app" } }));
+      const decision = evaluatePolicy(makeInput({ caller: { ...makeInput().caller, appId: "blocked-app" } }));
       expect(decision.allowed).toBe(false);
       expect(decision.deny_reason).toBe("POLICY_BLOCKED");
     } finally {

@@ -1,12 +1,13 @@
 /**
  * Policy evaluator – deterministic allow/deny and reason codes (L2-03 Phase 0).
- * @see Docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
+ * @see docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
  */
 
 import type { PolicyDecision, MaxBudgets } from "../contracts/policy-decision.js";
 import type { PolicyDenyReason } from "../contracts/policy-decision.js";
 import type { PolicyInput } from "./policy-input.js";
 import { getConfig } from "../bootstrap/index.js";
+import { listRegisteredWorkflowIds } from "../workflows/registry.js";
 
 /** Parse comma-separated env list; empty string or unset => [] */
 function parseDenyList(envValue: string | undefined): string[] {
@@ -45,9 +46,10 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   }
 
   const primaryIntent = intent.primary_intent ?? "chat";
-  const allowedPipelines = ["reactive_chat", "chat"];
+  const allowedPipelines = listRegisteredWorkflowIds();
+  const allowedIntents = new Set<string>([...allowedPipelines, "chat", "query"]);
   const hasAllowedIntent =
-    allowedPipelines.includes(primaryIntent) || intent.intents.some((i) => allowedPipelines.includes(i));
+    allowedIntents.has(primaryIntent) || intent.intents.some((i) => allowedIntents.has(i));
   if (!hasAllowedIntent) {
     return denyDecision("POLICY_BLOCKED", "pipeline_not_allowed");
   }
@@ -57,6 +59,8 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
     return denyDecision("POLICY_BLOCKED", "risk_flags");
   }
 
+  /** L2-05: When coding_agent is allowed, default allow_tools so router can enable tools. */
+  const allowTools = allowedPipelines.includes("coding_agent") ? ["stub_tool"] : [];
   let memoryScope: "user" | "project" | "org" | "none" = "none";
   try {
     memoryScope = getConfig().flags.enable_org_memory ? "org" : "none";
@@ -65,7 +69,7 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   }
   return {
     allowed: true,
-    allow_tools: [],
+    allow_tools: allowTools,
     deny_tools: [],
     memory_scope: memoryScope,
     max_budgets: { ...DEFAULT_MAX_BUDGETS },

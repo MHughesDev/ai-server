@@ -18,6 +18,7 @@
 - [x] Unit tests: chunker, scope filter, citation formatter, in-memory store, retrieval service
 - [x] Integration test: response envelope includes citations array
 - [x] E2E integration test: full retrieval path (ingest → query → citations) with env set before bootstrap
+- [x] E2E scope enforcement: caller org only receives citations from their org (`retrieval.integration.test.ts` — two orgs, query as o1, assert citations exclude o2)
 - [ ] Readiness review meeting (owner sign-off)
 - [ ] L2-07 / L2-08 implementation start
 
@@ -64,9 +65,11 @@
 
 ## 4) Module layout
 
-- `src/memory/`: types, chunker, memory-abstraction (scope + IMemoryStore), in-memory-store, retrieval-service, citation-formatter, default-store.
-- Query-handler: calls `runRetrieval(getDefaultStore(), …)` when plan.memory?.retrieval and scope ≠ none; passes `retrievalContext` to pipeline; on failure or degraded, continues without retrieval.
-- Chat pipeline: accepts optional `retrievalContext`; prepends context to prompt and sets `output.citations` from retrieval.
+- `src/memory/`: types, chunker, memory-abstraction (scope + IMemoryStore + IStructuredStore + IObjectStore), in-memory-store, **structured-store**, **object-store**, **memory-gateway**, retrieval-service, citation-formatter, default-store.
+- **Memory Gateway (SOW Segment I):** `src/memory/memory-gateway.ts` — `IMemoryGateway` composes `vectorStore` (IMemoryStore), `structuredStore` (IStructuredStore), `objectStore` (IObjectStore), optional `retention`. `getMemoryGateway()` in default-store returns the composed gateway; `getDefaultStore()` returns the same vector store for retrieval. Structured: key-value by scope (`InMemoryStructuredStore`). Object: blobs by id and scope (`InMemoryObjectStore`). Retention: config `memoryRetention` (ttl_seconds, max_chunks_per_scope); InMemoryStore accepts optional retention and evicts by TTL and max chunks per scope.
+- **Memory Engine (SOW M4 / Segment H):** `src/engines/memory_engine.ts` — implements `IEngine`; calls `runRetrieval(store, …)` only; returns `memory_response` Typed Artifact with citations and contextText. Reactive Chat pipeline invokes the Memory Engine when `plan.memory?.retrieval` and policy `memory_scope` ≠ none; query-handler passes `memoryStore: getDefaultStore()` into `createChatPipeline` for reactive_chat (vector store is `getMemoryGateway().vectorStore`).
+- Query-handler: for pipelines other than reactive_chat, still calls `runRetrieval(getDefaultStore(), …)` when plan.memory?.retrieval and scope ≠ none; passes `retrievalContext` to pipeline. On failure or degraded, continues without retrieval.
+- Chat pipeline: accepts optional `memoryStore`; when set and plan.memory is set, calls Memory Engine and uses result for context and citations; otherwise uses optional `retrievalContext` from input. Sets `output.citations` from retrieval.
 
 ---
 
@@ -86,13 +89,15 @@
 - **Outage fallback:** `src/memory/in-memory-store.test.ts` (returns degraded and empty when unavailable; ingest error when unavailable).
 - **Ingest-and-retrieve:** `src/memory/retrieval-service.test.ts` (runRetrieval with store hits and degraded).
 - **Full path E2E:** `src/server/retrieval.integration.test.ts` (retrieval enabled + org memory, ingest doc, POST /v1/query, assert citations).
+- **Scope enforcement E2E:** same file — test "enforces scope: caller org only receives citations from their org" (two org-scoped docs; query as org o1; assert citations only from o1, not o2).
 - **Citation formatter:** `src/memory/citation-formatter.test.ts` (citations from hits, dedupe, span truncation).
 
 ---
 
 ## 6) Known limits and deferred work
 
-- **Store:** Default is in-memory (no vector DB); swap via `setDefaultStore()` or production adapter.
+- **Store:** Default is in-memory (no vector DB); swap via `setDefaultStore()` or production adapter. **Segment I:** Structured and object stores are in-memory implementations (`InMemoryStructuredStore`, `InMemoryObjectStore`); production may swap for persistent backends.
+- **Retention:** Config `memoryRetention` (env: `MEMORY_RETENTION_TTL_SECONDS`, `MEMORY_RETENTION_MAX_CHUNKS_PER_SCOPE`) is applied by InMemoryStore when retention options are provided; other stores do not apply retention in MVP.
 - **Ingestion:** Text-only chunking; no PDF parsing or real embeddings in MVP.
 - **Ranking:** In-memory store uses simple text match; production should use vector similarity.
 - **Grounding:** Citation extraction only; no strict grounding score threshold in synthesis yet.
@@ -101,7 +106,7 @@
 
 ## 7) References
 
-- Spec: `Docs/SPEC/17_MemoryAbstraction_Spec.md`
-- Plan: `Docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
-- Runbook: `docs/Runbooks/Memory-Retrieval-Outage.md`
+- Spec: `docs/SPEC/17_MemoryAbstraction_Spec.md` or `docs/SPEC/17_MemoryAbstraction_Spec.md`
+- Plan: `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
+- Runbook: `docs/Runbooks/Memory-Retrieval-Outage.md` or `docs/Runbooks/Memory-Retrieval-Outage.md`
 - Config: `src/config/schema.ts` (memory_retrieval_enabled, enable_org_memory)

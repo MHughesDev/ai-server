@@ -1,1 +1,1 @@
-{"version":3,"file":"default-router.d.ts","sourceRoot":"","sources":["../../src/router/default-router.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,OAAO,KAAK,EAAE,OAAO,EAA4B,MAAM,YAAY,CAAC;AAQpE,iNAAiN;AACjN,eAAO,MAAM,aAAa,EAAE,OAqC3B,CAAC"}
+{"version":3,"file":"default-router.d.ts","sourceRoot":"","sources":["../../src/router/default-router.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,OAAO,KAAK,EAAE,OAAO,EAA4B,MAAM,YAAY,CAAC;AAQpE,2FAA2F;AAC3F,eAAO,MAAM,aAAa,EAAE,OA8G3B,CAAC"}

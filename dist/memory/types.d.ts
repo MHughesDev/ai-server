@@ -1,6 +1,6 @@
 /**
  * Memory and retrieval types – scope, chunks, retrieval results, citations.
- * @see Docs/SPEC/17_MemoryAbstraction_Spec.md, L2-06
+ * @see docs/SPEC/17_MemoryAbstraction_Spec.md, L2-06
  */
 /** Policy-defined scope for retrieval (user, project, org, none). */
 export type RetrievalScope = "user" | "project" | "org" | "none";
@@ -71,6 +71,27 @@ export interface IngestionInput {
 export interface IngestionResult {
     document_id: string;
     chunks_written: number;
+    /** Number of chunks dropped due to ingest cap policy. */
+    chunks_dropped?: number;
     error?: string;
+}
+/** L2-06 Segment I: Structured store – key-value records scoped by scope_keys. */
+export interface StructuredRecord {
+    key: string;
+    scope: RetrievalScope;
+    scope_keys: Record<string, string>;
+    value: unknown;
+    created_at?: string;
+    expires_at?: string;
+}
+/** L2-06 Segment I: Object store – blob by id and scope (e.g. raw documents). */
+export interface ObjectBlob {
+    id: string;
+    scope: RetrievalScope;
+    scope_keys: Record<string, string>;
+    content: string | Uint8Array;
+    content_type?: string;
+    created_at?: string;
+    expires_at?: string;
 }
 //# sourceMappingURL=types.d.ts.map

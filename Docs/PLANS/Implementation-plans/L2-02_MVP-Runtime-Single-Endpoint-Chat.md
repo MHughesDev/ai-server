@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: L2-02
 - Plan Name: MVP Runtime Single Endpoint Chat
-- Linked SPEC: `Docs/SPEC/02_API_Contracts.md`, `Docs/SPEC/04_Ingress_Spec.md`, `Docs/SPEC/05_BrainStem_Spec.md`, `Docs/SPEC/06_ControlPlane_Spec.md`, `Docs/SPEC/07_PolicyEngine_Spec.md`, `Docs/SPEC/13_Router_and_Dispatch_Spec.md`, `Docs/SPEC/14_Pipelines_Catalog.md`, `Docs/SPEC/15_ModelGateway_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`
+- Linked SPEC: `docs/SPEC/02_API_Contracts.md`, `docs/SPEC/04_Ingress_Spec.md`, `docs/SPEC/05_BrainStem_Spec.md`, `docs/SPEC/06_ControlPlane_Spec.md`, `docs/SPEC/07_PolicyEngine_Spec.md`, `docs/SPEC/13_Router_and_Dispatch_Spec.md`, `docs/SPEC/14_Pipelines_Catalog.md`, `docs/SPEC/15_ModelGateway_Spec.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`
 - Owner(s): Runtime Lead
 - Contributors: API Lead, Brain Stem Lead, Gateway Lead, QA Lead
 - Status: `complete`
@@ -23,6 +23,13 @@ Deliver the first production-shaped request path through `POST /v1/query`, with 
 - **Router**: `src/router/default-router.ts` — returns `RouteResult` with `reactive_chat` plan; integrates with control plane and policy deny.
 - **Chat pipeline**: `src/pipelines/chat-pipeline.ts` — calls Model Gateway, returns `ResponseEnvelope` with output and telemetry.
 - **Model Gateway**: `src/gateways/model-gateway.ts` — `IModelGateway`, `StubModelGateway`, `withTimeoutAndRetry`, `ModelGatewayError` mapped to taxonomy.
+- **Production Model Gateway Enhancements** (Agent 3, 2026-03-06):
+  - Circuit breaker pattern for provider resilience (`CircuitBreaker` class)
+  - Provider health checks with `checkProviderHealth()` and `runProviderHealthChecks()`
+  - Automatic fallback provider when primary fails
+  - Capability taxonomy (`CAPABILITY_TAXONOMY`) for routing: chat, classification, vision, embedding, code, summarization, extraction, reasoning
+  - Global provider health tracking via `providerHealth` map
+  - Health status exports: `getProviderHealth()`, `getAllProviderHealth()`, `resetProviderHealth()`
 - **Tests**: Ingress failure-path tests (`ingress/validate.test.ts`), brainstem unit tests, integration tests (`server/query.integration.test.ts`) for happy path and fail paths (invalid payload, bad UUID, unsupported contract_version, budget exceeded).
 
 ### 1.2 Intended Outcomes
@@ -55,11 +62,11 @@ Deliver the first production-shaped request path through `POST /v1/query`, with 
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-01_Contracts-and-Project-Scaffold.md` complete and accepted.
+- `docs/PLANS/Implementation-plans/L2-01_Contracts-and-Project-Scaffold.md` complete and accepted.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md`
 
 ### 3.3 External Dependencies
 - Network and credentials for model provider in non-production environment.

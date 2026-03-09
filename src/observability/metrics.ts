@@ -1,6 +1,6 @@
 /**
  * Core metrics with cardinality controls (allowlist labels).
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 1
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 1
  */
 
 /** Allowed label names to control cardinality */
@@ -14,13 +14,22 @@ const ALLOWED_LABELS = new Set([
   "event_type",
 ]);
 
+const MAX_COUNTER_SERIES = 2_000;
+const MAX_HISTOGRAM_SERIES = 500;
+const MAX_HISTOGRAM_SAMPLES_PER_SERIES = 256;
+
 function sanitizeLabelKey(key: string): string {
   return ALLOWED_LABELS.has(key) ? key : "unknown";
 }
 
-/** In-memory counters (for GET /metrics and tests) */
+/** In-memory counters (for GET /metrics and tests).
+ * PRODUCTION: Counters and histogram arrays grow unbounded with label combinations; long-lived processes may need bounded cardinality, periodic export-and-reset, or a fixed-size reservoir for histogram values.
+ */
 const counters: Map<string, number> = new Map();
 const histograms: Map<string, number[]> = new Map();
+let droppedCounterSeries = 0;
+let droppedHistogramSeries = 0;
+let droppedHistogramSamples = 0;
 
 function counterKey(name: string, labels: Record<string, string>): string {
   const parts = Object.entries(labels)
@@ -36,12 +45,24 @@ export function incrementCounter(
   labels: Record<string, string> = {}
 ): void {
   const key = counterKey(name, labels);
+  if (!counters.has(key) && counters.size >= MAX_COUNTER_SERIES) {
+    droppedCounterSeries += 1;
+    return;
+  }
   counters.set(key, (counters.get(key) ?? 0) + value);
 }
 
 export function recordHistogram(name: string, value: number, labels: Record<string, string> = {}): void {
   const key = counterKey(name, labels);
+  if (!histograms.has(key) && histograms.size >= MAX_HISTOGRAM_SERIES) {
+    droppedHistogramSeries += 1;
+    return;
+  }
   const list = histograms.get(key) ?? [];
+  if (list.length >= MAX_HISTOGRAM_SAMPLES_PER_SERIES) {
+    list.shift();
+    droppedHistogramSamples += 1;
+  }
   list.push(value);
   histograms.set(key, list);
 }
@@ -67,10 +88,86 @@ export function getHistogramSnapshot(): Record<string, { count: number; sum: num
   return out;
 }
 
+/** Parse metric key "name{label1=val1,...}" into name and labels object */
+function parseMetricKey(key: string): { name: string; labels: Record<string, string> } {
+  const brace = key.indexOf("{");
+  if (brace < 0) return { name: key, labels: {} };
+  const name = key.slice(0, brace);
+  const rest = key.slice(brace + 1, key.length - 1);
+  const labels: Record<string, string> = {};
+  for (const part of rest.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const k = part.slice(0, eq).trim();
+    const v = part.slice(eq + 1).trim().replace(/^"|"$/g, "");
+    if (k && v !== undefined) labels[k] = v;
+  }
+  return { name, labels };
+}
+
+function formatLabels(labels: Record<string, string>): string {
+  const parts = Object.entries(labels)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}="${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+  return parts.length ? `{${parts.join(",")}}` : "";
+}
+
+/**
+ * Export metrics in Prometheus exposition text format (for scraping).
+ * @see https://prometheus.io/docs/instrumenting/exposition_formats/
+ */
+export function getPrometheusText(): string {
+  const lines: string[] = [];
+  const counters = getCounterSnapshot();
+  const histograms = getHistogramSnapshot();
+  const seenTypes = new Set<string>();
+
+  for (const [key, value] of Object.entries(counters)) {
+    const { name, labels } = parseMetricKey(key);
+    const safeName = name.replace(/[^a-zA-Z0-9_]/g, "_");
+    if (!seenTypes.has(safeName)) {
+      lines.push(`# TYPE ${safeName} counter`);
+      seenTypes.add(safeName);
+    }
+    lines.push(`${safeName}${formatLabels(labels)} ${value}`);
+  }
+
+  for (const [key, data] of Object.entries(histograms)) {
+    const { name, labels } = parseMetricKey(key);
+    const baseName = name.replace(/[^a-zA-Z0-9_]/g, "_");
+    const countName = `${baseName}_count`;
+    const sumName = `${baseName}_sum`;
+    if (!seenTypes.has(baseName)) {
+      lines.push(`# TYPE ${baseName} summary`);
+      seenTypes.add(baseName);
+    }
+    lines.push(`${countName}${formatLabels(labels)} ${data.count}`);
+    lines.push(`${sumName}${formatLabels(labels)} ${data.sum}`);
+  }
+
+  return lines.length ? lines.join("\n") + "\n" : "# No metrics yet\n";
+}
+
 /** Reset all metrics (for tests) */
 export function resetMetrics(): void {
   counters.clear();
   histograms.clear();
+  droppedCounterSeries = 0;
+  droppedHistogramSeries = 0;
+  droppedHistogramSamples = 0;
+}
+
+/** Internal observability for bounded-memory behavior and backpressure visibility. */
+export function getMetricsInternalStats(): {
+  droppedCounterSeries: number;
+  droppedHistogramSeries: number;
+  droppedHistogramSamples: number;
+} {
+  return {
+    droppedCounterSeries,
+    droppedHistogramSeries,
+    droppedHistogramSamples,
+  };
 }
 
 /** Standard metric names */
@@ -92,3 +189,106 @@ export const METRIC_RETRIEVAL_HITS_TOTAL = "retrieval_hits_total";
 
 /** L2-07 Multimodal: attachment validation rejections by reason */
 export const METRIC_ATTACHMENT_REJECT_TOTAL = "attachment_reject_total";
+
+/** L2-04: Trace sampling for production telemetry volume control */
+interface TraceSampler {
+  shouldSample(traceId: string, operation: string): boolean;
+}
+
+class DeterministicTraceSampler implements TraceSampler {
+  constructor(private readonly sampleRate: number) {}
+
+  shouldSample(traceId: string, _operation: string): boolean {
+    if (this.sampleRate >= 1) return true;
+    if (this.sampleRate <= 0) return false;
+    // Deterministic sampling based on traceId hash
+    const hash = traceId.split("").reduce((acc, char) => {
+      return (acc * 31 + char.charCodeAt(0)) & 0x7fffffff;
+    }, 0);
+    return (hash % 1000) / 1000 < this.sampleRate;
+  }
+}
+
+let traceSampler: TraceSampler = new DeterministicTraceSampler(1);
+
+export function setTraceSampleRate(rate: number): void {
+  traceSampler = new DeterministicTraceSampler(Math.max(0, Math.min(1, rate)));
+}
+
+export function shouldSampleTrace(traceId: string, operation: string): boolean {
+  return traceSampler.shouldSample(traceId, operation);
+}
+
+/**
+ * Record request rate metric (part of RED).
+ * Call at the start of request handling.
+ */
+export function recordRequestRate(route: string): void {
+  incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route });
+}
+
+/**
+ * Record error metric (part of RED).
+ * Call when request results in an error.
+ */
+export function recordError(route: string, errorCode: string): void {
+  incrementCounter(METRIC_ERRORS_TOTAL, 1, { route, error_code: errorCode });
+}
+
+/**
+ * Record request duration (part of RED).
+ * Call at the end of request handling with duration in ms.
+ */
+export function recordDuration(route: string, durationMs: number): void {
+  recordHistogram(METRIC_REQUEST_LATENCY_MS, durationMs, { route });
+}
+
+/**
+ * Complete RED metrics recording for a request.
+ * Helper to record all three RED metrics in one call.
+ */
+export function recordRedMetrics(
+  route: string,
+  durationMs: number,
+  errorCode?: string
+): void {
+  recordRequestRate(route);
+  if (errorCode) {
+    recordError(route, errorCode);
+  }
+  recordDuration(route, durationMs);
+}
+
+/** Timestamp annotation for Prometheus export (L2-04) */
+export function getPrometheusTimestampAnnotation(): string {
+  return `# Timestamp: ${Date.now()}\n`;
+}
+
+/**
+ * L2-04: Export-and-reset strategy for long-lived processes.
+ * Returns current metrics and resets counters (histograms are preserved for history).
+ * Use this for periodic metric export to prevent unbounded memory growth.
+ */
+export function exportAndResetCounters(): {
+  counters: Record<string, number>;
+  timestamp: number;
+  droppedStats: {
+    droppedCounterSeries: number;
+    droppedHistogramSeries: number;
+    droppedHistogramSamples: number;
+  };
+} {
+  const snapshot = getCounterSnapshot();
+  const droppedStats = getMetricsInternalStats();
+  const timestamp = Date.now();
+
+  // Reset counters only (preserve histograms for historical analysis)
+  counters.clear();
+  droppedCounterSeries = 0;
+
+  return {
+    counters: snapshot,
+    timestamp,
+    droppedStats,
+  };
+}

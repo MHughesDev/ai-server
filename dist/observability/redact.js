@@ -1,6 +1,6 @@
 /**
  * Redaction utility for logs, events, and traces.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
  */
 /** Keys that must never appear in telemetry (secrets, PII) */
 const SENSITIVE_KEYS = new Set([
@@ -49,6 +49,17 @@ const ALLOWLIST_MINIMAL = new Set([
     "deny",
     "detail_redacted",
     "payload",
+    "cost_estimate_usd",
+    "tokens_used",
+    "workflow_id",
+    "engine_type",
+    "invocation_id",
+    "hit_count",
+    "latency_ms",
+    "scope",
+    "caller_org",
+    "caller_app",
+    "caller_user",
 ]);
 /**
  * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.

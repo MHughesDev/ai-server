@@ -1,32 +1,48 @@
 # 20 Config and Feature Flags
 
-## Sources
-Environment variables, versioned config files, optional central config service.
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 12, 18.9, 18.11).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (schema drift, parse-only flags, fail-fast behavior).
 
-## Feature Flags
-`enable_async_jobs`, `enable_web_tool`, `enable_org_memory`, `enable_strict_verifier`, `enable_cost_caps`, `enable_multimodal_pipeline`, `multimodal_input_path_enabled`, `governance_harness_readiness_gate_active`.
+## Configuration Sources
+- Environment variables.
+- Versioned config file overlays.
+- Optional central configuration service.
 
-- **multimodal_input_path_enabled** (L2-07): When true, attachment validation (type/size/count/mime) runs at ingress; capability-aware routing applies. Default: false in production. Env: `MULTIMODAL_INPUT_PATH_ENABLED`.
+## Configuration Requirements
+- Runtime-impacting settings must be represented in validated schema.
+- Invalid required config must fail startup in production.
+- `CONFIG_FILE` parse/read errors should fail fast when explicitly configured.
 
-- **enable_multimodal_pipeline**: When true with `multimodal_input_path_enabled`, `reactive_chat` is treated as multimodal-capable for routing.
+## Core Feature Flags
+- `enable_async_jobs`
+- `enable_web_tool`
+- `enable_org_memory`
+- `enable_strict_verifier`
+- `enable_cost_caps`
+- `enable_multimodal_pipeline`
+- `multimodal_input_path_enabled`
+- `governance_harness_readiness_gate_active`
+- `harness_autonomous_execution_enabled`
+- `platform_production_rollout_enabled`
+- `memory_retrieval_enabled`
 
-- **governance_harness_readiness_gate_active** (L2-99): When true, the harness readiness gate workflow is active (evidence collection, scorecard, go/no-go). Harness execution remains disabled until a formal go decision. Default: true. Env: `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE`.
+Canonical rollout flag is `platform_production_rollout_enabled` (env: `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`).
+Legacy alias `PLATFORM_MASTER_ROLLOUT_ENABLED` is accepted for compatibility but should be retired in docs and deployment manifests.
 
-- **platform_production_rollout_enabled** (L2-08): Production rollout gate; default `false`. Set `true` only after operational readiness gate passes. Used as kill-switch. Env: `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`.
+## Governance Rule for Flags
+- Flags are not documentation-only; each must map to explicit runtime behavior.
+- Production rollout and readiness gates must be enforced in control paths (not advisory-only).
 
-## L2-07 Attachment limits
-When multimodal input path is enabled: `MAX_ATTACHMENT_COUNT` (default 10), `MAX_ATTACHMENT_BYTES` (default 4 MiB per attachment, decoded size). Allowed types: image, pdf, json. Allowed MIME allowlist in code (image/png, image/jpeg, image/gif, image/webp, application/pdf, application/json).
+## Transport and Lifecycle Configuration
+- `PORT`, `HTTPS_PORT`, `TLS_KEY_PATH`, `TLS_CERT_PATH`.
+- Production target is fail-closed behavior when TLS is configured but invalid.
+- Release traceability metadata: `RELEASE_ID`, `BUILD_ID`.
 
-## HTTP/HTTPS (TLS)
-- **PORT** (default 3000): HTTP server port. Always listened on.
-- **HTTPS_PORT** (default 3443): Port for the HTTPS server when TLS is enabled.
-- **TLS_KEY_PATH**: Path to the TLS private key file (PEM). When set together with `TLS_CERT_PATH`, an HTTPS server is started in addition to HTTP.
-- **TLS_CERT_PATH**: Path to the TLS certificate file (PEM). When set together with `TLS_KEY_PATH`, HTTPS is enabled.
+## Retention and Limits
+- Memory retention controls: `MEMORY_RETENTION_TTL_SECONDS`, `MEMORY_RETENTION_MAX_CHUNKS_PER_SCOPE`.
+- Multimodal attachment bounds: `MAX_ATTACHMENT_COUNT`, `MAX_ATTACHMENT_BYTES`, MIME/type allowlists.
 
-If either path is missing or unreadable at startup, the server logs an error and runs HTTP only.
-
-## Release metadata (L2-08)
-Optional `RELEASE_ID` and `BUILD_ID` for artifact traceability; exposed in `GET /v1/version` and audit. Canary thresholds and rollout policy: `src/rollout/policy.ts`. Runbooks: `docs/Runbooks/Release-and-Rollback.md`.
-
-## Rollout
-Staged rollout with metrics guardrails and kill switches.
+## Current-State Notes
+- Some sink settings and rollout gates still need full schema/runtime enforcement alignment.
+- Feature flag parse vs behavior drift is tracked in the gaps report.

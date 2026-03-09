@@ -1,0 +1,286 @@
+/**
+ * Decision & Recommendation pipeline – options → score → decision memo (M5).
+ * @see SOW Segment J; Architecture §11.5
+ * Flow: execution (generate options) → evaluation (score/rank) → synthesis (decision memo).
+ */
+
+import type { IPipeline, PipelineInput } from "./types.js";
+import type { IModelGateway } from "../gateways/types.js";
+import type { ResponseEnvelope } from "../contracts/response-envelope.js";
+import type { EngineInvocation, TypedArtifact } from "../contracts/index.js";
+import type { DecisionMemoContent, Option } from "../contracts/m5-artifacts.js";
+import { canonicalToTypedArtifacts } from "../brainstem/canonical-to-artifacts.js";
+import { createExecutionEngine } from "../engines/execution_engine.js";
+import { createEvaluationEngine } from "../engines/evaluation_engine.js";
+import { createSynthesisEngine } from "../engines/synthesis_engine.js";
+import { getTraceContext } from "../observability/context.js";
+import { getObservability } from "../observability/index.js";
+import { randomUUID } from "node:crypto";
+
+function emitEngineEvent(
+  eventType: "ENGINE_START" | "ENGINE_END",
+  payload: {
+    engine_type: string;
+    invocation_id: string;
+    duration_ms?: number;
+    cost_estimate_usd?: number;
+    tokens_used?: number;
+  }
+): void {
+  const obs = getObservability();
+  const ctx = getTraceContext();
+  if (obs?.events) {
+    obs.events.emit({
+      event_type: eventType,
+      request_id: ctx?.request_id ?? "unknown",
+      trace_id: ctx?.trace_id,
+      timestamp_iso: new Date().toISOString(),
+      redaction_level: "minimal",
+      payload,
+    });
+  }
+}
+
+function emitWorkflowEvent(
+  eventType: "WORKFLOW_START" | "WORKFLOW_END",
+  payload: { workflow_id: string; duration_ms?: number; status?: string }
+): void {
+  const obs = getObservability();
+  const ctx = getTraceContext();
+  if (obs?.events) {
+    obs.events.emit({
+      event_type: eventType,
+      request_id: ctx?.request_id ?? "unknown",
+      trace_id: ctx?.trace_id,
+      timestamp_iso: new Date().toISOString(),
+      redaction_level: "minimal",
+      payload,
+    });
+  }
+}
+
+function textToArtifact(text: string, artifactId: string): TypedArtifact {
+  return {
+    artifact_id: artifactId,
+    artifact_kind: "report",
+    encoding: "text",
+    content: { inline: text },
+  };
+}
+
+export interface CreateDecisionPipelineOptions {
+  modelGateway: IModelGateway;
+}
+
+export function createDecisionPipeline(options: CreateDecisionPipelineOptions): IPipeline {
+  const { modelGateway } = options;
+  const executionEngine = createExecutionEngine(modelGateway);
+  const evaluationEngine = createEvaluationEngine();
+  const synthesisEngine = createSynthesisEngine(modelGateway);
+
+  return {
+    async run(input: PipelineInput): Promise<ResponseEnvelope> {
+      const { canonical, plan, caller } = input;
+      const ctx = getTraceContext();
+      const requestId = canonical.request_id;
+      const traceId = ctx?.trace_id;
+      const workflowId = plan.pipeline_type;
+      const workflowStart = Date.now();
+      const maxTokens = plan.budgets?.token_budget ?? 2048;
+      const query = canonical.text || "(no input)";
+      const prompt = `List and briefly describe 2–3 options for: ${query}. Then recommend one with a short justification.`;
+
+      emitWorkflowEvent("WORKFLOW_START", { workflow_id: workflowId });
+
+      const inputArtifacts: TypedArtifact[] = canonicalToTypedArtifacts(canonical);
+      if (inputArtifacts.length === 0) {
+        inputArtifacts.push(textToArtifact(query, randomUUID()));
+      }
+      const actorContext = {
+        org_id: caller.org_id,
+        app_id: caller.app_id,
+        user_id: caller.user_id,
+        roles: caller.scopes ?? [],
+      };
+      const budgets = { token_budget: maxTokens };
+      const metadata = { trace_id: traceId, contract_version: "v1" };
+
+      // Step 1: Execution (generate options)
+      const execInvId = randomUUID();
+      const execInv: EngineInvocation = {
+        invocation_id: execInvId,
+        engine_type: "execution",
+        task: {
+          task_id: "t1",
+          task_type: "execute",
+          category: "generation",
+          objective: { description: prompt },
+          input_artifacts: inputArtifacts,
+        },
+        context_artifacts: inputArtifacts,
+        actor_context: actorContext,
+        budgets,
+        metadata,
+      };
+      emitEngineEvent("ENGINE_START", { engine_type: "execution", invocation_id: execInvId });
+      const execStart = Date.now();
+      const executionResult = await executionEngine.invoke(execInv);
+      const execDuration = Date.now() - execStart;
+      emitEngineEvent("ENGINE_END", {
+        engine_type: "execution",
+        invocation_id: execInvId,
+        duration_ms: execDuration,
+        cost_estimate_usd: executionResult.metrics?.cost_estimate_usd,
+        tokens_used: executionResult.metrics?.tokens_used,
+      });
+
+      if (executionResult.status !== "success") {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return {
+          request_id: requestId,
+          status: "error",
+          mode: "sync",
+          error: {
+            code: executionResult.error?.code ?? "INTERNAL_ERROR",
+            message: executionResult.error?.message ?? "Execution engine failed",
+            detail: executionResult.error?.detail,
+          },
+          telemetry: {
+            pipeline: plan.pipeline_type,
+            models_used: [],
+            tool_calls: 0,
+            tokens_in: executionResult.metrics?.tokens_used ?? 0,
+            tokens_out: 0,
+            cost_usd_est: executionResult.metrics?.cost_estimate_usd ?? 0,
+            latency_ms: execDuration,
+          },
+        };
+      }
+
+      const execOutput = executionResult.result_artifacts[0] ?? textToArtifact(prompt, randomUUID());
+      const execText = String((execOutput.content as { inline?: string })?.inline ?? "");
+
+      // Step 2: Evaluation (score/rank)
+      const evalInvId = randomUUID();
+      const evalInv: EngineInvocation = {
+        invocation_id: evalInvId,
+        engine_type: "evaluation",
+        task: {
+          task_id: "t2",
+          task_type: "evaluate",
+          category: "evaluation",
+          input_artifacts: [execOutput],
+        },
+        context_artifacts: [execOutput],
+        actor_context: actorContext,
+        budgets,
+        metadata,
+      };
+      emitEngineEvent("ENGINE_START", { engine_type: "evaluation", invocation_id: evalInvId });
+      const evalStart = Date.now();
+      const evaluationResult = await evaluationEngine.invoke(evalInv);
+      const evalDuration = Date.now() - evalStart;
+      emitEngineEvent("ENGINE_END", {
+        engine_type: "evaluation",
+        invocation_id: evalInvId,
+        duration_ms: evalDuration,
+      });
+
+      const evalOutput =
+        evaluationResult.status === "success" && evaluationResult.result_artifacts[0]
+          ? evaluationResult.result_artifacts[0]
+          : execOutput;
+
+      // Step 3: Synthesis (decision memo)
+      const synthInvId = randomUUID();
+      const synthInv: EngineInvocation = {
+        invocation_id: synthInvId,
+        engine_type: "synthesis",
+        task: {
+          task_id: "t3",
+          task_type: "synthesize",
+          category: "synthesis",
+          input_artifacts: [],
+        },
+        context_artifacts: [evalOutput],
+        actor_context: actorContext,
+        budgets,
+        metadata,
+      };
+      emitEngineEvent("ENGINE_START", { engine_type: "synthesis", invocation_id: synthInvId });
+      const synthStart = Date.now();
+      const synthesisResult = await synthesisEngine.invoke(synthInv);
+      const synthDuration = Date.now() - synthStart;
+      emitEngineEvent("ENGINE_END", {
+        engine_type: "synthesis",
+        invocation_id: synthInvId,
+        duration_ms: synthDuration,
+        cost_estimate_usd: synthesisResult.metrics?.cost_estimate_usd,
+        tokens_used: synthesisResult.metrics?.tokens_used,
+      });
+
+      const memoText =
+        synthesisResult.status === "success" && synthesisResult.result_artifacts[0] != null
+          ? String(
+              (synthesisResult.result_artifacts[0].content as { inline?: string })?.inline ?? ""
+            )
+          : execText;
+
+      // Build DecisionMemo artifact (options, scores, recommendation)
+      const options: Option[] = [
+        { option_id: "opt1", label: "Option A", description: execText.slice(0, 100), score: 0.8 },
+        { option_id: "opt2", label: "Option B", description: "", score: 0.6 },
+      ];
+      const decisionMemo: DecisionMemoContent = {
+        question: query,
+        options,
+        assumptions: [],
+        risks: [],
+        recommendation: memoText.slice(0, 300),
+        recommendation_option_id: "opt1",
+      };
+      const memoArtifactId = randomUUID();
+
+      const execMetrics = executionResult.metrics ?? {};
+      const synthMetrics = synthesisResult.metrics ?? {};
+      const tokensIn = (execMetrics.tokens_used ?? 0) + (synthMetrics.tokens_used ?? 0);
+      const costUsd = (execMetrics.cost_estimate_usd ?? 0) + (synthMetrics.cost_estimate_usd ?? 0);
+
+      emitWorkflowEvent("WORKFLOW_END", {
+        workflow_id: workflowId,
+        duration_ms: Date.now() - workflowStart,
+        status: "ok",
+      });
+
+      return {
+        request_id: requestId,
+        status: "ok",
+        mode: "sync",
+        output: {
+          text: decisionMemo.recommendation ?? memoText,
+          structured: decisionMemo as unknown as Record<string, unknown>,
+          citations: [],
+          attachments: [
+            {
+              artifact_id: memoArtifactId,
+              artifact_kind: "decision_memo",
+            },
+          ],
+        },
+        telemetry: {
+          pipeline: plan.pipeline_type,
+          models_used: [],
+          tool_calls: 0,
+          tokens_in: tokensIn,
+          tokens_out: 0,
+          cost_usd_est: costUsd,
+          latency_ms: execDuration + evalDuration + synthDuration,
+        },
+      };
+    },
+  };
+}

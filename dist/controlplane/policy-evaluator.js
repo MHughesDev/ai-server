@@ -1,8 +1,9 @@
 /**
  * Policy evaluator – deterministic allow/deny and reason codes (L2-03 Phase 0).
- * @see Docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
+ * @see docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
  */
 import { getConfig } from "../bootstrap/index.js";
+import { listRegisteredWorkflowIds } from "../workflows/registry.js";
 /** Parse comma-separated env list; empty string or unset => [] */
 function parseDenyList(envValue) {
     if (envValue == null || envValue.trim() === "")
@@ -36,8 +37,9 @@ export function evaluatePolicy(input) {
         return denyDecision("POLICY_BLOCKED", "app_not_allowed");
     }
     const primaryIntent = intent.primary_intent ?? "chat";
-    const allowedPipelines = ["reactive_chat", "chat"];
-    const hasAllowedIntent = allowedPipelines.includes(primaryIntent) || intent.intents.some((i) => allowedPipelines.includes(i));
+    const allowedPipelines = listRegisteredWorkflowIds();
+    const allowedIntents = new Set([...allowedPipelines, "chat", "query"]);
+    const hasAllowedIntent = allowedIntents.has(primaryIntent) || intent.intents.some((i) => allowedIntents.has(i));
     if (!hasAllowedIntent) {
         return denyDecision("POLICY_BLOCKED", "pipeline_not_allowed");
     }
@@ -45,6 +47,8 @@ export function evaluatePolicy(input) {
     if (riskFlags.includes("high_risk") || riskFlags.includes("blocked")) {
         return denyDecision("POLICY_BLOCKED", "risk_flags");
     }
+    /** L2-05: When coding_agent is allowed, default allow_tools so router can enable tools. */
+    const allowTools = allowedPipelines.includes("coding_agent") ? ["stub_tool"] : [];
     let memoryScope = "none";
     try {
         memoryScope = getConfig().flags.enable_org_memory ? "org" : "none";
@@ -54,7 +58,7 @@ export function evaluatePolicy(input) {
     }
     return {
         allowed: true,
-        allow_tools: [],
+        allow_tools: allowTools,
         deny_tools: [],
         memory_scope: memoryScope,
         max_budgets: { ...DEFAULT_MAX_BUDGETS },

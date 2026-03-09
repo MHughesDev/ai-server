@@ -1,6 +1,6 @@
 /**
  * Evaluation harness types – gold dataset and scoring.
- * @see Docs/SPEC/12_EvaluationEngine_Spec.md, Docs/SPEC/21_Test_and_Eval_Plan.md, L2-04 Phase 2
+ * @see docs/SPEC/12_EvaluationEngine_Spec.md, docs/SPEC/21_Test_and_Eval_Plan.md, L2-04 Phase 2
  */
 /** A single gold case: input + expected outcomes */
 export interface EvalCase {
@@ -8,7 +8,7 @@ export interface EvalCase {
     /** Request envelope (valid for POST /v1/query) */
     input: Record<string, unknown>;
     /** Expected response status */
-    expected_status: "ok" | "blocked" | "error" | "accepted";
+    expected_status: "ok" | "blocked" | "error";
     /** Optional: max acceptable latency_ms */
     max_latency_ms?: number;
     /** Optional: expected pipeline_type in response */

@@ -1,6 +1,6 @@
 /**
  * Multimodal preprocessing – deterministic metadata and token estimates (L2-07 Phase 1).
- * @see Docs/SPEC/05_BrainStem_Spec.md
+ * @see docs/SPEC/05_BrainStem_Spec.md
  */
 /** Default token estimates by type (deterministic for budgeting) */
 const DEFAULT_TOKEN_ESTIMATES = {

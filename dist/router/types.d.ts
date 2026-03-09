@@ -1,6 +1,6 @@
 /**
  * Router/Dispatcher – map IntentBundle + PolicyDecision to allow/deny + PipelinePlan.
- * @see Docs/SPEC/13_Router_and_Dispatch_Spec.md, L2-03 Phase 2
+ * @see docs/SPEC/13_Router_and_Dispatch_Spec.md, L2-03 Phase 2
  */
 import type { CanonicalRequest, IntentBundle, PolicyDecision, PipelinePlan } from "../contracts/index.js";
 import type { ErrorCode } from "../contracts/errors.js";

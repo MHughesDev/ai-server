@@ -3,19 +3,20 @@
 ## 0) Document Control
 - Plan ID: PLAN-00
 - Plan Name: Master Delivery Plan (Harness Deferred)
-- Linked SPEC: `Docs/Overview.md`, `Docs/Architecture.md`
-- All known gaps (consolidated by area): `Docs/PLANS/Implementation-plans/Known-Gaps-Consolidated.md`
+- Linked SPEC: `docs/Overview.md` or `docs/Overview.md`, `docs/Architecture.md` or `docs/Architecture_document_Finalized.md`
+- Implementation status and gaps: SOW §2.6 (Contract and Type Gaps), §7 (What Might Need to Be Added); see `docs/PLANS/Scope-of-Work.md`.
 - Owner(s): Tech Lead, Platform Lead
 - Contributors: API, Runtime, Security, Ops, QA
 - Status: `draft`
 - Priority: `P0`
 - Created: 2026-02-18
-- Last Updated: 2026-02-18
+- Last Updated: 2026-02-27
+- **Implementation status (SOW):** Core implementation phases are complete, but production readiness remains conditional on closing active gaps in `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` (observability sink hardening, readiness dependency checks, and doc/runtime parity updates). Completion language in this plan should be interpreted as implementation-complete, not production-ready.
 - Review Cadence: Weekly delivery review + daily async status
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose
-Coordinate all non-harness platform work so the system is production-ready before coding agent harness implementation begins.
+Coordinate platform work so the system reaches production-ready status only after active operational and security gaps are closed. **Coding agent harness (autonomous loop) is implemented** and gated by `harness_autonomous_execution_enabled`; enable after L2-99 readiness gate passes.
 
 ### 1.2 Intended Outcomes
 - Outcome 1: Stable contracts and policy/routing core in production shape.
@@ -23,7 +24,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 - Outcome 3: Harness start criteria are objective and measurable.
 
 ### 1.3 Non-Goals
-- Non-goal 1: Building the coding agent planner/executor loop now.
+- Non-goal 1: Enabling the autonomous coding agent loop in production before the L2-99 readiness gate passes (implementation is complete; use `harness_autonomous_execution_enabled` only after sign-off).
 - Non-goal 2: Shipping broad tool-execution capabilities in this cycle.
 
 ## 2) Scope
@@ -31,7 +32,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 - Capability/process/interface in scope: Master sequencing for Plans 01-08 and deferred gate for Plan 99.
 
 ### 2.2 Out of Scope
-- Explicitly excluded work: Coding agent harness execution loop and autonomous patch workflows.
+- Explicitly excluded until gate passes: Enabling autonomous harness execution in production (code is implemented; enable via `harness_autonomous_execution_enabled` only after L2-99 go decision).
 
 ### 2.3 Interfaces Touched
 - API endpoints: `/v1/query`, operational health/metrics endpoints.
@@ -41,7 +42,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- Blocking plans/specs/services: Finalized architecture contracts from `Docs/Overview.md` and `Docs/Architecture.md`.
+- Blocking plans/specs/services: Finalized architecture contracts from `docs/Overview.md` / `docs/Overview.md` and `docs/Architecture.md` / `docs/Architecture_document_Finalized.md`.
 
 ### 3.2 Downstream Consumers
 - Plans/features blocked by this plan: Plan 99 (Deferred Coding Agent Harness), product integrations.
@@ -131,7 +132,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 - Basic docs: API and runbook basics.
 
 **Task List**
-- [ ] Task P1-01: Complete Plan 01 and verify acceptance criteria.
+- [x] Task P1-01: Complete Plan 01 and verify acceptance criteria.
 - [x] Task P1-02: Confirm interoperability with policy/routing placeholders.
 - [ ] Task P1-03: Publish MVP readiness report.
 
@@ -172,7 +173,7 @@ Coordinate all non-harness platform work so the system is production-ready befor
 - Test expansion: Negative path and abuse cases.
 
 **Task List**
-- [ ] Task P2-01: Complete policy and routing acceptance tests.
+- [x] Task P2-01: Complete policy and routing acceptance tests.
 - [ ] Task P2-02: Validate security controls and produce audit artifacts.
 - [ ] Task P2-03: Enable quality gates for regressions.
 
@@ -332,7 +333,7 @@ This project is a UI-less API server; dashboard panels are out of scope and defe
 
 ## 10) Rollout Strategy
 ### 10.1 Feature Flags
-- Flag name: `platform.master_rollout_enabled`
+- Flag name: `platform_production_rollout_enabled` (legacy alias: `PLATFORM_MASTER_ROLLOUT_ENABLED`)
 - Default state: false
 - Rollout criteria: All P0 plans pass acceptance and staging soak.
 

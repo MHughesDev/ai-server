@@ -1,0 +1,142 @@
+# AI Server Docker Compose Configuration
+# Production-ready with Redis for rate limiting and persistence
+
+version: "3.8"
+
+services:
+  ai-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ai-server:latest
+    container_name: ai-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3443:3443"  # HTTPS port
+    environment:
+      # Core
+      NODE_ENV: production
+      LOG_LEVEL: info
+      
+      # Security
+      OPERATIONAL_BEARER_TOKEN: ${OPERATIONAL_BEARER_TOKEN}
+      
+      # Model Gateway
+      MODEL_GATEWAY_PROVIDERS_JSON: ${MODEL_GATEWAY_PROVIDERS_JSON}
+      MODEL_GATEWAY_TIMEOUT_MS: 25000
+      MODEL_GATEWAY_MAX_RETRIES: 2
+      
+      # Auth
+      AUTH_IDP_REGISTRY_JSON: ${AUTH_IDP_REGISTRY_JSON}
+      AUTH_APP_REGISTRY_JSON: ${AUTH_APP_REGISTRY_JSON}
+      AUTH_AI_JWT_SECRET: ${AUTH_AI_JWT_SECRET}
+      
+      # Redis (for rate limiting and memory)
+      REDIS_URL: redis://redis:6379
+      
+      # Rate Limiting
+      INGRESS_RATE_LIMIT_MAX_REQUESTS: 100
+      INGRESS_RATE_LIMIT_WINDOW_MS: 60000
+      
+      # Memory
+      MEMORY_BACKEND: vector
+      MEMORY_EMBEDDING_PROVIDER: ${MEMORY_EMBEDDING_PROVIDER:-hash}
+      MEMORY_PERSISTENT_BACKEND: redis
+      
+      # Async Jobs
+      QUEUE_WORKERS_COUNT: ${QUEUE_WORKERS_COUNT:-2}
+      QUEUE_BACKEND: redis
+      
+      # Feature Flags
+      FEATURE_FLAG_ENABLE_DYNAMIC: "true"
+      
+      # Audit & Observability
+      AUDIT_LOG_PATH: /var/log/ai-server/audit.log
+      OBSERVABILITY_EVENT_SINK_PATH: /var/log/ai-server/events.log
+      
+      # TLS (optional)
+      TLS_KEY_PATH: ${TLS_KEY_PATH}
+      TLS_CERT_PATH: ${TLS_CERT_PATH}
+    volumes:
+      - ai-server-logs:/var/log/ai-server
+      - ai-server-data:/var/lib/ai-server
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-server-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-server-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - ai-server-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Optional: Vector database (choose one)
+  # Option 1: Weaviate
+  weaviate:
+    image: semitechnologies/weaviate:1.24.0
+    container_name: ai-server-weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+    networks:
+      - ai-server-network
+    profiles:
+      - weaviate
+
+  # Option 2: Chroma
+  chroma:
+    image: chromadb/chroma:0.4.24
+    container_name: ai-server-chroma
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: "/chroma/chroma"
+    volumes:
+      - chroma-data:/chroma/chroma
+    networks:
+      - ai-server-network
+    profiles:
+      - chroma
+
+volumes:
+  ai-server-logs:
+  ai-server-data:
+  redis-data:
+  weaviate-data:
+    driver: local
+  chroma-data:
+    driver: local
+
+networks:
+  ai-server-network:
+    driver: bridge

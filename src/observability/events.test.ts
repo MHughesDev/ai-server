@@ -10,13 +10,17 @@ import {
 } from "./events.js";
 
 describe("observability events", () => {
-  it("defines all required event types from SPEC 18", () => {
+  it("defines all required event types from SPEC 18 and Architecture §13", () => {
     const expected = [
       "ROUTE_DECISION",
       "POLICY_DECISION",
       "BUDGET_ASSIGN",
       "PIPELINE_START",
       "PIPELINE_END",
+      "WORKFLOW_START",
+      "WORKFLOW_END",
+      "ENGINE_START",
+      "ENGINE_END",
       "TOOL_START",
       "TOOL_END",
       "MEMORY_QUERY",
@@ -24,6 +28,7 @@ describe("observability events", () => {
       "VERIFY_RESULT",
       "FINAL_SYNTH",
       "ERROR",
+      "HARNESS_ITERATION",
     ];
     expect(REQUIRED_EVENT_TYPES).toEqual(expected);
   });
@@ -31,7 +36,10 @@ describe("observability events", () => {
   it("isRequiredEventType returns true for taxonomy values", () => {
     expect(isRequiredEventType("POLICY_DECISION")).toBe(true);
     expect(isRequiredEventType("ROUTE_DECISION")).toBe(true);
+    expect(isRequiredEventType("ENGINE_START")).toBe(true);
+    expect(isRequiredEventType("ENGINE_END")).toBe(true);
     expect(isRequiredEventType("ERROR")).toBe(true);
+    expect(isRequiredEventType("HARNESS_ITERATION")).toBe(true);
     expect(isRequiredEventType("unknown")).toBe(false);
   });
 

@@ -81,6 +81,7 @@
 ## 6) References
 
 - Plan: `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
-- Runbook: `docs/Runbooks/Multimodal-Input-Path.md`
-- Spec: `docs/SPEC/04_Ingress_Spec.md`, `docs/SPEC/05_BrainStem_Spec.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/02_API_Contracts.md`
+- **SOW:** Segment L (L.1a–L.1d) verifies L2-07 implementation and runbook linkage; see `docs/PLANS/Scope-of-Work.md` §4.1, §9 Segment L.
+- Runbook: `docs/Runbooks/Multimodal-Input-Path.md` (or `docs/Runbooks/` — check both path forms)
+- Spec: `docs/SPEC/` or `docs/SPEC/`: 04_Ingress_Spec.md, 05_BrainStem_Spec.md, 20_Config_and_FeatureFlags.md, 02_API_Contracts.md
 - Config: `src/config/schema.ts` (multimodal_input_path_enabled, maxAttachmentCount, maxAttachmentBytes)

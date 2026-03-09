@@ -1,6 +1,6 @@
 /**
  * Trace and request context propagation.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 1 – trace_id/request_id in every log/artifact
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 1 – trace_id/request_id in every log/artifact
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";

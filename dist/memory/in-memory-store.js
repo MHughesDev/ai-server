@@ -1,20 +1,57 @@
 /**
  * In-memory memory store – MVP implementation for tests and dev without vector DB.
+ * L2-06 Segment I: Optional retention (TTL and max_chunks_per_scope) when provided.
  * @see L2-06 Phase 0, MEM-001/MEM-002
  */
 import { scopeAllowsAccess } from "./memory-abstraction.js";
 import { chunkText } from "./chunker.js";
 import { randomUUID } from "node:crypto";
 const defaultTopK = 10;
+const defaultMaxChunksPerIngest = 128;
+function scopeKey(scope, scope_keys) {
+    const parts = [scope, ...Object.entries(scope_keys).sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v)];
+    return parts.join(":");
+}
 /**
  * In-memory store: chunks stored by scope; retrieval filters by scope and does
  * simple substring match for ranking (no embeddings). Suitable for tests and dev.
+ * When retention is set: evicts chunks older than ttl_seconds; evicts oldest per scope when over max_chunks_per_scope.
  */
 export class InMemoryStore {
     chunks = [];
     available = true;
+    retention;
+    constructor(retention) {
+        this.retention = retention;
+    }
+    evictByRetention() {
+        if (!this.retention)
+            return;
+        const now = Date.now();
+        if (this.retention.ttl_seconds != null && this.retention.ttl_seconds > 0) {
+            const cutoff = new Date(now - this.retention.ttl_seconds * 1000).toISOString();
+            this.chunks = this.chunks.filter((s) => (s.chunk.metadata.created_at ?? "") > cutoff);
+        }
+        const maxChunks = this.retention.max_chunks_per_scope;
+        if (maxChunks != null && maxChunks > 0) {
+            const byScope = new Map();
+            for (const s of this.chunks) {
+                const sk = scopeKey(s.chunk.metadata.scope, s.chunk.metadata.scope_keys);
+                const list = byScope.get(sk) ?? [];
+                list.push(s);
+                byScope.set(sk, list);
+            }
+            this.chunks = [];
+            for (const list of byScope.values()) {
+                list.sort((a, b) => (a.chunk.metadata.created_at ?? "").localeCompare(b.chunk.metadata.created_at ?? ""));
+                const keep = list.slice(-maxChunks);
+                this.chunks.push(...keep);
+            }
+        }
+    }
     async retrieve(request) {
         await Promise.resolve(); // satisfy async contract for future async store impl
+        this.evictByRetention();
         const start = Date.now();
         if (!this.available) {
             return {
@@ -42,6 +79,7 @@ export class InMemoryStore {
         const hits = candidates.slice(0, topK);
         return {
             hits,
+            degraded: false,
             latency_ms: Date.now() - start,
         };
     }
@@ -55,10 +93,24 @@ export class InMemoryStore {
             };
         }
         const chunkStrings = chunkText(input.text, { chunk_size: 512, overlap: 64 });
+        const maxChunksPerIngest = this.retention?.max_chunks_per_ingest ?? defaultMaxChunksPerIngest;
+        const capPolicy = this.retention?.ingest_chunk_cap_policy ?? "trim";
+        if (chunkStrings.length > maxChunksPerIngest && capPolicy === "reject") {
+            return {
+                document_id: input.document_id,
+                chunks_written: 0,
+                chunks_dropped: chunkStrings.length,
+                error: "ingest_chunk_cap_exceeded",
+            };
+        }
+        const boundedChunks = chunkStrings.length > maxChunksPerIngest
+            ? chunkStrings.slice(0, maxChunksPerIngest)
+            : chunkStrings;
+        const dropped = Math.max(0, chunkStrings.length - boundedChunks.length);
         let written = 0;
-        for (let i = 0; i < chunkStrings.length; i++) {
+        for (let i = 0; i < boundedChunks.length; i++) {
             const chunk = {
-                text: chunkStrings[i],
+                text: boundedChunks[i],
                 metadata: {
                     chunk_id: randomUUID(),
                     document_id: input.document_id,
@@ -75,7 +127,13 @@ export class InMemoryStore {
             });
             written++;
         }
-        return { document_id: input.document_id, chunks_written: written };
+        this.evictByRetention();
+        return {
+            document_id: input.document_id,
+            chunks_written: written,
+            chunks_dropped: dropped,
+            error: dropped > 0 ? "ingest_chunks_trimmed" : undefined,
+        };
     }
     async isAvailable() {
         await Promise.resolve();

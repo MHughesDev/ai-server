@@ -1,15 +1,26 @@
 # 01 Principles and Invariants
 
-## Invariants
-- Ingress is deterministic only.
-- Brain Stem is first cognition.
-- Policy decisions are enforceable and mandatory.
-- All tools flow through Tool Gateway.
-- All memory flows through Memory Abstraction.
-- Every request is traceable.
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 2, 3, 16, 18).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
 
-## Principles
-- Contract-first design.
-- Deterministic governance over prompt-only controls.
-- Low coupling, high debuggability.
-- Safe degradation under failure or budget pressure.
+## Non-Negotiable Invariants
+- Ingress is deterministic and non-cognitive.
+- Brain Stem is the first cognitive boundary.
+- Governance is enforceable through machine fields (`PolicyDecision`, budgets, allowlists), not prompt-only controls.
+- Engines never orchestrate and never call each other directly.
+- Orchestrator is the only authority for loops, nested workflows, retries, stop conditions, and budget inheritance.
+- All tool access flows through Tool Gateway; all memory access flows through Memory Gateway/abstraction.
+- Every request is traceable end-to-end (decision events, engine/tool/memory telemetry, costs, errors).
+
+## Design Principles
+- Contract-first internal and external interfaces.
+- Industry-agnostic core (domain specialization in workflows/config/tool adapters, not engines).
+- Modality-agnostic workflow selection (intent/risk/complexity/capability needs, not input type names).
+- Deterministic controls at trust boundaries (auth, policy, budgets, sandbox).
+- Safe degradation when dependencies fail (structured errors and bounded fallbacks).
+
+## Production Target Clarification
+- Identity context must come from verified trust-token claims in production.
+- Endpoint protection, budget enforcement, lifecycle controls, and sink persistence are required production behaviors.
+- Any implementation using stubs must be explicitly marked non-production.

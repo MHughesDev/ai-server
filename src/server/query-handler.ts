@@ -10,7 +10,14 @@ import { createControlPlane } from "../controlplane/control-plane-impl.js";
 import { assertCanDispatch, canDispatch } from "../controlplane/dispatch-gate.js";
 import { defaultRouter } from "../router/default-router.js";
 import { createChatPipeline } from "../pipelines/chat-pipeline.js";
-import { withTimeoutAndRetry, StubModelGateway, ModelGatewayError } from "../gateways/model-gateway.js";
+import { createCodingAgentPipeline } from "../pipelines/coding-agent-pipeline.js";
+import { createDeepResearchPipeline } from "../pipelines/deep-research-pipeline.js";
+import { createDecisionPipeline } from "../pipelines/decision-pipeline.js";
+import { createNestedWorkflowPipeline } from "../pipelines/nested-workflow-pipeline.js";
+import type { WorkflowRunnerDeps } from "../workflows/runner.js";
+import { createEngineRegistry } from "../engines/registry.js";
+import { createProviderBackedModelGateway, ModelGatewayError } from "../gateways/model-gateway.js";
+import { getDefaultToolGateway, AllowlistToolGateway, ExecutableToolGateway } from "../gateways/tool-gateway.js";
 import type { ResponseEnvelope } from "../contracts/response-envelope.js";
 import {
   runWithContextAsync,
@@ -33,10 +40,36 @@ import {
   METRIC_RETRIEVAL_HITS_TOTAL,
 } from "../observability/metrics.js";
 import { getConfig } from "../bootstrap/index.js";
+import { getFeatureFlagService } from "../config/feature-flags.js";
 import { writeAuditEvent } from "../security/audit-logger.js";
+import { redact, type RedactionLevel } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
 import { getDefaultStore } from "../memory/default-store.js";
 import { runRetrieval } from "../memory/retrieval-service.js";
+
+class RequestDeadlineExceededError extends Error {
+  constructor(public readonly deadlineMs: number) {
+    super(`Request deadline exceeded after ${deadlineMs}ms`);
+    this.name = "RequestDeadlineExceededError";
+  }
+}
+
+async function withDeadline<T>(promise: Promise<T>, deadlineMs?: number): Promise<T> {
+  if (!deadlineMs || deadlineMs <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new RequestDeadlineExceededError(deadlineMs));
+        }, deadlineMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function emit(event: TelemetryEvent): void {
   const obs = getObservability();
@@ -46,7 +79,7 @@ function emit(event: TelemetryEvent): void {
 function buildEvent(
   event_type: string,
   payload: Record<string, unknown>,
-  redaction_level: "minimal" = "minimal"
+  redaction_level: RedactionLevel = "minimal"
 ): TelemetryEvent {
   const ctx = getTraceContext();
   return {
@@ -59,18 +92,27 @@ function buildEvent(
   };
 }
 
+function capabilityForPipeline(pipelineType: string): string {
+  if (pipelineType === "decision") return "classification";
+  if (pipelineType === "deep_research") return "reasoning";
+  return "chat";
+}
+
+/** L2-05: Audit payloads are redacted so no raw secrets in audit log. */
 function writeSecurityAudit(
   event_type: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  redactionLevel: RedactionLevel = "minimal"
 ): void {
   const ctx = getTraceContext();
   const start = Date.now();
+  const safePayload = redact(payload, redactionLevel);
   writeAuditEvent({
     event_type,
     request_id: ctx?.request_id ?? "unknown",
     trace_id: ctx?.trace_id,
     timestamp_iso: new Date().toISOString(),
-    payload,
+    payload: safePayload,
   });
   recordHistogram(METRIC_AUDIT_WRITE_LATENCY_MS, Date.now() - start, {
     event_type,
@@ -86,6 +128,21 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
   const requestId = ingressResult.envelope.request_id;
   const ctx = createContext(requestId);
   const start = Date.now();
+  const flagContext = {
+    org_id: ingressResult.callerContext.orgId,
+    app_id: ingressResult.callerContext.appId,
+    user_id: ingressResult.callerContext.userId,
+  };
+  const flagService = getFeatureFlagService();
+  const isFlagEnabled = (flagName: keyof typeof config.flags): boolean =>
+    flagService?.evaluateFlag(flagName, flagContext).enabled ?? config.flags[flagName];
+  const multimodalInputPathEnabled =
+    isFlagEnabled("multimodal_input_path_enabled") && isFlagEnabled("enable_multimodal_pipeline");
+  const observabilityEnabled = isFlagEnabled("observability_required_events_v1");
+  const securityHardControlsEnabled = isFlagEnabled("security_hard_controls_enabled");
+  const memoryRetrievalEnabled = isFlagEnabled("memory_retrieval_enabled");
+  const costCapsEnabled = isFlagEnabled("enable_cost_caps");
+  const toolExecutionEnabled = process.env.TOOL_EXECUTION_ENABLED === "true";
 
   return runWithContextAsync(ctx, async () => {
     try {
@@ -93,10 +150,9 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
       const intent = extractIntent(canonical);
 
       const controlPlane = createControlPlane({ router: defaultRouter });
-      const multimodalCapablePipelines =
-        config.flags.multimodal_input_path_enabled && config.flags.enable_multimodal_pipeline
-          ? ["reactive_chat"]
-          : undefined;
+      const multimodalCapablePipelines = multimodalInputPathEnabled
+        ? ["reactive_chat"]
+        : undefined;
       const result = await controlPlane.decide({
         canonical,
         intent,
@@ -104,56 +160,83 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         multimodalCapablePipelines,
       });
 
-      if (config.flags.observability_required_events_v1) {
+      /** L2-05: Use policy redaction_level for events and audit so no raw secrets in logs. */
+      const redactionLevel = (result.policyDecision.redaction_level ?? "minimal") as RedactionLevel;
+
+      if (observabilityEnabled) {
         emit(
-          buildEvent("POLICY_DECISION", {
-            allowed: result.policyDecision.allowed,
-            deny_reason: result.policyDecision.deny_reason,
-            memory_scope: result.policyDecision.memory_scope,
-            allowed_pipelines: result.policyDecision.allowed_pipelines,
-          })
+          buildEvent(
+            "POLICY_DECISION",
+            {
+              allowed: result.policyDecision.allowed,
+              deny_reason: result.policyDecision.deny_reason,
+              memory_scope: result.policyDecision.memory_scope,
+              allowed_pipelines: result.policyDecision.allowed_pipelines,
+            },
+            redactionLevel
+          )
         );
         const budgets = result.policyDecision.max_budgets ?? {};
         emit(
-          buildEvent("BUDGET_ASSIGN", {
-            token_budget: budgets.token_budget,
-            tool_budget: budgets.tool_budget,
-            deadline_ms: budgets.deadline_ms,
-            cost_budget_usd: budgets.cost_budget_usd,
-          })
+          buildEvent(
+            "BUDGET_ASSIGN",
+            {
+              token_budget: budgets.token_budget,
+              tool_budget: budgets.tool_budget,
+              deadline_ms: budgets.deadline_ms,
+              cost_budget_usd: budgets.cost_budget_usd,
+            },
+            redactionLevel
+          )
         );
       }
-      if (config.flags.security_hard_controls_enabled) {
-        writeSecurityAudit("SECURITY_POLICY_DECISION", {
-          allowed: result.policyDecision.allowed,
-          deny_reason: result.policyDecision.deny_reason ?? null,
-          memory_scope: result.policyDecision.memory_scope ?? null,
-        });
+      if (securityHardControlsEnabled) {
+        writeSecurityAudit(
+          "SECURITY_POLICY_DECISION",
+          {
+            allowed: result.policyDecision.allowed,
+            deny_reason: result.policyDecision.deny_reason ?? null,
+            memory_scope: result.policyDecision.memory_scope ?? null,
+          },
+          redactionLevel
+        );
       }
 
       if (!canDispatch(result)) {
         const denyReason = result.routeResult.allowed ? "POLICY_BLOCKED" : result.routeResult.denyReason;
-        if (config.flags.security_hard_controls_enabled) {
+        if (securityHardControlsEnabled) {
           incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: denyReason });
-          writeSecurityAudit("SECURITY_ROUTE_DENY", {
-            deny_reason: denyReason,
-            stage: "control_plane",
-          });
-        }
-        if (config.flags.observability_required_events_v1) {
-          emit(
-            buildEvent("ROUTE_DECISION", {
-              deny: true,
+          writeSecurityAudit(
+            "SECURITY_ROUTE_DENY",
+            {
               deny_reason: denyReason,
-            })
+              stage: "control_plane",
+            },
+            redactionLevel
+          );
+        }
+        if (observabilityEnabled) {
+          emit(
+            buildEvent(
+              "ROUTE_DECISION",
+              {
+                deny: true,
+                deny_reason: denyReason,
+              },
+              redactionLevel
+            )
           );
           emit(
-            buildEvent("ERROR", {
-              code: denyReason,
-              message: "Request denied by governance",
-              stage: "control_plane",
-              detail_redacted: {},
-            })
+            buildEvent(
+              "ERROR",
+              {
+                code: denyReason,
+                message: "Request denied by governance",
+                stage: "control_plane",
+                detail_redacted: {},
+              },
+              redactionLevel
+            )
           );
         }
         incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: "denied", status: "blocked" });
@@ -190,37 +273,53 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
 
       assertCanDispatch(result);
       const plan = result.pipelinePlan;
+      if (!costCapsEnabled && plan.budgets?.cost_budget_usd !== undefined) {
+        plan.budgets = { ...plan.budgets, cost_budget_usd: undefined };
+      }
 
       // L2-06: Enable retrieval in plan when flag and policy scope allow
       const memoryScope = result.policyDecision.memory_scope ?? "none";
       if (
-        config.flags.memory_retrieval_enabled &&
+        memoryRetrievalEnabled &&
         memoryScope !== "none" &&
         !plan.memory?.retrieval
       ) {
-        plan.memory = { retrieval: "default", top_k: 5 };
+        plan.memory = { retrieval: memoryScope, top_k: 5 };
       }
 
-      if (config.flags.observability_required_events_v1) {
+      if (observabilityEnabled) {
         emit(
-          buildEvent("ROUTE_DECISION", {
-            route: plan.pipeline_type,
-            pipeline_type: plan.pipeline_type,
-            strategy_id: plan.strategy_id,
-            deny: false,
-          })
+          buildEvent(
+            "ROUTE_DECISION",
+            {
+              route: plan.pipeline_type,
+              pipeline_type: plan.pipeline_type,
+              strategy_id: plan.strategy_id,
+              deny: false,
+            },
+            redactionLevel
+          )
         );
         emit(
-          buildEvent("PIPELINE_START", {
-            pipeline_type: plan.pipeline_type,
-            strategy_id: plan.strategy_id,
-          })
+          buildEvent(
+            "PIPELINE_START",
+            {
+              pipeline_type: plan.pipeline_type,
+              strategy_id: plan.strategy_id,
+            },
+            redactionLevel
+          )
         );
       }
 
-      // L2-06: Run scoped retrieval when plan has memory.retrieval; fallback on failure
+      // L2-06: Run scoped retrieval when plan has memory.retrieval; for reactive_chat the pipeline uses Memory Engine instead.
       let retrievalContext: { contextText: string; citations: Array<{ source: string; ref: string; span?: string }> } | undefined;
-      if (plan.memory?.retrieval && memoryScope !== "none") {
+      const pipelineUsesMemoryEngine = plan.pipeline_type === "reactive_chat";
+      if (
+        plan.memory?.retrieval &&
+        memoryScope !== "none" &&
+        !pipelineUsesMemoryEngine
+      ) {
         const store = getDefaultStore();
         const caller = {
           user_id: ingressResult.callerContext.userId,
@@ -233,17 +332,27 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
             scope: memoryScope,
             caller,
             top_k: plan.memory.top_k ?? 5,
+            retrieval_timeout_ms: config.memory.retrieval_timeout_ms,
+            max_context_chars: config.memory.max_context_chars,
+            max_context_tokens:
+              plan.budgets?.token_budget != null
+                ? Math.max(64, Math.min(config.memory.max_context_tokens, Math.floor(plan.budgets.token_budget * 0.5)))
+                : config.memory.max_context_tokens,
           });
           if (retrievalResult.result.degraded) {
             incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "degraded" });
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
               emit(
-                buildEvent("ERROR", {
-                  code: "RETRIEVAL_UNAVAILABLE",
-                  message: "Retrieval store degraded; proceeding without context",
-                  stage: "retrieval",
-                  detail_redacted: {},
-                })
+                buildEvent(
+                  "ERROR",
+                  {
+                    code: "RETRIEVAL_UNAVAILABLE",
+                    message: "Retrieval store degraded; proceeding without context",
+                    stage: "retrieval",
+                    detail_redacted: {},
+                  },
+                  redactionLevel
+                )
               );
             }
           } else {
@@ -260,26 +369,34 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
               pipeline_type: plan.pipeline_type,
               status: retrievalResult.result.hits.length > 0 ? "hit" : "miss",
             });
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
               emit(
-                buildEvent("MEMORY_QUERY", {
-                  hit_count: retrievalResult.result.hits.length,
-                  latency_ms: retrievalResult.result.latency_ms,
-                  scope: memoryScope,
-                })
+                buildEvent(
+                  "MEMORY_QUERY",
+                  {
+                    hit_count: retrievalResult.result.hits.length,
+                    latency_ms: retrievalResult.result.latency_ms,
+                    scope: memoryScope,
+                  },
+                  redactionLevel
+                )
               );
             }
           }
         } catch (err) {
           incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "error" });
-          if (config.flags.observability_required_events_v1) {
+          if (observabilityEnabled) {
             emit(
-              buildEvent("ERROR", {
-                code: "RETRIEVAL_UNAVAILABLE",
-                message: err instanceof Error ? err.message : String(err),
-                stage: "retrieval",
-                detail_redacted: {},
-              })
+              buildEvent(
+                "ERROR",
+                {
+                  code: "RETRIEVAL_UNAVAILABLE",
+                  message: err instanceof Error ? err.message : String(err),
+                  stage: "retrieval",
+                  detail_redacted: {},
+                },
+                redactionLevel
+              )
             );
           }
           // Proceed without retrieval (degraded path)
@@ -300,10 +417,86 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         },
         retrievalContext,
       };
-      const chatPipeline = createChatPipeline(
-        withTimeoutAndRetry(new StubModelGateway(), { timeoutMs: 25_000, maxRetries: 2 })
-      );
-      const response = await chatPipeline.run(harnessInput);
+      const modelGateway = createProviderBackedModelGateway({
+        timeoutMs: config.model_gateway.timeout_ms,
+        maxRetries: config.model_gateway.max_retries,
+        defaultModel: config.model_gateway.default_model,
+        default_capability: config.model_gateway.default_capability,
+        providers: config.model_gateway.providers,
+        registry: config.model_gateway.registry,
+      }, {
+        capability: capabilityForPipeline(plan.pipeline_type),
+        org_id: ingressResult.callerContext.orgId,
+        app_id: ingressResult.callerContext.appId,
+        user_id: ingressResult.callerContext.userId,
+      });
+      const pipelineUsesMemory = pipelineUsesMemoryEngine ? { memoryStore: getDefaultStore() } : undefined;
+      const hasToolsInPlan = (plan.tools_enabled?.length ?? 0) > 0;
+      if (hasToolsInPlan && !toolExecutionEnabled) {
+        console.warn(
+          "[query] tools requested in plan but TOOL_EXECUTION_ENABLED is false; using deny-only gateway"
+        );
+      }
+      const toolGatewayForPlan = hasToolsInPlan
+        ? toolExecutionEnabled
+          ? new AllowlistToolGateway({
+              allowlist: plan.tools_enabled,
+              sandbox: plan.sandbox,
+              delegate: new ExecutableToolGateway(),
+            })
+          : getDefaultToolGateway()
+        : getDefaultToolGateway();
+      const memoryStoreForEngines = getDefaultStore();
+      const getEngine = createEngineRegistry({
+        modelGateway,
+        toolGateway: toolGatewayForPlan,
+        memoryStore: memoryStoreForEngines,
+        toolsAllowlist: plan.tools_enabled,
+      });
+      // Closure references runnerDeps; must be assigned after getPipelineForWorkflow is defined
+      // eslint-disable-next-line prefer-const -- circular: getPipelineForWorkflow closes over runnerDeps
+      let runnerDeps: WorkflowRunnerDeps;
+      const getPipelineForWorkflow = (workflowId: string) => {
+        switch (workflowId) {
+          case "coding_agent":
+            return createCodingAgentPipeline({
+              modelGateway,
+              toolGateway: toolGatewayForPlan,
+            });
+          case "deep_research":
+            return createDeepResearchPipeline({ modelGateway });
+          case "decision":
+            return createDecisionPipeline({ modelGateway });
+          case "tool_automation":
+          case "extraction":
+          case "verification":
+          case "planning_only":
+          case "batch_analysis":
+            return createNestedWorkflowPipeline({ runnerDeps });
+          default:
+            return createChatPipeline(modelGateway, pipelineUsesMemory);
+        }
+      };
+      runnerDeps = { getEngine, getPipelineForWorkflow };
+      const pipeline =
+        plan.pipeline_type === "composite_example" ||
+        plan.pipeline_type === "tool_automation" ||
+        plan.pipeline_type === "extraction" ||
+        plan.pipeline_type === "verification" ||
+        plan.pipeline_type === "planning_only" ||
+        plan.pipeline_type === "batch_analysis"
+          ? createNestedWorkflowPipeline({ runnerDeps })
+          : plan.pipeline_type === "coding_agent"
+            ? createCodingAgentPipeline({
+                modelGateway,
+                toolGateway: toolGatewayForPlan,
+              })
+            : plan.pipeline_type === "deep_research"
+              ? createDeepResearchPipeline({ modelGateway })
+              : plan.pipeline_type === "decision"
+                ? createDecisionPipeline({ modelGateway })
+                : createChatPipeline(modelGateway, pipelineUsesMemory);
+      const response = await withDeadline(pipeline.run(harnessInput), plan.budgets?.deadline_ms);
 
       const latencyMs = Date.now() - start;
       incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: plan.pipeline_type, status: "ok" });
@@ -313,26 +506,105 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         status: "ok",
       });
 
-      if (config.flags.observability_required_events_v1) {
+      if (observabilityEnabled) {
         emit(
-          buildEvent("PIPELINE_END", {
-            pipeline_type: plan.pipeline_type,
-            strategy_id: plan.strategy_id,
-            duration_ms: latencyMs,
-            status: "ok",
-          })
+          buildEvent(
+            "PIPELINE_END",
+            {
+              pipeline_type: plan.pipeline_type,
+              strategy_id: plan.strategy_id,
+              duration_ms: latencyMs,
+              status: "ok",
+            },
+            redactionLevel
+          )
         );
         emit(
-          buildEvent("FINAL_SYNTH", {
-            pipeline_type: plan.pipeline_type,
-            status: "ok",
-          })
+          buildEvent(
+            "FINAL_SYNTH",
+            {
+              pipeline_type: plan.pipeline_type,
+              status: "ok",
+            },
+            redactionLevel
+          )
         );
       }
 
       const telemetry = response.telemetry;
       const costUsd = telemetry?.cost_usd_est ?? 0;
-      recordTenantUsage(ingressResult.callerContext.orgId, { cost_usd: costUsd });
+      const tokenUsage = (telemetry?.tokens_in ?? 0) + (telemetry?.tokens_out ?? 0);
+      const tokenBudget = plan.budgets?.token_budget;
+      const costBudgetUsd = plan.budgets?.cost_budget_usd;
+      if (
+        tokenBudget != null &&
+        Number.isFinite(tokenBudget) &&
+        tokenUsage > tokenBudget
+      ) {
+        return {
+          request_id: requestId,
+          status: "blocked",
+          mode: "sync",
+          error: {
+            code: "BUDGET_EXCEEDED",
+            message: "Token budget exceeded",
+            detail: { token_budget: tokenBudget, tokens_used: tokenUsage },
+          },
+          telemetry: {
+            pipeline: telemetry?.pipeline ?? plan.pipeline_type,
+            models_used: telemetry?.models_used ?? [],
+            tool_calls: telemetry?.tool_calls ?? 0,
+            tokens_in: telemetry?.tokens_in ?? 0,
+            tokens_out: telemetry?.tokens_out ?? 0,
+            cost_usd_est: costUsd,
+            latency_ms: telemetry?.latency_ms ?? Date.now() - start,
+          },
+        };
+      }
+      if (
+        costCapsEnabled &&
+        costBudgetUsd != null &&
+        Number.isFinite(costBudgetUsd) &&
+        costUsd > costBudgetUsd
+      ) {
+        return {
+          request_id: requestId,
+          status: "blocked",
+          mode: "sync",
+          error: {
+            code: "BUDGET_EXCEEDED",
+            message: "Cost budget exceeded",
+            detail: { cost_budget_usd: costBudgetUsd, cost_used_usd: costUsd },
+          },
+          telemetry: {
+            pipeline: telemetry?.pipeline ?? plan.pipeline_type,
+            models_used: telemetry?.models_used ?? [],
+            tool_calls: telemetry?.tool_calls ?? 0,
+            tokens_in: telemetry?.tokens_in ?? 0,
+            tokens_out: telemetry?.tokens_out ?? 0,
+            cost_usd_est: costUsd,
+            latency_ms: telemetry?.latency_ms ?? Date.now() - start,
+          },
+        };
+      }
+      try {
+        await recordTenantUsage(ingressResult.callerContext.orgId, { cost_usd: costUsd });
+      } catch (usageErr) {
+        if (observabilityEnabled) {
+          emit(
+            buildEvent(
+              "ERROR",
+              {
+                code: "TENANT_USAGE_RECORD_FAILED",
+                message: usageErr instanceof Error ? usageErr.message : String(usageErr),
+                stage: "tenant_budget",
+                detail_redacted: {},
+              },
+              redactionLevel
+            )
+          );
+        }
+      }
       return {
         ...response,
         telemetry: {
@@ -346,6 +618,33 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         },
       };
     } catch (err) {
+      if (err instanceof RequestDeadlineExceededError) {
+        const latencyMs = Date.now() - start;
+        incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: "deadline", status: "blocked" });
+        recordHistogram(METRIC_REQUEST_LATENCY_MS, latencyMs, {
+          route: "deadline",
+          status: "blocked",
+        });
+        return {
+          request_id: requestId,
+          status: "blocked",
+          mode: "sync",
+          error: {
+            code: "BUDGET_EXCEEDED",
+            message: err.message,
+            detail: { deadline_ms: err.deadlineMs },
+          },
+          telemetry: {
+            pipeline: "unknown",
+            models_used: [],
+            tool_calls: 0,
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd_est: 0,
+            latency_ms: latencyMs,
+          },
+        };
+      }
       const latencyMs = Date.now() - start;
       const errorCode = err instanceof ModelGatewayError ? err.code : "INTERNAL_ERROR";
       incrementCounter(METRIC_ERRORS_TOTAL, 1, { error_code: errorCode });
@@ -354,7 +653,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         route: "unknown",
         status: "error",
       });
-      if (config.flags.security_hard_controls_enabled) {
+      if (securityHardControlsEnabled) {
         incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: "ERROR" });
         writeSecurityAudit("SECURITY_ERROR", {
           code: errorCode,
@@ -362,7 +661,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
           message_redacted: true,
         });
       }
-      if (config.flags.observability_required_events_v1) {
+      if (observabilityEnabled) {
         emit(
           buildEvent("ERROR", {
             code: errorCode,

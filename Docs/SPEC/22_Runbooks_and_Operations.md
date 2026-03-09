@@ -1,10 +1,39 @@
 # 22 Runbooks and Operations
 
-## Core Runbooks
-Provider outage, tool failure spikes, memory store outage, latency spikes, cost spikes. **Memory and Retrieval (L2-06):** `docs/Runbooks/Memory-Retrieval-Outage.md` — retrieval store unavailable, citation quality, scope violation; kill switch: `memory_retrieval_enabled=false`. Harness Readiness Gate (L2-99): `docs/Runbooks/Harness-Readiness-Gate.md` — evidence validation, scorecard disputes, go/no-go sign-off, exception remediation. **Release and Rollback (L2-08):** `docs/Runbooks/Release-and-Rollback.md` — release execution, canary analysis, rollback operations, emergency mitigation; owner: Operations Lead; escalation: Operations → SRE → Security → Leadership incident commander. **Multimodal Input Path (L2-07):** `docs/Runbooks/Multimodal-Input-Path.md` — attachment failure triage, capability mismatch, kill switch, supported matrix.
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 13, 18.2, 18.8, 18.9, 18.12).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (endpoint protection, sink durability, lifecycle hardening, rollout enforcement).
 
-## Dashboards
-This repository is a UI-less API server; it does not build or host dashboards. Top errors, strategy health, tool failure rates, queue depth, latency percentiles, and cost by org/app are consumed via metrics/events (e.g. `GET /metrics`) or via external dashboards (e.g. Grafana/Prometheus) when provisioned by ops.
+## Operational Endpoints
+- `GET /healthz`
+- `GET /readyz`
+- `GET /metrics`
+- `GET /v1/version`
+
+Production target: these endpoints must be protected by auth/mTLS/private network boundaries as appropriate.
+
+## Runbook Index
+| Runbook | Path | Purpose |
+|---|---|---|
+| Query and Policy Failures | `docs/Runbooks/Query-and-Policy-Failures.md` | Query errors, policy/tool denies, budget failures |
+| Release and Rollback | `docs/Runbooks/Release-and-Rollback.md` | Release execution, canary, rollback, emergency mitigation |
+| Multimodal Input Path | `docs/Runbooks/Multimodal-Input-Path.md` | Attachment validation and capability mismatch triage |
+| Memory and Retrieval Outage | `docs/Runbooks/Memory-Retrieval-Outage.md` | Retrieval degradation, citation quality, scope concerns |
+| Harness Readiness Gate | `docs/Runbooks/Harness-Readiness-Gate.md` | L2-99 governance gate and autonomous harness enablement |
+| Observability and Eval | `docs/Runbooks/Observability-and-Eval.md` | Events, metrics, eval regression, alert tuning |
+| CI Bootstrap Troubleshooting | `docs/Runbooks/CI-Bootstrap-Troubleshooting.md` | CI/build/bootstrap incident handling |
+
+## On-Call and Escalation
+- Primary owner: operations/platform on-call.
+- Escalation path: operations -> SRE -> security -> incident commander.
+- Security incidents require audit preservation and redaction-safe evidence handling.
+
+## Operations Requirements
+- Readiness reflects dependency health (not static success).
+- Runtime behavior: `/healthz` and `/readyz` evaluate operational dependency status (including configured telemetry/audit sinks) and return `503` when unhealthy/unready.
+- Startup must fail fast on invalid required configuration.
+- Graceful shutdown and drain behavior must be available for production.
+- Release metadata (`release_id`, `build_id`) must be present for traceability.
 
 ## Incident Workflow
-Classify -> mitigate -> validate recovery -> postmortem with owners and follow-ups.
+Classify -> mitigate -> verify recovery -> communicate -> postmortem -> tracked follow-ups.

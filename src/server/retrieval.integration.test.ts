@@ -141,4 +141,42 @@ describe("L2-06 retrieval integration (full path)", () => {
       ref: expect.any(String),
     });
   });
+
+  it("enforces scope: caller org only receives citations from their org (not other orgs)", async () => {
+    const store = getDefaultStore();
+    if (!(store instanceof InMemoryStore)) return;
+    store.clear();
+    await store.ingest({
+      document_id: "org-o1-doc",
+      text: "Secret content for org o1 only.",
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+      source_label: "org-o1.txt",
+    });
+    await store.ingest({
+      document_id: "org-o2-doc",
+      text: "Secret content for org o2 only.",
+      scope: "org",
+      scope_keys: { org_id: "o2" },
+      source_label: "org-o2.txt",
+    });
+
+    const bodyAsO1 = {
+      ...validQueryBody,
+      request_id: "550e8400-e29b-41d4-a716-446655440002",
+      caller: { app_id: "a1", user_id: "u1", org_id: "o1", scopes: [] },
+      input: { text: "What is the secret content?", attachments: [] },
+    };
+    const { statusCode, body } = await httpPost(port, "/v1/query", bodyAsO1);
+    expect(statusCode).toBe(200);
+    const parsed = JSON.parse(body) as {
+      status: string;
+      output?: { citations?: Array<{ source: string; ref: string; span?: string }> };
+    };
+    expect(parsed.status).toBe("ok");
+    const citations = parsed.output?.citations ?? [];
+    const sources = citations.map((c) => c.source);
+    expect(sources).toContain("org-o1.txt");
+    expect(sources).not.toContain("org-o2.txt");
+  });
 });

@@ -1,6 +1,6 @@
 /**
  * CanonicalRequest – internal unified representation after multimodal parsing.
- * @see Docs/Overview.md, Docs/Architecture.md (6.1)
+ * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.1)
  */
 import { z } from "zod";
 /** Attachment handle after canonicalization (no raw content in spine) */

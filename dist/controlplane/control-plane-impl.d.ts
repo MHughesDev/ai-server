@@ -1,6 +1,6 @@
 /**
  * Control plane implementation – policy → budget → router (L2-03).
- * @see Docs/SPEC/06_ControlPlane_Spec.md
+ * @see docs/SPEC/06_ControlPlane_Spec.md
  */
 import type { IControlPlane } from "./types.js";
 import type { IRouter } from "../router/types.js";

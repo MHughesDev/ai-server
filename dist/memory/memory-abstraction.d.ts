@@ -1,14 +1,15 @@
 /**
  * Memory abstraction – governed interface for retrieval and write-back.
- * @see Docs/SPEC/17_MemoryAbstraction_Spec.md
+ * @see docs/SPEC/17_MemoryAbstraction_Spec.md
+ * L2-06 Segment I: Structured and object store interfaces for gateway expansion.
  */
-import type { RetrievalRequest, RetrievalResult, RetrievalScope, IngestionInput, IngestionResult } from "./types.js";
+import type { RetrievalRequest, RetrievalResult, RetrievalScope, IngestionInput, IngestionResult, StructuredRecord, ObjectBlob } from "./types.js";
 /**
  * Scope check: whether a request scope is allowed to access data for given scope_keys.
  * Enforces user/project/org boundaries (org can see project/user; project can see user; user only self).
  */
 export declare function scopeAllowsAccess(requestScope: RetrievalScope, requestScopeKeys: Record<string, string>, chunkScope: RetrievalScope, chunkScopeKeys: Record<string, string>): boolean;
-/** Memory store interface – retrieval and optional ingestion. */
+/** Memory store interface – retrieval and optional ingestion (vector/semantic store). */
 export interface IMemoryStore {
     /** Retrieve with scope enforcement. Returns empty hits and degraded flag when unavailable. */
     retrieve(request: RetrievalRequest): Promise<RetrievalResult>;
@@ -16,5 +17,23 @@ export interface IMemoryStore {
     ingest?(input: IngestionInput): Promise<IngestionResult>;
     /** Health check for fallback decision. */
     isAvailable?(): Promise<boolean>;
+}
+/** L2-06 Segment I: Structured store – key-value records by scope. */
+export interface IStructuredStore {
+    get(key: string, scope: RetrievalScope, scope_keys: Record<string, string>): Promise<StructuredRecord | null>;
+    put(record: Omit<StructuredRecord, "created_at"> & {
+        created_at?: string;
+    }): Promise<void>;
+    delete(key: string, scope: RetrievalScope, scope_keys: Record<string, string>): Promise<boolean>;
+    list(scope: RetrievalScope, scope_keys: Record<string, string>): Promise<StructuredRecord[]>;
+}
+/** L2-06 Segment I: Object store – blobs by id and scope. */
+export interface IObjectStore {
+    get(id: string, scope: RetrievalScope, scope_keys: Record<string, string>): Promise<ObjectBlob | null>;
+    put(blob: Omit<ObjectBlob, "created_at"> & {
+        created_at?: string;
+    }): Promise<void>;
+    delete(id: string, scope: RetrievalScope, scope_keys: Record<string, string>): Promise<boolean>;
+    list(scope: RetrievalScope, scope_keys: Record<string, string>): Promise<Pick<ObjectBlob, "id" | "content_type" | "created_at">[]>;
 }
 //# sourceMappingURL=memory-abstraction.d.ts.map

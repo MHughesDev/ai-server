@@ -1,1 +1,1 @@
-{"version":3,"file":"stub-policy.d.ts","sourceRoot":"","sources":["../../src/controlplane/stub-policy.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,iCAAiC,CAAC;AAEtE,wDAAwD;AACxD,wBAAgB,qBAAqB,IAAI,cAAc,CAYtD"}
+{"version":3,"file":"stub-policy.d.ts","sourceRoot":"","sources":["../../src/controlplane/stub-policy.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,iCAAiC,CAAC;AAEtE,2FAA2F;AAC3F,wBAAgB,qBAAqB,IAAI,cAAc,CAYtD"}

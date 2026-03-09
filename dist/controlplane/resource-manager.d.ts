@@ -1,6 +1,6 @@
 /**
  * Resource manager – effective budgets and budget-exceeded enforcement (L2-03 Phase 1).
- * @see Docs/SPEC/09_ResourceManager_Spec.md, L2-03 GOV-003, GOV-004
+ * @see docs/SPEC/09_ResourceManager_Spec.md, L2-03 GOV-003, GOV-004
  */
 import type { PolicyDecision } from "../contracts/policy-decision.js";
 import type { CanonicalRequest } from "../contracts/canonical-request.js";
@@ -19,6 +19,7 @@ export interface BudgetCheckResult {
 /**
  * Compute effective per-request budgets from policy max_budgets and request context.
  * Deterministic: same policy + request → same effective budgets.
+ * PRODUCTION: deadline_ms and cost_budget_usd are passed through but not enforced in this module; runtime/pipeline must enforce them to avoid runaway requests or cost overruns.
  */
 export declare function assignBudgets(policy: PolicyDecision, _canonical: CanonicalRequest): EffectiveBudgets;
 /**

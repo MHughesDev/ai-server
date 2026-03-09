@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-06
 - Plan Name: Memory and Retrieval Infrastructure (No Harness)
-- Linked SPEC: `Docs/Overview.md` sections `14`, `17`, `18`, `21`; `Docs/Architecture.md` milestone 4 subset
+- Linked SPEC: `docs/Overview.md` sections `14`, `17`, `18`, `21`; `docs/Architecture_document_Finalized.md` milestone 4 subset
 - Owner(s): Retrieval Lead
 - Contributors: Data Platform, Runtime, Observability, QA, Security
 - Status: `draft`

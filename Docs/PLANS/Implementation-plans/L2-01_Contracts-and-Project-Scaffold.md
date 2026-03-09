@@ -3,13 +3,13 @@
 ## 0) Document Control
 - Plan ID: L2-01
 - Plan Name: Contracts and Project Scaffold
-- Linked SPEC: `Docs/SPEC/01_Principles_and_Invariants.md`, `Docs/SPEC/02_API_Contracts.md`, `Docs/SPEC/03_Component_Map.md`, `Docs/SPEC/04_Ingress_Spec.md`, `Docs/SPEC/05_BrainStem_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`
+- Linked SPEC: `docs/SPEC/01_Principles_and_Invariants.md`, `docs/SPEC/02_API_Contracts.md`, `docs/SPEC/03_Component_Map.md`, `docs/SPEC/04_Ingress_Spec.md`, `docs/SPEC/05_BrainStem_Spec.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`
 - Owner(s): Platform Lead
 - Contributors: API Lead, Runtime Lead, QA Lead
 - Status: `complete`
 - Priority: `P0`
 - Created: 2026-02-18
-- Last Updated: 2026-02-19
+- Last Updated: 2026-02-26
 - Review Cadence: Daily check-in + end-of-sprint gate review
 
 ## 1) Purpose and Outcome
@@ -27,8 +27,8 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 
 ## 2) Scope
 ### 2.1 In Scope
-- Contract definitions and validators for `RequestEnvelope`, `ResponseEnvelope`, `CanonicalRequest`, `IntentBundle`, `PolicyDecision`, and `PipelinePlan`.
-- Project scaffold for ingress, brain stem, control plane, router, gateways, pipelines, and observability modules.
+- Contract definitions and validators for `RequestEnvelope`, `ResponseEnvelope`, `CanonicalRequest`, `IntentBundle`, `PolicyDecision`, `PipelinePlan`, `TypedArtifact`, `Task`, `EngineInvocation`, `EngineResult`, and `WorkflowDefinition`.
+- Project scaffold for ingress, brain stem, control plane, router, gateways, pipelines, **workflows** (registry + definitions), **engines**, and observability modules.
 - Baseline configuration loader and feature flag defaults.
 - Baseline CI workflow and starter tests.
 
@@ -45,12 +45,12 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/00_Master-Delivery-Plan.md` approved sequencing.
+- `docs/PLANS/00_Master-Delivery-Plan.md` approved sequencing.
 - Architecture invariants accepted by owners.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-02_MVP-Runtime-Single-Endpoint-Chat.md`
-- `Docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-02_MVP-Runtime-Single-Endpoint-Chat.md`
+- `docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md`
 - All subsequent L2 plans.
 
 ### 3.3 External Dependencies
@@ -294,7 +294,7 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 | CNP-007 | Add seed unit + smoke tests | QA Lead | 1d | P1 | CNP-004,CNP-006 | Baseline tests deterministic | CI repeat runs |
 | CNP-008 | Final sprint handoff and sign-off notes | Platform Lead | 0.5d | P1 | CNP-007 | Handoff document accepted | Review meeting |
 
-**Handoff artifact:** [L2-01_Handoff.md](./L2-01_Handoff.md) (checklist, compatibility matrix, schema examples, CI commands, known limits, open risks). Runbook: [Docs/Runbooks/CI-Bootstrap-Troubleshooting.md](../../Runbooks/CI-Bootstrap-Troubleshooting.md).
+**Handoff artifact:** [L2-01_Handoff.md](./L2-01_Handoff.md) (checklist, compatibility matrix, schema examples, CI commands, known limits, open risks). Runbook: `docs/Runbooks/CI-Bootstrap-Troubleshooting.md` or `docs/Runbooks/CI-Bootstrap-Troubleshooting.md` (see [CI-Bootstrap-Troubleshooting.md](../../Runbooks/CI-Bootstrap-Troubleshooting.md)).
 
 ## 7) Validation and Test Strategy
 ### 7.1 Unit

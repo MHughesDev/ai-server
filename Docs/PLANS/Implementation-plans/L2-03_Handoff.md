@@ -16,6 +16,7 @@
 - [x] Governance events emitted: POLICY_DECISION, BUDGET_ASSIGN, ROUTE_DECISION, ERROR
 - [x] Feature flag: `control_plane_enforcement_enabled` (config); default true in dev/staging
 - [x] Integration tests: happy path, budget-exceeded (blocked + BUDGET_EXCEEDED)
+- [x] Control plane integration tests: `src/controlplane/control-plane-impl.integration.test.ts` (policy deny, budget deny, tenant cost cap)
 - [ ] Readiness review meeting (owner sign-off)
 - [ ] L2-04 / L2-05 implementation start
 
@@ -60,8 +61,8 @@ Response envelope for denied requests: `status: "blocked"`, `error: { code, mess
 
 ## 4) Known risks and deferred work
 
-- **Dynamic policy refresh:** Not implemented; policy rules are static (e.g. deny lists empty). Target: L2-08 hardening.
-- **Shared budget counters:** Per-request budgets only; no cross-request tenant caps in this implementation. Target: future resource manager iteration.
+- **Dynamic policy refresh:** Not implemented; policy rules are static (e.g. deny lists from env). Target: L2-08 hardening.
+- **Shared budget counters:** Per-request budgets are enforced; **tenant-level** hourly cost cap is implemented via `TENANT_COST_CAP_USD_PER_HOUR` and `checkTenantBudget()` / `recordTenantUsage()` in `src/controlplane/tenant-budget.ts`.
 - **Strategy weighting:** Router uses deterministic tie-breaker (chat); no advanced strategy weighting.
 
 ---
@@ -71,6 +72,7 @@ Response envelope for denied requests: `status: "blocked"`, `error: { code, mess
 | Check                 | Command / location |
 |-----------------------|--------------------|
 | Unit tests (policy, budget, router, dispatch gate) | `npm test` (controlplane/*.test.ts) |
+| Control plane integration (policy deny, budget, tenant cap) | `npm test` (controlplane/control-plane-impl.integration.test.ts) |
 | Integration (allow, budget-exceeded)              | `npm test` (query.integration.test.ts) |
 | Typecheck             | `npm run typecheck` |
 | Lint                  | `npm run lint` |

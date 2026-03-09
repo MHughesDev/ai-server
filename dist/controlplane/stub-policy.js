@@ -2,7 +2,7 @@
  * Stub policy – default allow chat for MVP.
  * @see L2-02 Phase 1; full policy in L2-03
  */
-/** Default policy for MVP: allow chat pipeline only. */
+/** Default policy for MVP: allow chat, coding_agent, deep_research, decision pipelines. */
 export function defaultPolicyDecision() {
     return {
         allowed: true,
@@ -12,7 +12,7 @@ export function defaultPolicyDecision() {
         safety_profile: "standard",
         redaction_level: "minimal",
         audit_level: "summary",
-        allowed_pipelines: ["reactive_chat", "chat"],
+        allowed_pipelines: ["reactive_chat", "chat", "coding_agent", "deep_research", "decision", "composite_example"],
         strategy: "reactive",
     };
 }

@@ -80,4 +80,59 @@ describe("InMemoryStore", () => {
     expect(result.chunks_written).toBe(0);
     expect(result.error).toBe("store_unavailable");
   });
+
+  it("evicts by max_chunks_per_scope when retention is set", async () => {
+    const storeWithRetention = new InMemoryStore({ max_chunks_per_scope: 2 });
+    await storeWithRetention.ingest({
+      document_id: "d1",
+      text: "First document with some content for chunking.",
+      scope: "user",
+      scope_keys: { user_id: "u1" },
+    });
+    await storeWithRetention.ingest({
+      document_id: "d2",
+      text: "Second document with more content to create multiple chunks for retention test.",
+      scope: "user",
+      scope_keys: { user_id: "u1" },
+    });
+    const result = await storeWithRetention.retrieve({
+      query_text: "document",
+      scope: "user",
+      scope_keys: { user_id: "u1" },
+      top_k: 20,
+    });
+    expect(result.hits.length).toBeLessThanOrEqual(2);
+  });
+
+  it("trims ingest when chunk cap policy is trim", async () => {
+    const trimStore = new InMemoryStore({
+      max_chunks_per_ingest: 2,
+      ingest_chunk_cap_policy: "trim",
+    });
+    const result = await trimStore.ingest({
+      document_id: "trim-doc",
+      text: "alpha ".repeat(1_500),
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+    });
+    expect(result.chunks_written).toBe(2);
+    expect(result.chunks_dropped).toBeGreaterThan(0);
+    expect(result.error).toBe("ingest_chunks_trimmed");
+  });
+
+  it("rejects ingest when chunk cap policy is reject", async () => {
+    const rejectStore = new InMemoryStore({
+      max_chunks_per_ingest: 2,
+      ingest_chunk_cap_policy: "reject",
+    });
+    const result = await rejectStore.ingest({
+      document_id: "reject-doc",
+      text: "alpha ".repeat(1_500),
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+    });
+    expect(result.chunks_written).toBe(0);
+    expect(result.chunks_dropped).toBeGreaterThan(0);
+    expect(result.error).toBe("ingest_chunk_cap_exceeded");
+  });
 });

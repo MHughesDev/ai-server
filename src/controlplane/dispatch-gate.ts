@@ -1,6 +1,6 @@
 /**
  * Dispatch precondition – no execution without governance artifacts (L2-03 Phase 3).
- * @see Docs/SPEC/01_Principles_and_Invariants.md, Docs/SPEC/03_Component_Map.md
+ * @see docs/SPEC/01_Principles_and_Invariants.md, docs/SPEC/03_Component_Map.md
  */
 
 import type { ControlPlaneResult } from "./types.js";

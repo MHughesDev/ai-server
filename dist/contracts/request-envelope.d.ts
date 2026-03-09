@@ -1,6 +1,6 @@
 /**
  * RequestEnvelope – external API contract for POST /v1/query.
- * @see Docs/SPEC/02_API_Contracts.md, Docs/Overview.md
+ * @see docs/SPEC/02_API_Contracts.md, docs/Overview.md
  */
 import { z } from "zod";
 declare const CallerSchema: z.ZodObject<{
@@ -10,15 +10,15 @@ declare const CallerSchema: z.ZodObject<{
     session_id: z.ZodOptional<z.ZodString>;
     scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
+    org_id: string;
     app_id: string;
     user_id: string;
-    org_id: string;
     scopes: string[];
     session_id?: string | undefined;
 }, {
+    org_id: string;
     app_id: string;
     user_id: string;
-    org_id: string;
     session_id?: string | undefined;
     scopes?: string[] | undefined;
 }>;
@@ -124,7 +124,7 @@ declare const PreferencesSchema: z.ZodObject<{
     response_format: z.ZodDefault<z.ZodEnum<["text", "json", "markdown"]>>;
     verbosity: z.ZodDefault<z.ZodEnum<["low", "medium", "high"]>>;
     stream: z.ZodDefault<z.ZodBoolean>;
-}, "strip", z.ZodTypeAny, {
+}, "strict", z.ZodTypeAny, {
     response_format: "json" | "text" | "markdown";
     verbosity: "low" | "medium" | "high";
     stream: boolean;
@@ -142,15 +142,15 @@ export declare const RequestEnvelopeSchema: z.ZodObject<{
         session_id: z.ZodOptional<z.ZodString>;
         scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     }, "strip", z.ZodTypeAny, {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         scopes: string[];
         session_id?: string | undefined;
     }, {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         session_id?: string | undefined;
         scopes?: string[] | undefined;
     }>;
@@ -222,7 +222,7 @@ export declare const RequestEnvelopeSchema: z.ZodObject<{
         response_format: z.ZodDefault<z.ZodEnum<["text", "json", "markdown"]>>;
         verbosity: z.ZodDefault<z.ZodEnum<["low", "medium", "high"]>>;
         stream: z.ZodDefault<z.ZodBoolean>;
-    }, "strip", z.ZodTypeAny, {
+    }, "strict", z.ZodTypeAny, {
         response_format: "json" | "text" | "markdown";
         verbosity: "low" | "medium" | "high";
         stream: boolean;
@@ -231,20 +231,18 @@ export declare const RequestEnvelopeSchema: z.ZodObject<{
         verbosity?: "low" | "medium" | "high" | undefined;
         stream?: boolean | undefined;
     }>>;
-    /** Optional: "auto" | "sync" | "async" – defaults to sync for MVP */
-    mode: z.ZodOptional<z.ZodEnum<["auto", "sync", "async"]>>;
+    /** Sync-only API: mode is optional but may only be "sync" when provided. */
+    mode: z.ZodOptional<z.ZodLiteral<"sync">>;
     /** Wall-clock deadline in ms */
     deadline_ms: z.ZodOptional<z.ZodNumber>;
-    /** Idempotency key for safe retries */
-    idempotency_key: z.ZodOptional<z.ZodString>;
     /** Contract version for compatibility; only v1 supported (enforced at ingress) */
     contract_version: z.ZodDefault<z.ZodString>;
-}, "strip", z.ZodTypeAny, {
+}, "strict", z.ZodTypeAny, {
     request_id: string;
     caller: {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         scopes: string[];
         session_id?: string | undefined;
     };
@@ -268,15 +266,14 @@ export declare const RequestEnvelopeSchema: z.ZodObject<{
         stream: boolean;
     };
     contract_version: string;
-    mode?: "auto" | "sync" | "async" | undefined;
+    mode?: "sync" | undefined;
     deadline_ms?: number | undefined;
-    idempotency_key?: string | undefined;
 }, {
     request_id: string;
     caller: {
+        org_id: string;
         app_id: string;
         user_id: string;
-        org_id: string;
         session_id?: string | undefined;
         scopes?: string[] | undefined;
     };
@@ -299,9 +296,8 @@ export declare const RequestEnvelopeSchema: z.ZodObject<{
         verbosity?: "low" | "medium" | "high" | undefined;
         stream?: boolean | undefined;
     } | undefined;
-    mode?: "auto" | "sync" | "async" | undefined;
+    mode?: "sync" | undefined;
     deadline_ms?: number | undefined;
-    idempotency_key?: string | undefined;
     contract_version?: string | undefined;
 }>;
 export type RequestEnvelope = z.infer<typeof RequestEnvelopeSchema>;

@@ -1,6 +1,6 @@
 /**
  * Control plane implementation – policy → budget → router (L2-03).
- * @see Docs/SPEC/06_ControlPlane_Spec.md
+ * @see docs/SPEC/06_ControlPlane_Spec.md
  */
 
 import type { IControlPlane, ControlPlaneInput, ControlPlaneResult } from "./types.js";
@@ -60,7 +60,7 @@ export function createControlPlane(opts: ControlPlaneImplOptions): IControlPlane
         };
       }
 
-      const tenantCheck = checkTenantBudget(input.caller.orgId);
+      const tenantCheck = await checkTenantBudget(input.caller.orgId);
       if (!tenantCheck.allowed) {
         const routeResult: RouteResult = {
           allowed: false,

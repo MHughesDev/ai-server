@@ -2,6 +2,13 @@
 
 Runbook for telemetry, metrics, alerts, and evaluation regression. Owner: Observability Lead; escalation: SRE → Runtime → Security.
 
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Sections 13 and 18.8).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
+Use this runbook for current operations, and track open hardening work (sink durability, retention, sampling, cardinality controls) against the gaps report.
+
 ---
 
 ## Missing telemetry / required events
@@ -9,7 +16,7 @@ Runbook for telemetry, metrics, alerts, and evaluation regression. Owner: Observ
 ### Symptom
 
 - Trace or event coverage below expected (if using external dashboards, they may show gaps).
-- Required events (SPEC 18): `ROUTE_DECISION`, `POLICY_DECISION`, `BUDGET_ASSIGN`, `PIPELINE_START`/`PIPELINE_END`, `ERROR`, `FINAL_SYNTH`.
+- Required events (SPEC 18): `ROUTE_DECISION`, `POLICY_DECISION`, `BUDGET_ASSIGN`, `PIPELINE_START`/`PIPELINE_END`, `WORKFLOW_START`/`WORKFLOW_END`, `ENGINE_START`/`ENGINE_END`, `ERROR`, `FINAL_SYNTH` (and `TOOL_*`, `MEMORY_*` when those paths run).
 
 ### Actions
 
@@ -20,8 +27,8 @@ Runbook for telemetry, metrics, alerts, and evaluation regression. Owner: Observ
 
 ### Verification
 
-- Trigger a request to `POST /v1/query` and confirm in logs (or captured events) that POLICY_DECISION, BUDGET_ASSIGN, ROUTE_DECISION, PIPELINE_START, PIPELINE_END, FINAL_SYNTH are present for success path.
-- Run the observability acceptance suite: `npm run acceptance:observability` (validates event taxonomy, redaction, trace context, metrics, eval baseline).
+- Trigger a request to `POST /v1/query` and confirm in logs (or captured events) that POLICY_DECISION, BUDGET_ASSIGN, ROUTE_DECISION, PIPELINE_START, WORKFLOW_START, ENGINE_START, ENGINE_END (×2 for reactive chat), WORKFLOW_END, PIPELINE_END, FINAL_SYNTH are present for success path.
+- Run the observability acceptance suite: `npm run acceptance:observability` (validates event taxonomy, redaction, trace context, metrics, event order / span hierarchy, eval baseline).
 
 ---
 
@@ -90,9 +97,9 @@ Use these as a reference when configuring your alert backend (e.g. Prometheus/Gr
 
 ## GET /metrics
 
-- Endpoint: `GET /metrics` (JSON).
-- Returns: `counters` (key → number), `histograms` (key → `{ count, sum }`).
-- Metric names: `requests_total`, `errors_total`, `request_latency_ms`, `route_total`, etc. Labels are allowlisted to control cardinality.
+- Endpoint: `GET /metrics`.
+- **Default (JSON):** Returns `{ counters: Record<string, number>, histograms: Record<string, { count, sum }> }`. Metric names: `requests_total`, `errors_total`, `request_latency_ms`, `route_total`, etc. Labels are allowlisted to control cardinality.
+- **Prometheus format:** Use `GET /metrics?format=prometheus` or `Accept: text/plain` to get Prometheus exposition text (`# TYPE`, counter and summary-style metrics) for scraping by Prometheus or compatible backends.
 
 ---
 

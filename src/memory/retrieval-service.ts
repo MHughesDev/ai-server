@@ -1,5 +1,6 @@
 /**
  * Retrieval service – scoped retrieval with fallback and observability.
+ * L2-06 Phase 6.2: Token-based context capping for accurate LLM context budgeting.
  * @see L2-06 Phase 1–3, MEM-003, MEM-006
  */
 
@@ -11,12 +12,22 @@ import type {
   CitationSpec,
 } from "./types.js";
 import { citationsFromRetrievalHits } from "./citation-formatter.js";
+import {
+  buildTokenBoundedContext,
+  DEFAULT_MAX_CONTEXT_TOKENS,
+  AVG_CHARS_PER_TOKEN,
+} from "../utils/tokens.js";
 
 export interface RetrievalServiceInput {
   query_text: string;
   scope: RetrievalScope;
   caller: RetrievalCallerContext;
   top_k?: number;
+  retrieval_timeout_ms?: number;
+  /** @deprecated Use max_context_tokens for accurate LLM budgeting */
+  max_context_chars?: number;
+  /** Maximum tokens for context (more accurate than character count) */
+  max_context_tokens?: number;
 }
 
 export interface RetrievalServiceResult {
@@ -24,9 +35,15 @@ export interface RetrievalServiceResult {
   citations: CitationSpec[];
   /** Context text to prepend to model prompt (concatenated chunks). */
   contextText: string;
+  /** Token estimation metadata for observability */
+  contextTokens?: {
+    estimated: number;
+    wasTruncated: boolean;
+  };
 }
 
 const DEFAULT_TOP_K = 5;
+const DEFAULT_RETRIEVAL_TIMEOUT_MS = 1_500;
 
 /**
  * Build scope_keys from caller context for the given scope.
@@ -46,12 +63,21 @@ export function scopeKeysFromCaller(
 /**
  * Run scoped retrieval and format citations + context text.
  * On store failure, returns degraded result (empty hits, empty citations, empty context).
+ * PRODUCTION: Uses token-based context capping for accurate LLM context budgeting.
  */
 export async function runRetrieval(
   store: IMemoryStore,
   input: RetrievalServiceInput
 ): Promise<RetrievalServiceResult> {
   const topK = input.top_k ?? DEFAULT_TOP_K;
+  const timeoutMs = input.retrieval_timeout_ms ?? DEFAULT_RETRIEVAL_TIMEOUT_MS;
+
+  // Prefer token-based budget, fall back to character-based with conversion
+  const maxContextTokens =
+    input.max_context_tokens ??
+    (input.max_context_chars ? Math.floor(input.max_context_chars / AVG_CHARS_PER_TOKEN) : undefined) ??
+    DEFAULT_MAX_CONTEXT_TOKENS;
+
   const scopeKeys = scopeKeysFromCaller(input.scope, input.caller);
   const request = {
     query_text: input.query_text,
@@ -59,15 +85,57 @@ export async function runRetrieval(
     scope_keys: scopeKeys,
     top_k: topK,
   };
-  const result = await store.retrieve(request);
-  const citations = citationsFromRetrievalHits(result.hits);
-  const contextText = result.hits
-    .map((h) => h.chunk.text)
-    .filter(Boolean)
-    .join("\n\n");
+
+  const start = Date.now();
+  const result = await withTimeoutOrDegraded(store.retrieve(request), timeoutMs, start);
+
+  // Use token-bounded context building for accurate LLM budgeting
+  const bounded = buildTokenBoundedContext(
+    result.hits.map((h) => ({ text: h.chunk.text, ...h })),
+    { maxTokens: maxContextTokens }
+  );
+
+  const hitsIncluded = bounded.includedIndices.map((i) => result.hits[i]);
+  const citations = citationsFromRetrievalHits(hitsIncluded);
+
   return {
     result,
     citations,
-    contextText,
+    contextText: bounded.contextText,
+    contextTokens: {
+      estimated: bounded.totalTokens,
+      wasTruncated: bounded.wasTruncated,
+    },
   };
 }
+
+async function withTimeoutOrDegraded(
+  retrievalPromise: Promise<RetrievalResult>,
+  timeoutMs: number,
+  startMs: number
+): Promise<RetrievalResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      retrievalPromise,
+      new Promise<RetrievalResult>((resolve) => {
+        timer = setTimeout(() => {
+          resolve({
+            hits: [],
+            degraded: true,
+            latency_ms: Date.now() - startMs,
+          });
+        }, timeoutMs);
+      }),
+    ]);
+  } catch {
+    return {
+      hits: [],
+      degraded: true,
+      latency_ms: Date.now() - startMs,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+

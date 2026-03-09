@@ -1,14 +1,41 @@
-# 06 ControlPlane Spec
+# 06 Control Plane Spec
+
+## Source Alignment
+- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 3, 9.3, 16, 18.3, 18.4).
+- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (runtime enforcement and control-path hardening).
 
 ## Purpose
-Govern execution without generating end-user answers.
+Control runtime that governs execution decisions and constraints without directly generating end-user outputs.
 
-## Modules
-Policy Engine, Strategy Engine, Resource Manager, Execution Supervisor, Failure Manager, Evaluation Engine.
+## Core Modules
+- Policy evaluation.
+- Strategy and workflow selection.
+- Resource and budget assignment.
+- Dispatch gating.
+- Execution supervision.
+- Failure handling and evaluation hooks.
 
-## Inputs/Outputs
-- Inputs: intent, caller context, runtime health.
-- Outputs: `PolicyDecision`, `PipelinePlan`.
+## Inputs
+- `CanonicalRequest`, `IntentBundle`, caller context, runtime health signals, and platform config.
 
-## Guarantees
-No direct tool execution; all constraints are enforceable machine fields.
+## Outputs
+- `PolicyDecision`.
+- Workflow execution spec (`PipelinePlan` in current implementation, where `pipeline_type` maps to workflow id).
+- Route/deny decision with explicit reason.
+
+## Authority Boundary
+Only this layer may:
+- Start/stop loops.
+- Invoke nested workflows.
+- Allocate or tighten budgets.
+- Enforce global stop conditions and retries.
+
+Engines may only produce artifacts and optional non-binding next-action suggestions.
+
+## Production Requirements
+- Governance path must be non-bypassable.
+- Budget fields must be enforced at runtime, not only computed.
+- Request deadlines must be globally enforced.
+
+## Current-State Notes
+- Parts of runtime enforcement (deadline/cost, some gate flags) are still tracked as open production gaps.

@@ -19,6 +19,14 @@ const opts = {
   contractVersion: CONTRACT_VERSION,
 };
 
+const verifiedCallerContext = {
+  appId: "a1",
+  userId: "u1",
+  orgId: "o1",
+  sessionId: undefined,
+  scopes: ["query:invoke"],
+};
+
 describe("validateIngress", () => {
   it("accepts valid envelope and returns IngressResult", () => {
     const result = validateIngress(validBody, opts);
@@ -80,6 +88,36 @@ describe("validateIngress", () => {
     );
   });
 
+  it("rejects async/auto request mode in sync-only API contract", () => {
+    expect(() =>
+      validateIngress({ ...validBody, mode: "async" }, opts)
+    ).toThrow(expect.objectContaining({ code: "INVALID_PAYLOAD" }));
+    expect(() =>
+      validateIngress({ ...validBody, mode: "auto" }, opts)
+    ).toThrow(expect.objectContaining({ code: "INVALID_PAYLOAD" }));
+  });
+
+  it("rejects paper-only request fields (idempotency, timestamp, safety_profile)", () => {
+    expect(() =>
+      validateIngress({ ...validBody, idempotency_key: "idem-1" }, opts)
+    ).toThrow(expect.objectContaining({ code: "INVALID_PAYLOAD" }));
+    expect(() =>
+      validateIngress({ ...validBody, timestamp: "2026-01-01T00:00:00.000Z" }, opts)
+    ).toThrow(expect.objectContaining({ code: "INVALID_PAYLOAD" }));
+    expect(() =>
+      validateIngress(
+        {
+          ...validBody,
+          preferences: {
+            ...validBody.preferences,
+            safety_profile: "strict",
+          },
+        },
+        opts
+      )
+    ).toThrow(expect.objectContaining({ code: "INVALID_PAYLOAD" }));
+  });
+
   it("rejects when requireAuthHeader is true and authHeader missing", () => {
     expect(() =>
       validateIngress(validBody, { ...opts, requireAuthHeader: true })
@@ -98,6 +136,56 @@ describe("validateIngress", () => {
       authHeader: "Bearer token",
     });
     expect(result.envelope.request_id).toBe(validBody.request_id);
+  });
+
+  it("derives callerContext from verified caller claims when provided", () => {
+    const result = validateIngress(
+      {
+        ...validBody,
+        caller: { ...validBody.caller, scopes: ["query:invoke"] },
+      },
+      {
+      ...opts,
+      verifiedCallerContext,
+      }
+    );
+    expect(result.callerContext).toEqual(verifiedCallerContext);
+  });
+
+  it("rejects when caller body does not match verified token claims", () => {
+    expect(() =>
+      validateIngress(
+        {
+          ...validBody,
+          caller: { ...validBody.caller, org_id: "other-org" },
+        },
+        {
+          ...opts,
+          verifiedCallerContext,
+        }
+      )
+    ).toThrow(
+      expect.objectContaining({
+        code: "AUTH_INVALID",
+        message: "Request caller does not match authenticated token claims",
+      })
+    );
+  });
+
+  it("does not require scopes match when body scopes field is omitted", () => {
+    const body = {
+      ...validBody,
+      caller: {
+        app_id: "a1",
+        user_id: "u1",
+        org_id: "o1",
+      },
+    };
+    const result = validateIngress(body, {
+      ...opts,
+      verifiedCallerContext,
+    });
+    expect(result.callerContext.scopes).toEqual(["query:invoke"]);
   });
 
   it("normalizes request_id from header when missing in body", () => {

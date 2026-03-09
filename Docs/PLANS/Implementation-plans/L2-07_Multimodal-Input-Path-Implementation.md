@@ -3,13 +3,13 @@
 ## 0) Document Control
 - Plan ID: L2-07
 - Plan Name: Multimodal Input Path Implementation
-- Linked SPEC: `Docs/SPEC/04_Ingress_Spec.md`, `Docs/SPEC/05_BrainStem_Spec.md`, `Docs/SPEC/08_StrategyEngine_Spec.md`, `Docs/SPEC/14_Pipelines_Catalog.md`, `Docs/SPEC/19_Security_and_Isolation_Spec.md`, `Docs/SPEC/20_Config_and_FeatureFlags.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/04_Ingress_Spec.md`, `docs/SPEC/05_BrainStem_Spec.md`, `docs/SPEC/08_StrategyEngine_Spec.md`, `docs/SPEC/14_Pipelines_Catalog.md`, `docs/SPEC/19_Security_and_Isolation_Spec.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Runtime Lead
 - Contributors: Ingress Lead, Brain Stem Lead, Security Lead, QA Lead
 - Status: `implemented`
 - Priority: `P1`
 - Created: 2026-02-18
-- Last Updated: 2026-02-18
+- Last Updated: 2026-02-27
 - Review Cadence: Daily implementation sync + weekly security review
 
 ## 1) Purpose and Outcome
@@ -45,12 +45,12 @@ Enable deterministic multimodal request handling (image/PDF with text) while pre
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md` complete.
-- `Docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-05_Security-Isolation-and-Compliance-Implementation.md` complete.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`
+- `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`
 
 ### 3.3 External Dependencies
 - Supported format and capability matrix from model providers.
@@ -77,7 +77,7 @@ Enable deterministic multimodal request handling (image/PDF with text) while pre
 - **Phase 1**: `src/brainstem/preprocess.ts` provides deterministic token estimates per attachment type; `canonicalize.ts` uses them for handles and total `token_estimate`.
 - **Phase 2**: `default-router.ts` checks `multimodalCapablePipelines`; when request has image/file modality and no capable pipeline in policy, returns `MULTIMODAL_UNSUPPORTED`. Config: `multimodal_input_path_enabled`, `enable_multimodal_pipeline`, `maxAttachmentCount`, `maxAttachmentBytes`.
 - **Phase 3**: Attachment validation and router tests cover abuse (oversized, unsupported type) and deterministic taxonomy.
-- **Phase 4**: Gate checklist satisfied (tests pass); support matrix and runbook in `docs/Runbooks/Multimodal-Input-Path.md`; handoff to L2-08 in `docs/PLANS/Implementation-plans/L2-07_Handoff.md`.
+- **Phase 4**: Gate checklist satisfied (tests pass); support matrix and runbook in `docs/Runbooks/Multimodal-Input-Path.md` or `docs/Runbooks/Multimodal-Input-Path.md`; handoff to L2-08 in `docs/PLANS/Implementation-plans/L2-07_Handoff.md`. **SOW Segment L.1 (2026-02-27):** Verification complete; runbook linked in `docs/SPEC/22_Runbooks_and_Operations.md` runbook index.
 
 ---
 

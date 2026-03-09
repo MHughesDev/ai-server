@@ -1,6 +1,6 @@
 /**
  * Attachment validation – type, size, count, mime allowlist (L2-07 Phase 0).
- * @see Docs/SPEC/04_Ingress_Spec.md, Docs/SPEC/19_Security_and_Isolation_Spec.md
+ * @see docs/SPEC/04_Ingress_Spec.md, docs/SPEC/19_Security_and_Isolation_Spec.md
  */
 import type { Attachment } from "../contracts/request-envelope.js";
 /** Deterministic reject reason for attachment validation */

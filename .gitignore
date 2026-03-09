@@ -1,0 +1,22 @@
+# Dependencies and build
+node_modules/
+dist/
+coverage/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.local
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,6 +1,6 @@
 /**
  * Scoped secret resolution – enforce access by caller role/org/environment.
- * @see Docs/SPEC/19_Security_and_Isolation_Spec.md, L2-05 Phase 1
+ * @see docs/SPEC/19_Security_and_Isolation_Spec.md, L2-05 Phase 1
  */
 
 import type { CallerContext, SecretRef } from "./types.js";

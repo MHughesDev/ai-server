@@ -94,4 +94,4 @@ Events are emitted when `observability_required_events_v1` is true. Payloads are
 - Trace context: `src/observability/context.ts`
 - Metrics: `src/observability/metrics.ts`
 - Eval: `src/eval/runner.ts`, `baseline.json`, `run-eval.ts`
-- Runbook: `docs/Runbooks/Observability-and-Eval.md`
+- Runbook: `docs/Runbooks/Observability-and-Eval.md` or `docs/Runbooks/Observability-and-Eval.md`

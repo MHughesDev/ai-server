@@ -1,6 +1,6 @@
 /**
  * Observability – tracing, metrics, structured logs.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04
  */
 import type { EventEmitter } from "./emitter.js";
 import type { TraceContext } from "./context.js";

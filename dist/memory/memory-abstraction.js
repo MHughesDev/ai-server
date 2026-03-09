@@ -1,6 +1,7 @@
 /**
  * Memory abstraction – governed interface for retrieval and write-back.
- * @see Docs/SPEC/17_MemoryAbstraction_Spec.md
+ * @see docs/SPEC/17_MemoryAbstraction_Spec.md
+ * L2-06 Segment I: Structured and object store interfaces for gateway expansion.
  */
 /**
  * Scope check: whether a request scope is allowed to access data for given scope_keys.

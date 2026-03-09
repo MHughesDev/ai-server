@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-03
 - Plan Name: Policy, Budgeting, and Routing Core
-- Linked SPEC: `Docs/Overview.md` sections `06`, `07`, `08`, `13`, `20`; `Docs/Architecture.md` milestone 2
+- Linked SPEC: `docs/Overview.md` sections `06`, `07`, `08`, `13`, `20`; `docs/Architecture_document_Finalized.md` milestone 2
 - Owner(s): Control Plane Lead
 - Contributors: Policy, Router, Runtime, Security, QA
 - Status: `draft`

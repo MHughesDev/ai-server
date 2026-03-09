@@ -1,15 +1,19 @@
 /**
  * Canonical event taxonomy and schema for observability.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
  */
 import { z } from "zod";
-/** Required event types per SPEC 18 */
+/** Required event types per SPEC 18 and Architecture §13 */
 export const REQUIRED_EVENT_TYPES = [
     "ROUTE_DECISION",
     "POLICY_DECISION",
     "BUDGET_ASSIGN",
     "PIPELINE_START",
     "PIPELINE_END",
+    "WORKFLOW_START",
+    "WORKFLOW_END",
+    "ENGINE_START",
+    "ENGINE_END",
     "TOOL_START",
     "TOOL_END",
     "MEMORY_QUERY",
@@ -17,6 +21,7 @@ export const REQUIRED_EVENT_TYPES = [
     "VERIFY_RESULT",
     "FINAL_SYNTH",
     "ERROR",
+    "HARNESS_ITERATION",
 ];
 export function isRequiredEventType(s) {
     return REQUIRED_EVENT_TYPES.includes(s);

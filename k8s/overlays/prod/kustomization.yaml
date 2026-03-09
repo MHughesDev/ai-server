@@ -1,0 +1,62 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-server-prod
+
+namePrefix: prod-
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: Deployment
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+      - op: replace
+        path: /spec/strategy/rollingUpdate/maxSurge
+        value: "25%"
+  - target:
+      kind: Ingress
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.example.com
+  - target:
+      kind: PodDisruptionBudget
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ai-server
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+      - op: replace
+        path: /spec/metrics/0/resource/target/averageUtilization
+        value: 60
+
+configMapGenerator:
+  - name: ai-server-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true
+      - MEMORY_BACKEND=vector
+      - MEMORY_EMBEDDING_PROVIDER=openai
+      - QUEUE_WORKERS_COUNT=4
+      - FEATURE_FLAG_ENABLE_DYNAMIC=false

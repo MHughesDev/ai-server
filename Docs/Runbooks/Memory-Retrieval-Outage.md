@@ -1,6 +1,13 @@
 # Memory and Retrieval Outage
 
-Runbook for retrieval/store degradation and citation issues (L2-06).
+Runbook for retrieval/store degradation and citation issues (L2-06). Segment I: Memory Gateway also includes structured and object stores; retention (TTL, max chunks per scope) applies to the vector store when configured.
+
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Sections 12, 18.7).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
+Production target assumes persistent/shared retrieval backends with bounded latency and context; this runbook includes current degrade behavior while those targets are still being hardened.
 
 ---
 
@@ -15,7 +22,7 @@ Runbook for retrieval/store degradation and citation issues (L2-06).
 ### Actions
 
 1. **Confirm fallback behavior:** Requests should still return 200 with `status: "ok"`; only retrieval context and citations are missing. No need to fail the request.
-2. **Check store health:** If using a dedicated vector store, verify connectivity and disk/index health. For in-memory default store, restart restores state but clears corpus.
+2. **Check store health:** If using a dedicated vector store, verify connectivity and disk/index health. For in-memory default store (`getDefaultStore()` / `getMemoryGateway().vectorStore`), restart restores state but clears corpus. Structured and object stores (`getMemoryGateway().structuredStore`, `objectStore`) are in-memory; they are not used for retrieval path but may hold metadata/blobs.
 3. **Temporary disable retrieval:** Set `MEMORY_RETRIEVAL_ENABLED=false` and restart to stop retrieval attempts until store is fixed.
 4. **Emit and review:** Ensure `observability_required_events_v1` is true so ERROR events with stage `retrieval` are emitted for diagnosis.
 

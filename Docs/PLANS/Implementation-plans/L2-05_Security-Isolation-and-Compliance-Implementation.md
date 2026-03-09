@@ -3,14 +3,18 @@
 ## 0) Document Control
 - Plan ID: L2-05
 - Plan Name: Security Isolation and Compliance Implementation
-- Linked SPEC: `Docs/SPEC/16_ToolGateway_Spec.md`, `Docs/SPEC/19_Security_and_Isolation_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/16_ToolGateway_Spec.md`, `docs/SPEC/19_Security_and_Isolation_Spec.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Security Lead
 - Contributors: Platform Lead, Runtime Lead, SRE Lead, QA Lead
 - Status: `implemented`
 - Priority: `P0`
 - Created: 2026-02-18
-- Last Updated: 2026-02-18
+- Last Updated: 2026-02-26
 - Review Cadence: Daily risk triage + formal security review each week
+
+**Implementation note (M3):** Tool Gateway now has AllowlistToolGateway and StubAllowedToolGateway in addition to DenyOnlyToolGateway (see SPEC 16). Tool Engine enforces allowlist; default remains deny-only in production.
+
+**Implementation note (L2-05 Segment G, 2026-02-26):** Tool Gateway allowlist is sourced from **PolicyDecision**: router sets **PipelinePlan.tools_enabled** = `policy.allow_tools` minus `policy.deny_tools`; optional **PipelinePlan.sandbox** (e.g. timeout_ms from budget) is set when tools are enabled. Query-handler builds AllowlistToolGateway when plan has tools_enabled. **Redaction:** All telemetry events and security audit payloads use **policy.redaction_level** (none/minimal/full); audit log payloads are redacted before write so no raw secrets appear in logs. **Audit trail:** TOOL_ACCESS audit events are written when policy.audit_level !== "none" and security_hard_controls_enabled, with tool_id, allowed, status, duration_ms (payload redacted). See SOW §4.1 Segment G and SPEC 19.
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose
@@ -45,13 +49,13 @@ Harden isolation, auditing, and compliance controls so advanced capability work 
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md` complete.
-- `Docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` baseline complete.
+- `docs/PLANS/Implementation-plans/L2-03_Policy-Budgeting-and-Routing-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` baseline complete.
 
 ### 3.2 Downstream Consumers
-- `Docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
-- `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`
+- `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
 
 ### 3.3 External Dependencies
 - Security policy approval and owner assignment.

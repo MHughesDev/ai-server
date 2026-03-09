@@ -3,6 +3,6 @@
  * @see L2-02 Phase 1; full policy in L2-03
  */
 import type { PolicyDecision } from "../contracts/policy-decision.js";
-/** Default policy for MVP: allow chat pipeline only. */
+/** Default policy for MVP: allow chat, coding_agent, deep_research, decision pipelines. */
 export declare function defaultPolicyDecision(): PolicyDecision;
 //# sourceMappingURL=stub-policy.d.ts.map

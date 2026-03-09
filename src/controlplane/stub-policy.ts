@@ -5,7 +5,7 @@
 
 import type { PolicyDecision } from "../contracts/policy-decision.js";
 
-/** Default policy for MVP: allow chat pipeline only. */
+/** Default policy for MVP: allow chat, coding_agent, deep_research, decision pipelines. */
 export function defaultPolicyDecision(): PolicyDecision {
   return {
     allowed: true,
@@ -15,7 +15,7 @@ export function defaultPolicyDecision(): PolicyDecision {
     safety_profile: "standard",
     redaction_level: "minimal",
     audit_level: "summary",
-    allowed_pipelines: ["reactive_chat", "chat"],
+    allowed_pipelines: ["reactive_chat", "chat", "coding_agent", "deep_research", "decision", "composite_example"],
     strategy: "reactive",
   };
 }

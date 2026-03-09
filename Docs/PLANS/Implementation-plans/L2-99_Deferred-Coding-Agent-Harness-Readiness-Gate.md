@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: L2-99
 - Plan Name: Deferred Coding Agent Harness Readiness Gate
-- Linked SPEC: `Docs/SPEC/18_Observability_Spec.md`, `Docs/SPEC/19_Security_and_Isolation_Spec.md`, `Docs/SPEC/21_Test_and_Eval_Plan.md`, `Docs/SPEC/22_Runbooks_and_Operations.md`
+- Linked SPEC: `docs/SPEC/18_Observability_Spec.md`, `docs/SPEC/19_Security_and_Isolation_Spec.md`, `docs/SPEC/21_Test_and_Eval_Plan.md`, `docs/SPEC/22_Runbooks_and_Operations.md`
 - Owner(s): Program Lead, Security Lead
 - Contributors: Platform Lead, Runtime Lead, SRE Lead, QA Lead, Governance Board
 - Status: `in progress` (implementation complete; gate workflow operational)
@@ -15,8 +15,8 @@
 ### Implementation summary (code)
 - **Feature flag**: `governance_harness_readiness_gate_active` in `src/config/schema.ts`; env `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE` (default true).
 - **Governance module**: `src/governance/` — types (scorecard, evidence, risk, decision memo), scorecard calculator and threshold logic, evidence validation (completeness and freshness). See Section 7.1 unit coverage.
-- **Runbook**: `docs/Runbooks/Harness-Readiness-Gate.md` for gate workflow and exception handling.
-- **SPEC**: `docs/SPEC/20_Config_and_FeatureFlags.md` updated with L2-99 flag.
+- **Runbook**: `docs/Runbooks/Harness-Readiness-Gate.md` or `docs/Runbooks/Harness-Readiness-Gate.md` for gate workflow and exception handling.
+- **SPEC**: `docs/SPEC/20_Config_and_FeatureFlags.md` or `docs/SPEC/` updated with L2-99 flag.
 - **Handoff**: `docs/PLANS/Implementation-plans/L2-99_Handoff.md` — checklist, usage, CI, references.
 - **Templates**: `L2-99_Evidence-Checklist.md` (evidence/owner matrix), `L2-99_Decision-Memo-Template.md` (Phase 3 memo).
 - **Workflow test**: `src/governance/readiness-workflow.test.ts` — evidence → validate → score (Section 7.2).
@@ -53,7 +53,7 @@ Determine whether the platform has met objective readiness criteria to begin con
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `Docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md` complete.
+- `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md` complete.
 - All L2-01 through L2-08 gates accepted or approved with documented exceptions.
 
 ### 3.2 Downstream Consumers

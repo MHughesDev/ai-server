@@ -1,6 +1,6 @@
 /**
  * Brain Stem – first cognition: canonicalize input, produce IntentBundle.
- * @see Docs/SPEC/05_BrainStem_Spec.md
+ * @see docs/SPEC/05_BrainStem_Spec.md
  */
 import type { RequestEnvelope } from "../contracts/index.js";
 import type { CanonicalRequest, IntentBundle } from "../contracts/index.js";

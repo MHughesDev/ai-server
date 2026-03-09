@@ -1,6 +1,6 @@
 /**
  * PipelinePlan – internal Router output (concrete execution setup).
- * @see Docs/Overview.md, Docs/Architecture.md (6.4), SPEC 13
+ * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.4), SPEC 13
  */
 import { z } from "zod";
 const BudgetsSchema = z.object({
@@ -19,7 +19,7 @@ const VerificationSchema = z
 export const PipelinePlanSchema = z.object({
     pipeline_type: z.string(),
     strategy_id: z.string().optional(),
-    execution_mode: z.enum(["sync_stream", "async_job"]).default("sync_stream"),
+    execution_mode: z.literal("sync_stream").default("sync_stream"),
     budgets: BudgetsSchema.optional(),
     constraints: ConstraintsSchema,
     verification_level: z.enum(["none", "basic", "strict"]).default("basic"),
@@ -35,6 +35,14 @@ export const PipelinePlanSchema = z.object({
         .optional(),
     /** Tools enabled for this run */
     tools_enabled: z.array(z.string()).default([]),
+    /** L2-05: Sandbox options for tool execution (Architecture §12). */
+    sandbox: z
+        .object({
+        timeout_ms: z.number().int().positive().optional(),
+        network_access: z.boolean().optional(),
+        filesystem_access: z.boolean().optional(),
+    })
+        .optional(),
     /** Memory config */
     memory: z
         .object({

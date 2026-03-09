@@ -2,6 +2,15 @@
 
 Runbook for the Deferred Coding Agent Harness Readiness Gate. Owner: Program Lead; escalation: Program Lead → Security Lead → Executive sponsor.
 
+## Source Alignment
+
+- Normative production requirements: `docs/Architecture_document_Finalized.md` (Sections 11, 18.3, 18.4, 18.12).
+- Current implementation deltas/gaps: `docs/Production-Readiness-Gaps-Report.md`.
+
+This runbook governs when autonomous harness behavior can be enabled in production, and should be applied alongside security, observability, and policy readiness evidence.
+
+**L2-99 gate (SOW Segment L.4):** Autonomous harness execution is **implemented** and gated by feature flag. When the readiness gate passes and security/observability sign-off is complete, enable `harness_autonomous_execution_enabled` (env: `HARNESS_AUTONOMOUS_EXECUTION_ENABLED=true`) so the coding-agent pipeline runs the autonomous loop: (execution ↔ tool)* → evaluation → synthesis, with budgets and `HARNESS_ITERATION` observability events. Until the flag is enabled, the coding agent runs in single-pass mode only.
+
 ---
 
 ## Gate workflow overview
@@ -14,11 +23,10 @@ Runbook for the Deferred Coding Agent Harness Readiness Gate. Owner: Program Lea
 
 ---
 
-## Feature flag
+## Feature flags
 
-- **Flag**: `governance_harness_readiness_gate_active` (see `src/config/schema.ts`).
-- **Env**: `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE` (default: true).
-- When true, gate workflow tooling and checks are active; harness execution remains false until approved.
+- **Gate workflow**: `governance_harness_readiness_gate_active` (see `src/config/schema.ts`). Env: `GOVERNANCE_HARNESS_READINESS_GATE_ACTIVE` (default: true). When true, gate workflow tooling and checks are active.
+- **Harness execution**: `harness_autonomous_execution_enabled` (default: false). Env: `HARNESS_AUTONOMOUS_EXECUTION_ENABLED`. Set to `true` only after formal go decision and sign-off; when true, the coding-agent pipeline runs the autonomous (execution ↔ tool)* loop with budgets and observability (`HARNESS_ITERATION` events).
 
 ---
 
@@ -92,7 +100,8 @@ Runbook for the Deferred Coding Agent Harness Readiness Gate. Owner: Program Lea
 ## Implementation reference
 
 - **Types and scorecard**: `src/governance/` (types, scorecard, evidence).
-- **Plan**: `docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`.
+- **Autonomous harness**: `src/pipelines/coding-agent-pipeline.ts` (branch on `harness_autonomous_execution_enabled`; loop honors `proposed_next_action` from execution engine); `src/engines/execution_engine.ts` (returns `proposed_next_action` when task has `suggested_tool_ref`). Observability: `HARNESS_ITERATION` event (see `src/observability/events.ts`).
+- **Plan**: `docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` (or `docs/PLANS/`).
 - **Handoff**: `docs/PLANS/Implementation-plans/L2-99_Handoff.md` (usage, CI, references).
 - **Templates**: `L2-99_Evidence-Checklist.md`, `L2-99_Decision-Memo-Template.md` (same folder as plan).
-- **SPECs**: 18 Observability, 19 Security and Isolation, 21 Test and Eval Plan, 22 Runbooks and Operations.
+- **SPECs**: 18 Observability, 19 Security and Isolation, 20 Config and Feature Flags, 21 Test and Eval Plan, 22 Runbooks and Operations.

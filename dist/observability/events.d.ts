@@ -1,10 +1,10 @@
 /**
  * Canonical event taxonomy and schema for observability.
- * @see Docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
+ * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0
  */
 import { z } from "zod";
-/** Required event types per SPEC 18 */
-export declare const REQUIRED_EVENT_TYPES: readonly ["ROUTE_DECISION", "POLICY_DECISION", "BUDGET_ASSIGN", "PIPELINE_START", "PIPELINE_END", "TOOL_START", "TOOL_END", "MEMORY_QUERY", "MEMORY_WRITE", "VERIFY_RESULT", "FINAL_SYNTH", "ERROR"];
+/** Required event types per SPEC 18 and Architecture §13 */
+export declare const REQUIRED_EVENT_TYPES: readonly ["ROUTE_DECISION", "POLICY_DECISION", "BUDGET_ASSIGN", "PIPELINE_START", "PIPELINE_END", "WORKFLOW_START", "WORKFLOW_END", "ENGINE_START", "ENGINE_END", "TOOL_START", "TOOL_END", "MEMORY_QUERY", "MEMORY_WRITE", "VERIFY_RESULT", "FINAL_SYNTH", "ERROR", "HARNESS_ITERATION"];
 export type RequiredEventType = (typeof REQUIRED_EVENT_TYPES)[number];
 export declare function isRequiredEventType(s: string): s is RequiredEventType;
 /** Payloads for governance and lifecycle events (allowlisted fields only) */
@@ -17,15 +17,15 @@ export declare const RouteDecisionPayloadSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     pipeline_type?: string | undefined;
     strategy_id?: string | undefined;
-    reason?: string | undefined;
     route?: string | undefined;
     deny?: boolean | undefined;
+    reason?: string | undefined;
 }, {
     pipeline_type?: string | undefined;
     strategy_id?: string | undefined;
-    reason?: string | undefined;
     route?: string | undefined;
     deny?: boolean | undefined;
+    reason?: string | undefined;
 }>;
 export declare const PolicyDecisionPayloadSchema: z.ZodObject<{
     allowed: z.ZodBoolean;

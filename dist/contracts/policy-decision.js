@@ -1,6 +1,6 @@
 /**
  * PolicyDecision – internal Control Plane output (allow/deny + budgets).
- * @see Docs/Overview.md, Docs/Architecture.md (6.3), SPEC 07, L2-03
+ * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.3), SPEC 07, L2-03
  */
 import { z } from "zod";
 import { ERROR_CODES } from "./errors.js";

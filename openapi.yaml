@@ -1,0 +1,830 @@
+openapi: 3.1.0
+info:
+  title: AI Server API
+  description: |
+    Production-grade, modular, multimodal AI server with strict cognition boundary.
+    
+    ## Overview
+    This API provides a complete interface for processing AI requests with:
+    - Intent classification and routing
+    - Pipeline planning and execution
+    - Policy enforcement and rate limiting
+    - Memory and retrieval capabilities
+    - Observability and audit logging
+    
+    ## Authentication
+    All requests require authentication via Bearer token. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your-token>
+    ```
+    
+    ## Rate Limiting
+    API requests are subject to rate limiting based on org/app/user scope.
+    Rate limit information is included in response headers:
+    - `X-RateLimit-Limit`: Maximum requests allowed
+    - `X-RateLimit-Remaining`: Remaining requests in current window
+    - `X-RateLimit-Reset`: Unix timestamp when limit resets
+    
+  version: "2024-01-01"
+  contact:
+    name: AI Server Team
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /v1/intent:
+    post:
+      summary: Submit an intent for processing
+      description: |
+        Submits a user intent for classification and routing. The intent is validated,
+        classified, and routed to appropriate workflows.
+      operationId: submitIntent
+      tags:
+        - Intent Processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestEnvelope'
+            examples:
+              simpleQuery:
+                summary: Simple chat query
+                value:
+                  version: "2024-01-01"
+                  request_id: "req-123"
+                  timestamp: "2024-01-15T10:30:00Z"
+                  intent:
+                    intent_id: "chat-456"
+                    scope:
+                      org_id: "org-789"
+                      app_id: "app-abc"
+                      user_id: "user-xyz"
+                    input_artifacts:
+                      - artifact_id: "input-1"
+                        artifact_kind: "text"
+                        schema_ref: "schema://text@v1"
+                        encoding: "utf-8"
+                        content:
+                          inline: "What is the capital of France?"
+              withContext:
+                summary: Query with context
+                value:
+                  version: "2024-01-01"
+                  request_id: "req-789"
+                  timestamp: "2024-01-15T10:35:00Z"
+                  intent:
+                    intent_id: "analysis-001"
+                    scope:
+                      org_id: "org-789"
+                      app_id: "app-abc"
+                      user_id: "user-xyz"
+                    input_artifacts:
+                      - artifact_id: "code-1"
+                        artifact_kind: "code"
+                        schema_ref: "schema://code@v1"
+                        encoding: "utf-8"
+                        content:
+                          inline: "function sum(a, b) { return a + b; }"
+                    context_artifacts:
+                      - artifact_id: "ctx-1"
+                        artifact_kind: "text"
+                        schema_ref: "schema://text@v1"
+                        encoding: "utf-8"
+                        content:
+                          inline: "Review this code for errors"
+      responses:
+        '200':
+          description: Intent accepted for processing
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Rate limit ceiling
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in window
+            X-Request-ID:
+              schema:
+                type: string
+              description: Unique request identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseEnvelope'
+              examples:
+                accepted:
+                  summary: Request accepted
+                  value:
+                    version: "2024-01-01"
+                    request_id: "req-123"
+                    timestamp: "2024-01-15T10:30:01Z"
+                    status: "accepted"
+                    trace_id: "trace-abc-123"
+                deferred:
+                  summary: Request deferred to async processing
+                  value:
+                    version: "2024-01-01"
+                    request_id: "req-123"
+                    timestamp: "2024-01-15T10:30:01Z"
+                    status: "deferred"
+                    async_job_id: "job-789"
+                    estimated_completion_ms: 30000
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "INVALID_REQUEST"
+                  message: "Missing required field: intent.intent_id"
+        '401':
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "Rate limit exceeded. Try again in 60 seconds."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/query:
+    post:
+      summary: Submit a query (simplified interface)
+      description: |
+        Simplified endpoint for submitting queries. Automatically creates
+        the intent envelope and routes to appropriate handlers.
+      operationId: submitQuery
+      tags:
+        - Query Processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              simple:
+                summary: Simple query
+                value:
+                  prompt: "What is machine learning?"
+                  scope:
+                    org_id: "org-789"
+                    app_id: "app-abc"
+                    user_id: "user-xyz"
+              withContext:
+                summary: Query with conversation context
+                value:
+                  prompt: "Explain step by step"
+                  scope:
+                    org_id: "org-789"
+                    app_id: "app-abc"
+                    user_id: "user-xyz"
+                  conversation_id: "conv-123"
+                  context:
+                    - role: "user"
+                      content: "How does neural networks work?"
+                    - role: "assistant"
+                      content: "Neural networks are..."
+      responses:
+        '200':
+          description: Query processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+              examples:
+                success:
+                  summary: Successful response
+                  value:
+                    response: "Machine learning is a subset of artificial intelligence..."
+                    status: "success"
+                    usage:
+                      tokens_in: 10
+                      tokens_out: 150
+                      cost_usd: 0.0025
+        '400':
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/retrieve:
+    post:
+      summary: Retrieve from memory store
+      description: |
+        Performs semantic search against the memory store within the specified scope.
+        Returns relevant chunks ranked by similarity.
+      operationId: retrieveMemory
+      tags:
+        - Memory & Retrieval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrievalRequest'
+            examples:
+              simple:
+                summary: Simple retrieval
+                value:
+                  query_text: "machine learning basics"
+                  scope: "org"
+                  scope_keys:
+                    org_id: "org-789"
+                  top_k: 5
+      responses:
+        '200':
+          description: Retrieval results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetrievalResult'
+              example:
+                hits:
+                  - chunk:
+                      text: "Machine learning is a method of data analysis..."
+                      document_id: "doc-123"
+                      chunk_index: 0
+                    score: 0.89
+                    scope_keys:
+                      org_id: "org-789"
+                degraded: false
+        '400':
+          description: Invalid retrieval request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/ingest:
+    post:
+      summary: Ingest into memory store
+      description: |
+        Ingests a document into the memory store for later retrieval.
+        Document is chunked and indexed within the specified scope.
+      operationId: ingestMemory
+      tags:
+        - Memory & Retrieval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestionRequest'
+            examples:
+              simple:
+                summary: Simple ingestion
+                value:
+                  document_id: "doc-456"
+                  text: "Document content to be indexed..."
+                  scope: "org"
+                  scope_keys:
+                    org_id: "org-789"
+                  source_label: "documentation.txt"
+      responses:
+        '200':
+          description: Ingestion result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionResult'
+              example:
+                document_id: "doc-456"
+                chunks_written: 3
+                chunks_dropped: 0
+        '400':
+          description: Invalid ingestion request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/token/exchange:
+    post:
+      summary: Exchange external token for AI service token
+      description: |
+        Exchanges an external JWT (from configured IdP) for an AI service
+        internal JWT. Validates the external token against registered IdPs.
+      operationId: exchangeToken
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - external_token
+                - org_id
+                - app_id
+              properties:
+                external_token:
+                  type: string
+                  description: JWT token from external IdP
+                org_id:
+                  type: string
+                  description: Organization identifier
+                app_id:
+                  type: string
+                  description: Application identifier
+      responses:
+        '200':
+          description: Token exchange successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: "Bearer"
+                  expires_in:
+                    type: integer
+                    description: Token lifetime in seconds
+        '401':
+          description: Token exchange failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /healthz:
+    get:
+      summary: Health check endpoint
+      description: |
+        Liveness probe. Returns 200 if the service is running.
+        Does not check dependency health.
+      operationId: healthCheck
+      tags:
+        - Health & Monitoring
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /readyz:
+    get:
+      summary: Readiness check endpoint
+      description: |
+        Readiness probe. Returns 200 only when all dependencies are healthy
+        (model providers, memory store, etc.). Returns 503 if not ready.
+      operationId: readinessCheck
+      tags:
+        - Health & Monitoring
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+                  dependencies:
+                    type: object
+                    properties:
+                      model_gateway:
+                        type: string
+                        example: "healthy"
+                      memory_store:
+                        type: string
+                        example: "healthy"
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "not_ready"
+                  reason:
+                    type: string
+
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Returns metrics in Prometheus format for monitoring.
+        Includes request rates, latencies, error rates, and resource utilization.
+      operationId: getMetrics
+      tags:
+        - Health & Monitoring
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP ai_requests_total Total number of AI requests
+                # TYPE ai_requests_total counter
+                ai_requests_total{status="success"} 1027
+                ai_requests_total{status="error"} 23
+
+  /v1/version:
+    get:
+      summary: Get API version information
+      description: |
+        Returns version information about the AI server deployment.
+        Includes release ID, build ID, and supported API versions.
+      operationId: getVersion
+      tags:
+        - Information
+      security: []
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  release_id:
+                    type: string
+                    example: "v1.2.3"
+                  build_id:
+                    type: string
+                    example: "abc123def456"
+                  api_version:
+                    type: string
+                    example: "2024-01-01"
+                  supported_versions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["2024-01-01", "2023-12-01"]
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RequestEnvelope:
+      type: object
+      required:
+        - version
+        - request_id
+        - timestamp
+        - intent
+      properties:
+        version:
+          type: string
+          description: API version
+          example: "2024-01-01"
+        request_id:
+          type: string
+          description: Unique request identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: Request timestamp in ISO 8601 format
+        intent:
+          $ref: '#/components/schemas/IntentBundle'
+        pipeline_hint:
+          type: object
+          properties:
+            suggested_workflow:
+              type: string
+            priority:
+              type: string
+              enum: [low, normal, high, urgent]
+
+    IntentBundle:
+      type: object
+      required:
+        - intent_id
+        - scope
+        - input_artifacts
+      properties:
+        intent_id:
+          type: string
+          description: Unique intent identifier
+        scope:
+          $ref: '#/components/schemas/Scope'
+        input_artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypedArtifact'
+        context_artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypedArtifact'
+        policy_constraints:
+          type: object
+          properties:
+            max_cost_usd:
+              type: number
+            max_latency_ms:
+              type: integer
+
+    Scope:
+      type: object
+      required:
+        - org_id
+        - app_id
+        - user_id
+      properties:
+        org_id:
+          type: string
+          description: Organization identifier
+        app_id:
+          type: string
+          description: Application identifier
+        user_id:
+          type: string
+          description: User identifier
+        project_id:
+          type: string
+          description: Project identifier (optional)
+
+    TypedArtifact:
+      type: object
+      required:
+        - artifact_id
+        - artifact_kind
+        - schema_ref
+        - encoding
+        - content
+      properties:
+        artifact_id:
+          type: string
+        artifact_kind:
+          type: string
+          enum: [text, code, image, audio, evaluation_report, tool_result, report]
+        schema_ref:
+          type: string
+          description: Schema reference URI
+          example: "schema://text@v1"
+        encoding:
+          type: string
+          enum: [utf-8, base64, binary, json]
+        content:
+          type: object
+          properties:
+            inline:
+              oneOf:
+                - type: string
+                - type: object
+            uri:
+              type: string
+
+    ResponseEnvelope:
+      type: object
+      required:
+        - version
+        - request_id
+        - timestamp
+        - status
+      properties:
+        version:
+          type: string
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [accepted, rejected, deferred, error]
+        trace_id:
+          type: string
+          description: Distributed tracing identifier
+        async_job_id:
+          type: string
+          description: Present when status is "deferred"
+        estimated_completion_ms:
+          type: integer
+          description: Estimated processing time when deferred
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    QueryRequest:
+      type: object
+      required:
+        - prompt
+        - scope
+      properties:
+        prompt:
+          type: string
+          description: The user's query or instruction
+        scope:
+          $ref: '#/components/schemas/Scope'
+        conversation_id:
+          type: string
+          description: For multi-turn conversations
+        context:
+          type: array
+          description: Previous conversation turns
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant, system]
+              content:
+                type: string
+        max_tokens:
+          type: integer
+          description: Maximum tokens to generate
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+
+    QueryResponse:
+      type: object
+      required:
+        - response
+        - status
+      properties:
+        response:
+          type: string
+          description: Generated response text
+        status:
+          type: string
+          enum: [success, error]
+        usage:
+          type: object
+          properties:
+            tokens_in:
+              type: integer
+            tokens_out:
+              type: integer
+            cost_usd:
+              type: number
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    RetrievalRequest:
+      type: object
+      required:
+        - query_text
+        - scope
+        - scope_keys
+        - top_k
+      properties:
+        query_text:
+          type: string
+          description: Query text for semantic search
+        scope:
+          type: string
+          enum: [user, project, org, none]
+        scope_keys:
+          type: object
+          additionalProperties:
+            type: string
+        top_k:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of results to return
+        filters:
+          type: object
+          description: Optional metadata filters
+
+    RetrievalResult:
+      type: object
+      required:
+        - hits
+        - degraded
+      properties:
+        hits:
+          type: array
+          items:
+            type: object
+            properties:
+              chunk:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  document_id:
+                    type: string
+                  chunk_index:
+                    type: integer
+              score:
+                type: number
+                description: Similarity score (0-1)
+              scope_keys:
+                type: object
+        degraded:
+          type: boolean
+          description: True if retrieval was degraded (fallback mode)
+
+    IngestionRequest:
+      type: object
+      required:
+        - document_id
+        - text
+        - scope
+        - scope_keys
+      properties:
+        document_id:
+          type: string
+        text:
+          type: string
+          description: Document content to ingest
+        scope:
+          type: string
+          enum: [user, project, org]
+        scope_keys:
+          type: object
+          additionalProperties:
+            type: string
+        source_label:
+          type: string
+          description: Human-readable source identifier
+        metadata:
+          type: object
+          description: Optional document metadata
+
+    IngestionResult:
+      type: object
+      required:
+        - document_id
+        - chunks_written
+      properties:
+        document_id:
+          type: string
+        chunks_written:
+          type: integer
+        chunks_dropped:
+          type: integer
+        error:
+          type: string
+          description: Error code if ingestion partially failed
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'

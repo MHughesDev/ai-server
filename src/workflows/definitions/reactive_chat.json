@@ -1,0 +1,25 @@
+{
+  "workflow_id": "reactive_chat",
+  "version": "v1",
+  "entry_conditions": {
+    "intents": ["query", "chat"],
+    "required_capabilities": {"needs_memory": true}
+  },
+  "steps": [
+    {
+      "step_id": "s1",
+      "kind": "engine_call",
+      "ref": "execution",
+      "input_mapping": {},
+      "depends_on": []
+    },
+    {
+      "step_id": "s2",
+      "kind": "engine_call",
+      "ref": "synthesis",
+      "input_mapping": {},
+      "depends_on": ["s1"]
+    }
+  ],
+  "stop_conditions": { "max_iterations": 1, "deadline_ms": 60000 }
+}

@@ -1,6 +1,6 @@
 /**
  * PolicyDecision – internal Control Plane output (allow/deny + budgets).
- * @see Docs/Overview.md, Docs/Architecture.md (6.3), SPEC 07, L2-03
+ * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.3), SPEC 07, L2-03
  */
 import { z } from "zod";
 import type { ErrorCode } from "./errors.js";
@@ -61,8 +61,8 @@ export declare const PolicyDecisionSchema: z.ZodObject<{
     allowed: boolean;
     allow_tools: string[];
     deny_tools: string[];
-    memory_scope: "user" | "project" | "org" | "none";
-    safety_profile: "standard" | "strict" | "internal";
+    memory_scope: "org" | "user" | "project" | "none";
+    safety_profile: "strict" | "standard" | "internal";
     redaction_level: "none" | "minimal" | "full";
     audit_level: "none" | "full" | "summary";
     allowed_pipelines: string[];
@@ -79,14 +79,14 @@ export declare const PolicyDecisionSchema: z.ZodObject<{
     deny_reason?: string | undefined;
     allow_tools?: string[] | undefined;
     deny_tools?: string[] | undefined;
-    memory_scope?: "user" | "project" | "org" | "none" | undefined;
+    memory_scope?: "org" | "user" | "project" | "none" | undefined;
     max_budgets?: {
         deadline_ms?: number | undefined;
         token_budget?: number | undefined;
         tool_budget?: number | undefined;
         cost_budget_usd?: number | undefined;
     } | undefined;
-    safety_profile?: "standard" | "strict" | "internal" | undefined;
+    safety_profile?: "strict" | "standard" | "internal" | undefined;
     redaction_level?: "none" | "minimal" | "full" | undefined;
     audit_level?: "none" | "full" | "summary" | undefined;
     allowed_pipelines?: string[] | undefined;
