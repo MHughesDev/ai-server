@@ -297,7 +297,7 @@ describe("Integration Tests with Mocked Providers", () => {
       const memoryEngine = registry("memory")!;
 
       // First, ingest some data
-      await store.ingest!({
+      await store.ingest({
         document_id: "test-doc",
         text: "The quick brown fox jumps over the lazy dog",
         scope: "org",
@@ -318,7 +318,7 @@ describe("Integration Tests with Mocked Providers", () => {
       const store = new InMemoryStore();
       
       // Ingest data for org-1
-      await store.ingest!({
+      await store.ingest({
         document_id: "org1-doc",
         text: "Secret data for organization 1",
         scope: "org",
@@ -326,7 +326,7 @@ describe("Integration Tests with Mocked Providers", () => {
       });
 
       // Ingest data for org-2
-      await store.ingest!({
+      await store.ingest({
         document_id: "org2-doc",
         text: "Secret data for organization 2",
         scope: "org",
@@ -357,7 +357,7 @@ describe("Integration Tests with Mocked Providers", () => {
       const memoryStore = new InMemoryStore();
 
       // Pre-populate memory
-      await memoryStore.ingest!({
+      await memoryStore.ingest({
         document_id: "context-doc",
         text: "Important context for the user query",
         scope: "user",

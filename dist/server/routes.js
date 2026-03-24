@@ -11,11 +11,44 @@ import { exchangeToken, queryRequiresAiJwt, verifyQueryCallerFromAuthHeader, } f
 import { checkQueryRateLimitAsync, createRateLimitedRejection, attachRateLimitHeaders, detectAbuse, } from "./rate-limit.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 import { RequestQueue, sendBackpressureResponse, handleCors } from "./transport.js";
+import { getFeatureFlagService } from "../config/feature-flags.js";
+import { runProductionPreflight } from "./preflight.js";
 // Global request queue for backpressure (Phase 7.1)
 const requestQueue = new RequestQueue({
     maxConcurrent: parseInt(process.env.MAX_CONCURRENT_REQUESTS ?? "100", 10),
     maxQueueDepth: parseInt(process.env.MAX_REQUEST_QUEUE_DEPTH ?? "50", 10),
 });
+// Gap 3A: Async job queue service (initialized by bootstrap)
+let jobQueueService = null;
+export function setJobQueueService(service) {
+    jobQueueService = service;
+}
+export function getJobQueueService() {
+    return jobQueueService;
+}
+class RequestProcessingTimeoutError extends Error {
+    timeoutMs;
+    constructor(timeoutMs) {
+        super(`Request processing timed out after ${timeoutMs}ms`);
+        this.timeoutMs = timeoutMs;
+        this.name = "RequestProcessingTimeoutError";
+    }
+}
+async function withRequestTimeout(promise, timeoutMs) {
+    let timer;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new RequestProcessingTimeoutError(timeoutMs)), timeoutMs);
+            }),
+        ]);
+    }
+    finally {
+        if (timer)
+            clearTimeout(timer);
+    }
+}
 export async function handleRequest(req, res) {
     // L2-06 Phase 7.1: CORS handling
     const corsHandled = handleCors(req, res, {
@@ -126,8 +159,21 @@ async function processRequest(req, res) {
         sendJson(res, 200, versionPayload);
         return;
     }
+    if (method === "GET" && path === "/v1/preflight") {
+        if (!isOperationalAccessAllowed(config.operationalBearerToken, authHeader)) {
+            sendJson(res, 401, {
+                status: "error",
+                error: { code: "AUTH_INVALID", message: "Unauthorized operational endpoint access" },
+            });
+            return;
+        }
+        const report = await runProductionPreflight(config);
+        sendJson(res, report.summary.status === "pass" ? 200 : 503, report);
+        return;
+    }
     if (method === "POST" && path === "/token/exchange") {
-        if (config.env === "production" && !config.flags.platform_production_rollout_enabled) {
+        const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
+        if (config.env === "production" && !rolloutEnabled) {
             sendJson(res, 503, {
                 status: "error",
                 error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
@@ -188,21 +234,33 @@ async function processRequest(req, res) {
         }
         return;
     }
-    if (method === "POST" && path === "/v1/query") {
-        if (config.env === "production" && !config.flags.platform_production_rollout_enabled) {
+    // Gap 3A: Async job submission endpoint
+    if (method === "POST" && path === "/v1/query/async") {
+        const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
+        if (config.env === "production" && !rolloutEnabled) {
             sendJson(res, 503, {
                 status: "error",
                 error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
             });
             return;
         }
-        // PRODUCTION: Add per-request timeout (e.g. from plan.budgets.deadline_ms) so slow pipelines don't hold connections indefinitely.
-        if (!config.flags.runtime_mvp_query_chat_enabled) {
-            sendJson(res, 404, { error: "MVP query endpoint not enabled" });
+        if (!jobQueueService) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "ASYNC_NOT_AVAILABLE", message: "Async job queue not configured" },
+            });
             return;
         }
         try {
             const verifiedCallerContext = verifyQueryCallerFromAuthHeader(authHeader, config);
+            const flagContext = verifiedCallerContext
+                ? {
+                    org_id: verifiedCallerContext.orgId,
+                    app_id: verifiedCallerContext.appId,
+                    user_id: verifiedCallerContext.userId,
+                }
+                : undefined;
+            const multimodalInputPathEnabled = isFeatureFlagEnabled("multimodal_input_path_enabled", config, flagContext);
             const contentLength = req.headers["content-length"];
             const len = contentLength ? parseInt(contentLength, 10) : undefined;
             const body = await readJsonBody(req, config.maxRequestBodyBytes, {
@@ -216,7 +274,243 @@ async function processRequest(req, res) {
                 requireAuthHeader: queryRequiresAiJwt(config),
                 authHeader,
                 contractVersion: CONTRACT_VERSION,
-                multimodalInputPathEnabled: config.flags.multimodal_input_path_enabled,
+                multimodalInputPathEnabled,
+                attachmentLimits: {
+                    maxCount: config.maxAttachmentCount,
+                    maxBytesPerAttachment: config.maxAttachmentBytes,
+                },
+                verifiedCallerContext,
+            });
+            // Rate limiting
+            const rateLimitDecision = await checkQueryRateLimitAsync(config.ingress_rate_limit, ingressResult.callerContext, req.socket.remoteAddress);
+            attachRateLimitHeaders(res, rateLimitDecision);
+            if (!rateLimitDecision.allowed) {
+                throw createRateLimitedRejection(rateLimitDecision);
+            }
+            // Extract webhook URL from headers if provided
+            const webhookUrl = req.headers["x-webhook-url"];
+            // Submit async job
+            const job = await jobQueueService.submitJob({
+                request: ingressResult,
+                webhook_url: webhookUrl,
+                max_attempts: 3,
+                metadata: {
+                    org_id: ingressResult.callerContext.orgId,
+                    app_id: ingressResult.callerContext.appId,
+                    user_id: ingressResult.callerContext.userId,
+                    trace_id: requestIdHeader,
+                },
+            });
+            sendJson(res, 202, {
+                status: "accepted",
+                job_id: job.id,
+                status_url: `/v1/jobs/${job.id}`,
+                created_at: job.created_at,
+            });
+        }
+        catch (err) {
+            if (isIngressRejection(err)) {
+                sendErrorRejection(res, err);
+                return;
+            }
+            sendJson(res, 500, {
+                status: "error",
+                error: { code: "INTERNAL_ERROR", message: "Internal server error" },
+            });
+        }
+        return;
+    }
+    // Gap 3A: Get job status endpoint
+    if (method === "GET" && path.startsWith("/v1/jobs/")) {
+        if (!jobQueueService) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "ASYNC_NOT_AVAILABLE", message: "Async job queue not configured" },
+            });
+            return;
+        }
+        const jobId = path.replace("/v1/jobs/", "");
+        if (!jobId || jobId.includes("/")) {
+            sendJson(res, 400, {
+                status: "error",
+                error: { code: "INVALID_JOB_ID", message: "Invalid job ID" },
+            });
+            return;
+        }
+        const job = await jobQueueService.getJob(jobId);
+        if (!job) {
+            sendJson(res, 404, {
+                status: "error",
+                error: { code: "JOB_NOT_FOUND", message: "Job not found" },
+            });
+            return;
+        }
+        sendJson(res, 200, { status: "ok", job });
+        return;
+    }
+    // Gap 3A: Cancel job endpoint
+    if (method === "POST" && path.startsWith("/v1/jobs/") && path.endsWith("/cancel")) {
+        if (!jobQueueService) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "ASYNC_NOT_AVAILABLE", message: "Async job queue not configured" },
+            });
+            return;
+        }
+        const jobId = path.replace("/v1/jobs/", "").replace("/cancel", "");
+        if (!jobId || jobId.includes("/")) {
+            sendJson(res, 400, {
+                status: "error",
+                error: { code: "INVALID_JOB_ID", message: "Invalid job ID" },
+            });
+            return;
+        }
+        const cancelled = await jobQueueService.cancelJob(jobId);
+        if (!cancelled) {
+            sendJson(res, 409, {
+                status: "error",
+                error: { code: "CANNOT_CANCEL", message: "Job cannot be cancelled (not found or already completed)" },
+            });
+            return;
+        }
+        sendJson(res, 200, { status: "ok", job_id: jobId, cancelled: true });
+        return;
+    }
+    // Gap 3A: List jobs endpoint
+    if (method === "GET" && path === "/v1/jobs") {
+        if (!jobQueueService) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "ASYNC_NOT_AVAILABLE", message: "Async job queue not configured" },
+            });
+            return;
+        }
+        const urlParams = new URLSearchParams(url.search);
+        const jobs = await jobQueueService.listJobs({
+            status: urlParams.get("status"),
+            org_id: urlParams.get("org_id") ?? undefined,
+            app_id: urlParams.get("app_id") ?? undefined,
+            user_id: urlParams.get("user_id") ?? undefined,
+            limit: urlParams.get("limit") ? parseInt(urlParams.get("limit"), 10) : undefined,
+            offset: urlParams.get("offset") ? parseInt(urlParams.get("offset"), 10) : undefined,
+        });
+        sendJson(res, 200, { status: "ok", jobs, count: jobs.length });
+        return;
+    }
+    // Gap 3D: Feature flag admin endpoints
+    if (path.startsWith("/admin/flags")) {
+        if (!isOperationalAccessAllowed(config.operationalBearerToken, authHeader)) {
+            sendJson(res, 401, {
+                status: "error",
+                error: { code: "AUTH_INVALID", message: "Unauthorized admin endpoint access" },
+            });
+            return;
+        }
+        const flagService = getFeatureFlagService();
+        if (!flagService) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "FLAGS_NOT_AVAILABLE", message: "Feature flag service not initialized" },
+            });
+            return;
+        }
+        // GET /admin/flags - List all flags
+        if (method === "GET" && path === "/admin/flags") {
+            const flags = flagService.getAllFlags();
+            sendJson(res, 200, { status: "ok", flags });
+            return;
+        }
+        // POST /admin/flags/evaluate - Evaluate a flag
+        if (method === "POST" && path === "/admin/flags/evaluate") {
+            const body = (await readJsonBody(req, config.maxRequestBodyBytes, {
+                timeoutMs: config.requestReadTimeoutMs,
+            }));
+            const result = flagService.evaluateFlag(body.flag_name, {
+                org_id: typeof body.org_id === "string" ? body.org_id : undefined,
+                app_id: typeof body.app_id === "string" ? body.app_id : undefined,
+                user_id: typeof body.user_id === "string" ? body.user_id : undefined,
+            });
+            sendJson(res, 200, { status: "ok", result });
+            return;
+        }
+        // POST /admin/flags/overrides - Create override
+        if (method === "POST" && path === "/admin/flags/overrides") {
+            const body = (await readJsonBody(req, config.maxRequestBodyBytes, {
+                timeoutMs: config.requestReadTimeoutMs,
+            }));
+            flagService.setOverride({
+                flag_name: String(body.flag_name ?? ""),
+                scope: body.scope,
+                scope_id: String(body.scope_id ?? ""),
+                enabled: body.enabled === true,
+                variant: typeof body.variant === "string" ? body.variant : undefined,
+                payload: body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+                    ? body.payload
+                    : undefined,
+                expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
+            });
+            sendJson(res, 201, { status: "ok", message: "Override created" });
+            return;
+        }
+        // DELETE /admin/flags/overrides/:flag/:scope/:scopeId - Remove override
+        if (method === "DELETE" && path.startsWith("/admin/flags/overrides/")) {
+            const parts = path.replace("/admin/flags/overrides/", "").split("/");
+            if (parts.length === 3) {
+                const [flagName, scope, scopeId] = parts;
+                flagService.removeOverride(flagName, scope, scopeId);
+                sendJson(res, 200, { status: "ok", message: "Override removed" });
+                return;
+            }
+        }
+        // GET /admin/flags/overrides/:scope/:scopeId - List overrides for scope
+        if (method === "GET" && path.startsWith("/admin/flags/overrides/")) {
+            const parts = path.replace("/admin/flags/overrides/", "").split("/");
+            if (parts.length === 2) {
+                const [scope, scopeId] = parts;
+                const overrides = flagService.getOverrides(scope, scopeId);
+                sendJson(res, 200, { status: "ok", overrides });
+                return;
+            }
+        }
+    }
+    if (method === "POST" && path === "/v1/query") {
+        const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
+        if (config.env === "production" && !rolloutEnabled) {
+            sendJson(res, 503, {
+                status: "error",
+                error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
+            });
+            return;
+        }
+        // PRODUCTION: Add per-request timeout (e.g. from plan.budgets.deadline_ms) so slow pipelines don't hold connections indefinitely.
+        if (!isFeatureFlagEnabled("runtime_mvp_query_chat_enabled", config)) {
+            sendJson(res, 404, { error: "MVP query endpoint not enabled" });
+            return;
+        }
+        try {
+            const verifiedCallerContext = verifyQueryCallerFromAuthHeader(authHeader, config);
+            const flagContext = verifiedCallerContext
+                ? {
+                    org_id: verifiedCallerContext.orgId,
+                    app_id: verifiedCallerContext.appId,
+                    user_id: verifiedCallerContext.userId,
+                }
+                : undefined;
+            const multimodalInputPathEnabled = isFeatureFlagEnabled("multimodal_input_path_enabled", config, flagContext);
+            const contentLength = req.headers["content-length"];
+            const len = contentLength ? parseInt(contentLength, 10) : undefined;
+            const body = await readJsonBody(req, config.maxRequestBodyBytes, {
+                timeoutMs: config.requestReadTimeoutMs,
+            });
+            const requestIdHeader = req.headers[HEADER_REQUEST_ID];
+            const ingressResult = validateIngress(body, {
+                maxBodyBytes: config.maxRequestBodyBytes,
+                contentLength: len,
+                requestIdHeader,
+                requireAuthHeader: queryRequiresAiJwt(config),
+                authHeader,
+                contractVersion: CONTRACT_VERSION,
+                multimodalInputPathEnabled,
                 attachmentLimits: {
                     maxCount: config.maxAttachmentCount,
                     maxBytesPerAttachment: config.maxAttachmentBytes,
@@ -241,7 +535,8 @@ async function processRequest(req, res) {
                 });
                 // Log but don't block - can be enhanced to block if needed
             }
-            const response = await handleQuery(ingressResult);
+            const processingTimeoutMs = parseInt(process.env.REQUEST_PROCESSING_TIMEOUT_MS ?? "120000", 10);
+            const response = await withRequestTimeout(handleQuery(ingressResult), processingTimeoutMs);
             sendJson(res, 200, response);
         }
         catch (err) {
@@ -253,6 +548,18 @@ async function processRequest(req, res) {
                     });
                 }
                 sendErrorRejection(res, err);
+                return;
+            }
+            if (err instanceof RequestProcessingTimeoutError) {
+                sendJson(res, 504, {
+                    request_id: req.headers[HEADER_REQUEST_ID] || null,
+                    status: "error",
+                    error: {
+                        code: "TIMEOUT",
+                        message: err.message,
+                        detail: { timeout_ms: err.timeoutMs },
+                    },
+                });
                 return;
             }
             if (err instanceof Error && (err.name === "BodyTooLargeError" || err.name === "InvalidJsonError")) {
@@ -303,6 +610,10 @@ function getHeaderValue(value) {
     if (!value)
         return undefined;
     return Array.isArray(value) ? value[0] : value;
+}
+function isFeatureFlagEnabled(flagName, config, context) {
+    const service = getFeatureFlagService();
+    return service?.evaluateFlag(flagName, context).enabled ?? config.flags[flagName];
 }
 function isOperationalAccessAllowed(expectedToken, authHeader) {
     if (!expectedToken)

@@ -103,7 +103,9 @@ export async function createPersistentStore(
       const { S3PersistentStore } = await import("./persistent-adapters/s3-store.js");
       return new S3PersistentStore(config.s3 ?? {});
     }
-    default:
-      throw new Error(`Unknown persistent backend: ${config.backend}`);
+    default: {
+      const unknownBackend = config.backend as unknown as string;
+      throw new Error(`Unknown persistent backend: ${unknownBackend}`);
+    }
   }
 }

@@ -150,9 +150,9 @@ export class RedisVectorBackend implements VectorBackend {
         const record: VectorRecord = {
           id: key.replace(this.keyPrefix, ""),
           text: data["text"] ?? "",
-          embedding: JSON.parse(data["embedding"] ?? "[]"),
+          embedding: JSON.parse(data["embedding"] ?? "[]") as number[],
           scope: data["scope"] as RetrievalScope,
-          scope_keys: JSON.parse(data["scope_keys"] ?? "{}"),
+          scope_keys: JSON.parse(data["scope_keys"] ?? "{}") as Record<string, string>,
           document_id: data["document_id"] ?? "",
           position: parseInt(data["position"] ?? "0", 10),
           source_label: data["source_label"],

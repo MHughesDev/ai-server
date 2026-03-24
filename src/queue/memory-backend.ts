@@ -12,7 +12,7 @@ export class MemoryQueueBackend implements QueueBackend {
   private processing = new Set<string>();
   private sequenceId = 0;
 
-  async submit(jobData: Omit<Job, "id" | "created_at" | "status" | "attempts">): Promise<Job> {
+  submit(jobData: Omit<Job, "id" | "created_at" | "status" | "attempts">): Promise<Job> {
     this.sequenceId++;
     const jobId = `job-${Date.now()}-${this.sequenceId}`;
     const now = new Date().toISOString();
@@ -29,29 +29,29 @@ export class MemoryQueueBackend implements QueueBackend {
     this.jobs.set(jobId, job);
     this.pendingQueue.push(jobId);
 
-    return { ...job };
+    return Promise.resolve({ ...job });
   }
 
-  async get(jobId: string): Promise<Job | null> {
+  get(jobId: string): Promise<Job | null> {
     const job = this.jobs.get(jobId);
-    return job ? { ...job } : null;
+    return Promise.resolve(job ? { ...job } : null);
   }
 
-  async update(jobId: string, updates: Partial<Job>): Promise<Job | null> {
+  update(jobId: string, updates: Partial<Job>): Promise<Job | null> {
     const job = this.jobs.get(jobId);
-    if (!job) return null;
+    if (!job) return Promise.resolve(null);
 
     const updated = { ...job, ...updates };
     this.jobs.set(jobId, updated);
-    return { ...updated };
+    return Promise.resolve({ ...updated });
   }
 
-  async cancel(jobId: string): Promise<boolean> {
+  cancel(jobId: string): Promise<boolean> {
     const job = this.jobs.get(jobId);
-    if (!job) return false;
+    if (!job) return Promise.resolve(false);
 
     if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
-      return false;
+      return Promise.resolve(false);
     }
 
     // Remove from pending queue if present
@@ -65,10 +65,10 @@ export class MemoryQueueBackend implements QueueBackend {
 
     job.status = "cancelled";
     job.completed_at = new Date().toISOString();
-    return true;
+    return Promise.resolve(true);
   }
 
-  async list(options: {
+  list(options: {
     status?: JobStatus;
     org_id?: string;
     app_id?: string;
@@ -97,10 +97,10 @@ export class MemoryQueueBackend implements QueueBackend {
     const offset = options.offset ?? 0;
     const limit = options.limit ?? 100;
 
-    return jobs.slice(offset, offset + limit).map(j => ({ ...j }));
+    return Promise.resolve(jobs.slice(offset, offset + limit).map(j => ({ ...j })));
   }
 
-  async claimForProcessing(_workerId: string): Promise<Job | null> {
+  claimForProcessing(_workerId: string): Promise<Job | null> {
     while (this.pendingQueue.length > 0) {
       const jobId = this.pendingQueue.shift()!;
       const job = this.jobs.get(jobId);
@@ -113,12 +113,12 @@ export class MemoryQueueBackend implements QueueBackend {
       job.attempts++;
       this.processing.add(jobId);
 
-      return { ...job };
+      return Promise.resolve({ ...job });
     }
-    return null;
+    return Promise.resolve(null);
   }
 
-  async complete(jobId: string, result: Job["response"]): Promise<void> {
+  complete(jobId: string, result: Job["response"]): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job) throw new Error(`Job ${jobId} not found`);
 
@@ -126,9 +126,10 @@ export class MemoryQueueBackend implements QueueBackend {
     job.response = result;
     job.completed_at = new Date().toISOString();
     this.processing.delete(jobId);
+    return Promise.resolve();
   }
 
-  async fail(jobId: string, error: Job["error"]): Promise<void> {
+  fail(jobId: string, error: Job["error"]): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job) throw new Error(`Job ${jobId} not found`);
 
@@ -143,9 +144,10 @@ export class MemoryQueueBackend implements QueueBackend {
       job.status = "failed";
       job.completed_at = new Date().toISOString();
     }
+    return Promise.resolve();
   }
 
-  async cleanup(): Promise<{ completed: number; failed: number }> {
+  cleanup(): Promise<{ completed: number; failed: number }> {
     const now = new Date();
     let completed = 0;
     let failed = 0;
@@ -167,7 +169,7 @@ export class MemoryQueueBackend implements QueueBackend {
       }
     }
 
-    return { completed, failed };
+    return Promise.resolve({ completed, failed });
   }
 
   // For testing

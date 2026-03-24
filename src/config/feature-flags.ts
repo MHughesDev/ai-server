@@ -57,13 +57,14 @@ export class FeatureFlagService {
     console.log("[feature-flags] Feature flag service initialized");
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
     }
+    return Promise.resolve();
   }
 
-  private async loadFlags(): Promise<void> {
+  private loadFlags(): Promise<void> {
     switch (this.config.backend) {
       case "config":
         // Flags are loaded from environment on bootstrap
@@ -75,6 +76,7 @@ export class FeatureFlagService {
         // Would integrate with LaunchDarkly SDK
         break;
     }
+    return Promise.resolve();
   }
 
   /**
@@ -130,7 +132,7 @@ export class FeatureFlagService {
 
     // Return default/config value
     return {
-      enabled: defaultValue as boolean,
+      enabled: defaultValue,
       reason: "config",
     };
   }
@@ -231,7 +233,7 @@ export class FeatureFlagService {
     const hashInput = `${flagName}:${context.org_id ?? ""}:${context.app_id ?? ""}:${context.user_id ?? ""}`;
     const hash = this.simpleHash(hashInput);
     const index = hash % variants.length;
-    return variants[index]!;
+    return variants[index];
   }
 
   private simpleHash(str: string): number {

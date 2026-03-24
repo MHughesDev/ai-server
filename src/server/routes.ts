@@ -512,7 +512,7 @@ async function processRequest(
       const parts = path.replace("/admin/flags/overrides/", "").split("/");
       if (parts.length === 3) {
         const [flagName, scope, scopeId] = parts;
-        flagService.removeOverride(flagName!, scope as FlagScope, scopeId!);
+        flagService.removeOverride(flagName, scope as FlagScope, scopeId);
         sendJson(res, 200, { status: "ok", message: "Override removed" });
         return;
       }
@@ -523,7 +523,7 @@ async function processRequest(
       const parts = path.replace("/admin/flags/overrides/", "").split("/");
       if (parts.length === 2) {
         const [scope, scopeId] = parts;
-        const overrides = flagService.getOverrides(scope as FlagScope, scopeId!);
+        const overrides = flagService.getOverrides(scope as FlagScope, scopeId);
         sendJson(res, 200, { status: "ok", overrides });
         return;
       }

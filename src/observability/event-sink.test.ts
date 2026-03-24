@@ -90,7 +90,7 @@ describe("event sink", () => {
       setEventBackpressureCallback(null);
     });
 
-    it("triggers backpressure callback when threshold reached", async () => {
+    it("triggers backpressure callback when threshold reached", () => {
       const path = tempPath();
       let backpressureTriggered = false;
 
@@ -118,7 +118,7 @@ describe("event sink", () => {
       }
     });
 
-    it("status includes backpressure indicator", async () => {
+    it("status includes backpressure indicator", () => {
       const path = tempPath();
 
       try {
@@ -144,7 +144,7 @@ describe("event sink", () => {
       }
     });
 
-    it("isBackpressureActive returns correct state", async () => {
+    it("isBackpressureActive returns correct state", () => {
       const path = tempPath();
 
       try {

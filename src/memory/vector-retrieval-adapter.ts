@@ -222,8 +222,8 @@ export class FileVectorBackend implements VectorBackend {
     return matches.slice(0, Math.max(0, input.top_k));
   }
 
-  async isAvailable(): Promise<boolean> {
-    return true;
+  isAvailable(): Promise<boolean> {
+    return Promise.resolve(true);
   }
 }
 

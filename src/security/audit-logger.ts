@@ -64,7 +64,7 @@ export function createFileAuditSink(
   const queue: string[] = [];
   let droppedEntries = 0;
   let draining = false;
-  let closed = false;
+  const closed = false;
   let lastError: string | null = null;
   let backpressureActive = false;
 

@@ -59,24 +59,25 @@ spec:
             limits:
               memory: "2Gi"
               cpu: "1000m"
+          # Exec probes send Bearer token when OPERATIONAL_BEARER_TOKEN is set (see routes.ts).
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-              httpHeaders:
-                - name: Accept
-                  value: application/json
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - >-
+                  node -e "const t=process.env.OPERATIONAL_BEARER_TOKEN;const h=t?{Authorization:'Bearer '+t}:{};fetch('http://127.0.0.1:3000/healthz',{headers:h}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            httpGet:
-              path: /readyz
-              port: http
-              httpHeaders:
-                - name: Accept
-                  value: application/json
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - >-
+                  node -e "const t=process.env.OPERATIONAL_BEARER_TOKEN;const h=t?{Authorization:'Bearer '+t}:{};fetch('http://127.0.0.1:3000/readyz',{headers:h}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3

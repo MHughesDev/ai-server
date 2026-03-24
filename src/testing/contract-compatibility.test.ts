@@ -4,7 +4,6 @@
  * @see Production-Readiness-Complete-Checklist.md Phase 10
  */
 
-import { jest } from "@jest/globals";
 import type { 
   RequestEnvelope, 
   ResponseEnvelope,

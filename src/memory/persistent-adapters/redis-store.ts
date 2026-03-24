@@ -301,7 +301,7 @@ export class RedisPersistentStore implements PersistentMemoryStore {
           const data = JSON.parse(value) as { value: unknown; scope: string; scope_keys: Record<string, string>; created_at: string; expires_at?: string };
           const keyParts = key.split(":");
           records.push({
-            key: keyParts[keyParts.length - 1]!,
+            key: keyParts[keyParts.length - 1],
             scope: data.scope as StructuredRecord["scope"],
             scope_keys: data.scope_keys,
             value: data.value,
@@ -375,9 +375,9 @@ export class RedisPersistentStore implements PersistentMemoryStore {
     });
   }
 
-  async cleanupExpired(): Promise<number> {
+  cleanupExpired(): Promise<number> {
     // Redis handles expiration automatically
-    return 0;
+    return Promise.resolve(0);
   }
 
   async close(): Promise<void> {

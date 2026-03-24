@@ -68,7 +68,14 @@ services:
     networks:
       - ai-server-network
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      # Include Bearer token when OPERATIONAL_BEARER_TOKEN is set (same behavior as routes.ts).
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const t=process.env.OPERATIONAL_BEARER_TOKEN;const h=t?{Authorization:'Bearer '+t}:{};fetch('http://127.0.0.1:3000/healthz',{headers:h}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

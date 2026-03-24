@@ -18,6 +18,7 @@ import { getDefaultToolGateway, AllowlistToolGateway, ExecutableToolGateway } fr
 import { runWithContextAsync, createContext, getTraceContext, getObservability, } from "../observability/index.js";
 import { incrementCounter, recordHistogram, METRIC_REQUESTS_TOTAL, METRIC_ERRORS_TOTAL, METRIC_REQUEST_LATENCY_MS, METRIC_ROUTE_TOTAL, METRIC_SECURITY_DENY_TOTAL, METRIC_AUDIT_WRITE_LATENCY_MS, METRIC_RETRIEVAL_LATENCY_MS, METRIC_RETRIEVAL_FALLBACK_TOTAL, METRIC_RETRIEVAL_HITS_TOTAL, } from "../observability/metrics.js";
 import { getConfig } from "../bootstrap/index.js";
+import { getFeatureFlagService } from "../config/feature-flags.js";
 import { writeAuditEvent } from "../security/audit-logger.js";
 import { redact } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
@@ -98,12 +99,25 @@ export async function handleQuery(ingressResult) {
     const requestId = ingressResult.envelope.request_id;
     const ctx = createContext(requestId);
     const start = Date.now();
+    const flagContext = {
+        org_id: ingressResult.callerContext.orgId,
+        app_id: ingressResult.callerContext.appId,
+        user_id: ingressResult.callerContext.userId,
+    };
+    const flagService = getFeatureFlagService();
+    const isFlagEnabled = (flagName) => flagService?.evaluateFlag(flagName, flagContext).enabled ?? config.flags[flagName];
+    const multimodalInputPathEnabled = isFlagEnabled("multimodal_input_path_enabled") && isFlagEnabled("enable_multimodal_pipeline");
+    const observabilityEnabled = isFlagEnabled("observability_required_events_v1");
+    const securityHardControlsEnabled = isFlagEnabled("security_hard_controls_enabled");
+    const memoryRetrievalEnabled = isFlagEnabled("memory_retrieval_enabled");
+    const costCapsEnabled = isFlagEnabled("enable_cost_caps");
+    const toolExecutionEnabled = process.env.TOOL_EXECUTION_ENABLED === "true";
     return runWithContextAsync(ctx, async () => {
         try {
             const canonical = canonicalize(ingressResult.envelope);
             const intent = extractIntent(canonical);
             const controlPlane = createControlPlane({ router: defaultRouter });
-            const multimodalCapablePipelines = config.flags.multimodal_input_path_enabled && config.flags.enable_multimodal_pipeline
+            const multimodalCapablePipelines = multimodalInputPathEnabled
                 ? ["reactive_chat"]
                 : undefined;
             const result = await controlPlane.decide({
@@ -114,7 +128,7 @@ export async function handleQuery(ingressResult) {
             });
             /** L2-05: Use policy redaction_level for events and audit so no raw secrets in logs. */
             const redactionLevel = (result.policyDecision.redaction_level ?? "minimal");
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
                 emit(buildEvent("POLICY_DECISION", {
                     allowed: result.policyDecision.allowed,
                     deny_reason: result.policyDecision.deny_reason,
@@ -129,7 +143,7 @@ export async function handleQuery(ingressResult) {
                     cost_budget_usd: budgets.cost_budget_usd,
                 }, redactionLevel));
             }
-            if (config.flags.security_hard_controls_enabled) {
+            if (securityHardControlsEnabled) {
                 writeSecurityAudit("SECURITY_POLICY_DECISION", {
                     allowed: result.policyDecision.allowed,
                     deny_reason: result.policyDecision.deny_reason ?? null,
@@ -138,14 +152,14 @@ export async function handleQuery(ingressResult) {
             }
             if (!canDispatch(result)) {
                 const denyReason = result.routeResult.allowed ? "POLICY_BLOCKED" : result.routeResult.denyReason;
-                if (config.flags.security_hard_controls_enabled) {
+                if (securityHardControlsEnabled) {
                     incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: denyReason });
                     writeSecurityAudit("SECURITY_ROUTE_DENY", {
                         deny_reason: denyReason,
                         stage: "control_plane",
                     }, redactionLevel);
                 }
-                if (config.flags.observability_required_events_v1) {
+                if (observabilityEnabled) {
                     emit(buildEvent("ROUTE_DECISION", {
                         deny: true,
                         deny_reason: denyReason,
@@ -189,17 +203,17 @@ export async function handleQuery(ingressResult) {
             }
             assertCanDispatch(result);
             const plan = result.pipelinePlan;
-            if (!config.flags.enable_cost_caps && plan.budgets?.cost_budget_usd !== undefined) {
+            if (!costCapsEnabled && plan.budgets?.cost_budget_usd !== undefined) {
                 plan.budgets = { ...plan.budgets, cost_budget_usd: undefined };
             }
             // L2-06: Enable retrieval in plan when flag and policy scope allow
             const memoryScope = result.policyDecision.memory_scope ?? "none";
-            if (config.flags.memory_retrieval_enabled &&
+            if (memoryRetrievalEnabled &&
                 memoryScope !== "none" &&
                 !plan.memory?.retrieval) {
                 plan.memory = { retrieval: memoryScope, top_k: 5 };
             }
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
                 emit(buildEvent("ROUTE_DECISION", {
                     route: plan.pipeline_type,
                     pipeline_type: plan.pipeline_type,
@@ -231,10 +245,13 @@ export async function handleQuery(ingressResult) {
                         top_k: plan.memory.top_k ?? 5,
                         retrieval_timeout_ms: config.memory.retrieval_timeout_ms,
                         max_context_chars: config.memory.max_context_chars,
+                        max_context_tokens: plan.budgets?.token_budget != null
+                            ? Math.max(64, Math.min(config.memory.max_context_tokens, Math.floor(plan.budgets.token_budget * 0.5)))
+                            : config.memory.max_context_tokens,
                     });
                     if (retrievalResult.result.degraded) {
                         incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "degraded" });
-                        if (config.flags.observability_required_events_v1) {
+                        if (observabilityEnabled) {
                             emit(buildEvent("ERROR", {
                                 code: "RETRIEVAL_UNAVAILABLE",
                                 message: "Retrieval store degraded; proceeding without context",
@@ -257,7 +274,7 @@ export async function handleQuery(ingressResult) {
                             pipeline_type: plan.pipeline_type,
                             status: retrievalResult.result.hits.length > 0 ? "hit" : "miss",
                         });
-                        if (config.flags.observability_required_events_v1) {
+                        if (observabilityEnabled) {
                             emit(buildEvent("MEMORY_QUERY", {
                                 hit_count: retrievalResult.result.hits.length,
                                 latency_ms: retrievalResult.result.latency_ms,
@@ -268,7 +285,7 @@ export async function handleQuery(ingressResult) {
                 }
                 catch (err) {
                     incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "error" });
-                    if (config.flags.observability_required_events_v1) {
+                    if (observabilityEnabled) {
                         emit(buildEvent("ERROR", {
                             code: "RETRIEVAL_UNAVAILABLE",
                             message: err instanceof Error ? err.message : String(err),
@@ -307,12 +324,18 @@ export async function handleQuery(ingressResult) {
                 user_id: ingressResult.callerContext.userId,
             });
             const pipelineUsesMemory = pipelineUsesMemoryEngine ? { memoryStore: getDefaultStore() } : undefined;
-            const toolGatewayForPlan = (plan.tools_enabled?.length ?? 0) > 0
-                ? new AllowlistToolGateway({
-                    allowlist: plan.tools_enabled,
-                    sandbox: plan.sandbox,
-                    delegate: new ExecutableToolGateway(),
-                })
+            const hasToolsInPlan = (plan.tools_enabled?.length ?? 0) > 0;
+            if (hasToolsInPlan && !toolExecutionEnabled) {
+                console.warn("[query] tools requested in plan but TOOL_EXECUTION_ENABLED is false; using deny-only gateway");
+            }
+            const toolGatewayForPlan = hasToolsInPlan
+                ? toolExecutionEnabled
+                    ? new AllowlistToolGateway({
+                        allowlist: plan.tools_enabled,
+                        sandbox: plan.sandbox,
+                        delegate: new ExecutableToolGateway(),
+                    })
+                    : getDefaultToolGateway()
                 : getDefaultToolGateway();
             const memoryStoreForEngines = getDefaultStore();
             const getEngine = createEngineRegistry({
@@ -371,7 +394,7 @@ export async function handleQuery(ingressResult) {
                 route: plan.pipeline_type,
                 status: "ok",
             });
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
                 emit(buildEvent("PIPELINE_END", {
                     pipeline_type: plan.pipeline_type,
                     strategy_id: plan.strategy_id,
@@ -385,8 +408,33 @@ export async function handleQuery(ingressResult) {
             }
             const telemetry = response.telemetry;
             const costUsd = telemetry?.cost_usd_est ?? 0;
+            const tokenUsage = (telemetry?.tokens_in ?? 0) + (telemetry?.tokens_out ?? 0);
+            const tokenBudget = plan.budgets?.token_budget;
             const costBudgetUsd = plan.budgets?.cost_budget_usd;
-            if (config.flags.enable_cost_caps &&
+            if (tokenBudget != null &&
+                Number.isFinite(tokenBudget) &&
+                tokenUsage > tokenBudget) {
+                return {
+                    request_id: requestId,
+                    status: "blocked",
+                    mode: "sync",
+                    error: {
+                        code: "BUDGET_EXCEEDED",
+                        message: "Token budget exceeded",
+                        detail: { token_budget: tokenBudget, tokens_used: tokenUsage },
+                    },
+                    telemetry: {
+                        pipeline: telemetry?.pipeline ?? plan.pipeline_type,
+                        models_used: telemetry?.models_used ?? [],
+                        tool_calls: telemetry?.tool_calls ?? 0,
+                        tokens_in: telemetry?.tokens_in ?? 0,
+                        tokens_out: telemetry?.tokens_out ?? 0,
+                        cost_usd_est: costUsd,
+                        latency_ms: telemetry?.latency_ms ?? Date.now() - start,
+                    },
+                };
+            }
+            if (costCapsEnabled &&
                 costBudgetUsd != null &&
                 Number.isFinite(costBudgetUsd) &&
                 costUsd > costBudgetUsd) {
@@ -414,7 +462,7 @@ export async function handleQuery(ingressResult) {
                 await recordTenantUsage(ingressResult.callerContext.orgId, { cost_usd: costUsd });
             }
             catch (usageErr) {
-                if (config.flags.observability_required_events_v1) {
+                if (observabilityEnabled) {
                     emit(buildEvent("ERROR", {
                         code: "TENANT_USAGE_RECORD_FAILED",
                         message: usageErr instanceof Error ? usageErr.message : String(usageErr),
@@ -472,7 +520,7 @@ export async function handleQuery(ingressResult) {
                 route: "unknown",
                 status: "error",
             });
-            if (config.flags.security_hard_controls_enabled) {
+            if (securityHardControlsEnabled) {
                 incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: "ERROR" });
                 writeSecurityAudit("SECURITY_ERROR", {
                     code: errorCode,
@@ -480,7 +528,7 @@ export async function handleQuery(ingressResult) {
                     message_redacted: true,
                 });
             }
-            if (config.flags.observability_required_events_v1) {
+            if (observabilityEnabled) {
                 emit(buildEvent("ERROR", {
                     code: errorCode,
                     message: err instanceof Error ? err.message : String(err),

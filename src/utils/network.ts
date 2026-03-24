@@ -3,8 +3,8 @@
  * L2-06 Phase 9: TCP connection pooling and timeout tuning.
  */
 
-import type { Agent as HttpAgent } from "node:http";
-import type { Agent as HttpsAgent } from "node:https";
+import { Agent as HttpAgent } from "node:http";
+import { Agent as HttpsAgent } from "node:https";
 
 // ============================================================================
 // Connection Timeout Configuration
@@ -104,9 +104,8 @@ export const DefaultTcpPoolConfig: TcpPoolConfig = {
  */
 export function createHttpAgent(options: Partial<TcpPoolConfig> = {}): HttpAgent {
   const opts = { ...DefaultTcpPoolConfig, ...options };
-  const { Agent } = require("node:http");
 
-  return new Agent({
+  return new HttpAgent({
     keepAlive: opts.keepAlive,
     keepAliveMsecs: opts.keepAliveTimeoutMs,
     maxSockets: opts.maxSocketsPerHost,
@@ -119,9 +118,8 @@ export function createHttpAgent(options: Partial<TcpPoolConfig> = {}): HttpAgent
  */
 export function createHttpsAgent(options: Partial<TcpPoolConfig> = {}): HttpsAgent {
   const opts = { ...DefaultTcpPoolConfig, ...options };
-  const { Agent } = require("node:https");
 
-  return new Agent({
+  return new HttpsAgent({
     keepAlive: opts.keepAlive,
     keepAliveMsecs: opts.keepAliveTimeoutMs,
     maxSockets: opts.maxSocketsPerHost,
@@ -150,7 +148,8 @@ export async function fetchWithTimeout(
   url: string,
   options: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
-  const { connectTimeoutMs = 5000, timeoutMs = 30000, useConnectionPool = true, ...fetchOptions } = options;
+  const { connectTimeoutMs: _connectTimeoutMs = 5000, timeoutMs = 30000, useConnectionPool = true, ...fetchOptions } =
+    options;
 
   const urlObj = new URL(url);
   const isHttps = urlObj.protocol === "https:";
@@ -171,7 +170,7 @@ export async function fetchWithTimeout(
     const response = await fetch(url, {
       ...fetchOptions,
       signal: controller.signal,
-      // @ts-ignore - Node.js fetch supports agent
+      // @ts-expect-error Node.js fetch supports undici `agent` when provided by runtime
       agent,
     });
 

@@ -1140,6 +1140,13 @@ export declare const ConfigSchema: z.ZodObject<{
     auditLogPath: z.ZodOptional<z.ZodString>;
     /** Optional persistent observability event sink path (validated). */
     observabilityEventSinkPath: z.ZodOptional<z.ZodString>;
+    /** Gap 3A: Async job queue configuration */
+    queueBackend: z.ZodDefault<z.ZodEnum<["memory", "redis", "postgres"]>>;
+    queueWorkers: z.ZodDefault<z.ZodNumber>;
+    queueMaxRetries: z.ZodDefault<z.ZodNumber>;
+    queueWebhookTimeoutMs: z.ZodDefault<z.ZodNumber>;
+    queueWebhookRetryAttempts: z.ZodDefault<z.ZodNumber>;
+    queueJobTimeoutMs: z.ZodDefault<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     env: "dev" | "staging" | "production";
     logLevel: "debug" | "info" | "warn" | "error";
@@ -1252,6 +1259,12 @@ export declare const ConfigSchema: z.ZodObject<{
     maxAttachmentBytes: number;
     observability_trace_sample_rate: number;
     httpsPort: number;
+    queueBackend: "memory" | "redis" | "postgres";
+    queueWorkers: number;
+    queueMaxRetries: number;
+    queueWebhookTimeoutMs: number;
+    queueWebhookRetryAttempts: number;
+    queueJobTimeoutMs: number;
     operationalBearerToken?: string | undefined;
     tlsKeyPath?: string | undefined;
     tlsCertPath?: string | undefined;
@@ -1374,6 +1387,12 @@ export declare const ConfigSchema: z.ZodObject<{
     tlsCertPath?: string | undefined;
     auditLogPath?: string | undefined;
     observabilityEventSinkPath?: string | undefined;
+    queueBackend?: "memory" | "redis" | "postgres" | undefined;
+    queueWorkers?: number | undefined;
+    queueMaxRetries?: number | undefined;
+    queueWebhookTimeoutMs?: number | undefined;
+    queueWebhookRetryAttempts?: number | undefined;
+    queueJobTimeoutMs?: number | undefined;
 }>;
 export type Config = z.infer<typeof ConfigSchema>;
 export type FeatureFlags = z.infer<typeof FeatureFlagsSchema>;

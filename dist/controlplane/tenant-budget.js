@@ -7,17 +7,19 @@ import { dirname } from "node:path";
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour sliding window
 class InMemoryTenantBudgetBackend {
     usage = new Map();
-    async get(orgId) {
-        return [...(this.usage.get(orgId) ?? [])];
+    get(orgId) {
+        return Promise.resolve([...(this.usage.get(orgId) ?? [])]);
     }
-    async set(orgId, entries) {
+    set(orgId, entries) {
         if (entries.length === 0)
             this.usage.delete(orgId);
         else
             this.usage.set(orgId, entries);
+        return Promise.resolve();
     }
-    async reset() {
+    reset() {
         this.usage.clear();
+        return Promise.resolve();
     }
 }
 class FileTenantBudgetBackend {
@@ -38,19 +40,21 @@ class FileTenantBudgetBackend {
         mkdirSync(dirname(this.storePath), { recursive: true });
         writeFileSync(this.storePath, JSON.stringify(data), "utf8");
     }
-    async get(orgId) {
-        return [...(this.readAll()[orgId] ?? [])];
+    get(orgId) {
+        return Promise.resolve([...(this.readAll()[orgId] ?? [])]);
     }
-    async set(orgId, entries) {
+    set(orgId, entries) {
         const all = this.readAll();
         if (entries.length === 0)
             delete all[orgId];
         else
             all[orgId] = entries;
         this.writeAll(all);
+        return Promise.resolve();
     }
-    async reset() {
+    reset() {
         this.writeAll({});
+        return Promise.resolve();
     }
 }
 class UpstashRedisTenantBudgetBackend {

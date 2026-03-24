@@ -57,11 +57,11 @@ export class RetentionJob {
     this.options.onLog?.(`Starting retention job (interval: ${this.options.intervalMs}ms)`);
 
     // Run immediately on start
-    this.executeRetention(runFn);
+    void this.executeRetention(runFn);
 
     // Schedule periodic runs
     this.intervalId = setInterval(() => {
-      this.executeRetention(runFn);
+      void this.executeRetention(runFn);
     }, this.options.intervalMs);
   }
 
@@ -125,16 +125,16 @@ export function createInMemoryRetentionRunner(
   _store: IMemoryStore,
   _config: MemoryRetentionConfig
 ): () => Promise<RetentionResult> {
-  return async () => {
+  return () => {
     // In-memory store handles retention internally via evictByRetention()
     // Trigger a dummy retrieve to force eviction
     const start = Date.now();
-    return {
+    return Promise.resolve({
       removed: 0,
       scopesProcessed: 0,
       durationMs: Date.now() - start,
       errors: [],
-    };
+    });
   };
 }
 

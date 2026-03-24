@@ -4,7 +4,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createGunzip, createInflate } from "node:zlib";
+import { createGunzip, createInflate, deflateSync, gzipSync } from "node:zlib";
 
 // ============================================================================
 // CORS (Cross-Origin Resource Sharing)
@@ -134,7 +134,7 @@ export function compressResponse(
     return { body, encoding: "identity", compressed: false };
   }
 
-  const acceptEncoding = req.headers["accept-encoding"] as string | undefined;
+  const acceptEncoding = req.headers["accept-encoding"];
   const encoding = selectEncoding(acceptEncoding);
 
   if (encoding === "identity") {
@@ -144,11 +144,9 @@ export function compressResponse(
   // Synchronous compression for small payloads
   try {
     if (encoding === "gzip") {
-      const { gzipSync } = require("node:zlib");
       return { body: gzipSync(bodyBuffer, { level: opts.level }), encoding: "gzip", compressed: true };
     }
     if (encoding === "deflate") {
-      const { deflateSync } = require("node:zlib");
       return {
         body: deflateSync(bodyBuffer, { level: opts.level }),
         encoding: "deflate",
@@ -306,7 +304,7 @@ export function applyKeepAliveHeaders(res: ServerResponse, options: Partial<Keep
  * Read and decompress request body.
  */
 export async function readDecompressedBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
-  const contentEncoding = req.headers["content-encoding"] as string | undefined;
+  const contentEncoding = req.headers["content-encoding"];
   const decompressionStream = createDecompressionStream(contentEncoding);
 
   return new Promise((resolve, reject) => {

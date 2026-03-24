@@ -23,17 +23,19 @@ interface TenantBudgetBackend {
 class InMemoryTenantBudgetBackend implements TenantBudgetBackend {
   private readonly usage = new Map<string, UsageEntry[]>();
 
-  async get(orgId: string): Promise<UsageEntry[]> {
-    return [...(this.usage.get(orgId) ?? [])];
+  get(orgId: string): Promise<UsageEntry[]> {
+    return Promise.resolve([...(this.usage.get(orgId) ?? [])]);
   }
 
-  async set(orgId: string, entries: UsageEntry[]): Promise<void> {
+  set(orgId: string, entries: UsageEntry[]): Promise<void> {
     if (entries.length === 0) this.usage.delete(orgId);
     else this.usage.set(orgId, entries);
+    return Promise.resolve();
   }
 
-  async reset(): Promise<void> {
+  reset(): Promise<void> {
     this.usage.clear();
+    return Promise.resolve();
   }
 }
 
@@ -53,19 +55,21 @@ class FileTenantBudgetBackend implements TenantBudgetBackend {
     writeFileSync(this.storePath, JSON.stringify(data), "utf8");
   }
 
-  async get(orgId: string): Promise<UsageEntry[]> {
-    return [...(this.readAll()[orgId] ?? [])];
+  get(orgId: string): Promise<UsageEntry[]> {
+    return Promise.resolve([...(this.readAll()[orgId] ?? [])]);
   }
 
-  async set(orgId: string, entries: UsageEntry[]): Promise<void> {
+  set(orgId: string, entries: UsageEntry[]): Promise<void> {
     const all = this.readAll();
     if (entries.length === 0) delete all[orgId];
     else all[orgId] = entries;
     this.writeAll(all);
+    return Promise.resolve();
   }
 
-  async reset(): Promise<void> {
+  reset(): Promise<void> {
     this.writeAll({});
+    return Promise.resolve();
   }
 }
 

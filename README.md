@@ -6,9 +6,11 @@ Production-grade, modular, multimodal AI server with strict cognition boundary a
 
 ## Docs
 
+- [AGENTS.md](AGENTS.md) – **for AI coding agents:** pointer to deploy playbook and verification gates
 - [Overview](docs/Overview.md) – master spec and canonical types
 - [Architecture](docs/Architecture_document_Finalized.md) – components and flow (finalized)
 - [Production Readiness Gaps](docs/Production-Readiness-Gaps-Report.md) – canonical current implementation status and remaining work
+- [Production Readiness — Go/No-Go & agent playbook](docs/Production-Readiness-Go-No-Go-Summary.md) – scorecard, deploy checklist, **agent briefing** to get to green CI and deployment
 - [Production Deployment Guide](docs/Production-Deployment-Guide.md) – canonical deployment and launch runbook
 - [Scope of Work](docs/PLANS/Scope-of-Work.md) – implementation phases, segments, file paths, verification (§4.1, §9)
 - [Master Delivery Plan](docs/PLANS/00_Master-Delivery-Plan.md)

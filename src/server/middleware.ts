@@ -78,7 +78,7 @@ export function readJsonBody(
       }
     });
     req.on("aborted", () => fail(new RequestAbortedError()));
-    req.on("error", (err) => fail(err as Error));
+    req.on("error", (err) => fail(err));
   });
 }
 

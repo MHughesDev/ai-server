@@ -114,7 +114,7 @@ async function checkModelProvidersHealth(config: Config): Promise<DependencyStat
 
   const startTime = Date.now();
   const results: Array<{ provider: string; status: string; error?: string }> = [];
-  let allHealthy = true;
+  const allHealthy = true;
 
   for (const provider of config.model_gateway.providers) {
     try {
@@ -204,15 +204,15 @@ async function checkRedisHealth(): Promise<DependencyStatus | null> {
  * Check vector backend health.
  * L2-04: Vector backend dependency health check.
  */
-async function checkVectorBackendHealth(config: Config): Promise<DependencyStatus | null> {
+function checkVectorBackendHealth(config: Config): Promise<DependencyStatus | null> {
   // Only check if memory backend is configured for vector
   if (config.memory?.backend !== "vector") {
-    return null;
+    return Promise.resolve(null);
   }
 
   // Note: Actual vector backend check would depend on the specific implementation
   // (Pinecone, Weaviate, pgvector, etc.)
-  return {
+  return Promise.resolve({
     name: "vector_backend",
     healthy: true,
     ready: true,
@@ -221,7 +221,7 @@ async function checkVectorBackendHealth(config: Config): Promise<DependencyStatu
       status: "configured",
       note: "Actual connectivity check depends on specific vector store implementation",
     },
-  };
+  });
 }
 
 /**

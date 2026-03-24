@@ -69,20 +69,21 @@ describe("rate limiting", () => {
       const store = new Map<string, string>();
       return {
         store,
-        async get(key: string): Promise<string | null> {
-          return store.get(key) ?? null;
+        get(key: string): Promise<string | null> {
+          return Promise.resolve(store.get(key) ?? null);
         },
-        async set(key: string, value: string, options?: { px?: number }): Promise<void> {
+        set(key: string, value: string, options?: { px?: number }): Promise<void> {
           store.set(key, value);
           if (options?.px) {
             setTimeout(() => store.delete(key), options.px);
           }
+          return Promise.resolve();
         },
-        async incr(key: string): Promise<number> {
+        incr(key: string): Promise<number> {
           const current = parseInt(store.get(key) ?? "0", 10);
           const next = current + 1;
           store.set(key, String(next));
-          return next;
+          return Promise.resolve(next);
         },
       };
     };
@@ -103,9 +104,15 @@ describe("rate limiting", () => {
 
     it("fails open on Redis error", async () => {
       const failingRedis: RedisLikeClient = {
-        async get(): Promise<string | null> { throw new Error("Redis down"); },
-        async set(): Promise<void> { throw new Error("Redis down"); },
-        async incr(): Promise<number> { throw new Error("Redis down"); },
+        get(): Promise<string | null> {
+          return Promise.reject(new Error("Redis down"));
+        },
+        set(): Promise<void> {
+          return Promise.reject(new Error("Redis down"));
+        },
+        incr(): Promise<number> {
+          return Promise.reject(new Error("Redis down"));
+        },
       };
       setRedisClient(failingRedis);
 

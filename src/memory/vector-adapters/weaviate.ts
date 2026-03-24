@@ -203,7 +203,8 @@ export class WeaviateAdapter implements VectorStore {
     }
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.client = null;
+    return Promise.resolve();
   }
 }

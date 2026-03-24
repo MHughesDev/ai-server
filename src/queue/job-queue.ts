@@ -36,8 +36,8 @@ export class JobQueueService {
     this.backend = backend ?? new MemoryQueueBackend();
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) return;
+  start(): Promise<void> {
+    if (this.isRunning) return Promise.resolve();
     this.isRunning = true;
 
     // Start workers
@@ -51,9 +51,10 @@ export class JobQueueService {
     }, 60 * 60 * 1000); // Every hour
 
     console.log(`[job-queue] Started ${this.config.workers} workers`);
+    return Promise.resolve();
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     this.isRunning = false;
 
     // Stop all workers
@@ -67,6 +68,7 @@ export class JobQueueService {
     }
 
     console.log("[job-queue] Stopped all workers");
+    return Promise.resolve();
   }
 
   private startWorker(workerId: string): void {

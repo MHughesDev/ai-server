@@ -3,7 +3,7 @@
  * L2-06: TCP connection pooling for model providers, vector stores, etc.
  */
 
-import type { Agent } from "node:http";
+import { Agent as HttpAgent } from "node:http";
 import { Agent as HttpsAgent } from "node:https";
 
 export interface ConnectionPoolOptions {
@@ -32,7 +32,7 @@ export const DefaultConnectionPoolOptions: ConnectionPoolOptions = {
  * Creates and manages http.Agent and https.Agent instances.
  */
 export class ConnectionPoolManager {
-  private httpAgent: Agent | null = null;
+  private httpAgent: HttpAgent | null = null;
   private httpsAgent: HttpsAgent | null = null;
   private options: ConnectionPoolOptions;
 
@@ -43,10 +43,8 @@ export class ConnectionPoolManager {
   /**
    * Get or create the HTTP agent.
    */
-  getHttpAgent(): Agent {
+  getHttpAgent(): HttpAgent {
     if (!this.httpAgent) {
-      // Dynamic import to avoid issues with Node.js module system
-      const { Agent: HttpAgent } = require("node:http");
       this.httpAgent = new HttpAgent({
         keepAlive: this.options.keepAlive,
         keepAliveMsecs: this.options.keepAliveMs,
@@ -55,7 +53,7 @@ export class ConnectionPoolManager {
         timeout: this.options.timeoutMs,
       });
     }
-    return this.httpAgent as Agent;
+    return this.httpAgent;
   }
 
   /**
@@ -77,7 +75,7 @@ export class ConnectionPoolManager {
   /**
    * Get the appropriate agent for a URL.
    */
-  getAgentForUrl(url: string): Agent | HttpsAgent {
+  getAgentForUrl(url: string): HttpAgent | HttpsAgent {
     return url.startsWith("https:") ? this.getHttpsAgent() : this.getHttpAgent();
   }
 
@@ -116,7 +114,7 @@ export class ConnectionPoolManager {
   /**
    * Destroy all connections in the pool.
    */
-  async destroy(): Promise<void> {
+  destroy(): Promise<void> {
     if (this.httpAgent) {
       this.httpAgent.destroy();
       this.httpAgent = null;
@@ -125,6 +123,7 @@ export class ConnectionPoolManager {
       this.httpsAgent.destroy();
       this.httpsAgent = null;
     }
+    return Promise.resolve();
   }
 }
 

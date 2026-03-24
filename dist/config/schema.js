@@ -239,6 +239,13 @@ export const ConfigSchema = z.object({
     auditLogPath: z.string().min(1).optional(),
     /** Optional persistent observability event sink path (validated). */
     observabilityEventSinkPath: z.string().min(1).optional(),
+    /** Gap 3A: Async job queue configuration */
+    queueBackend: z.enum(["memory", "redis", "postgres"]).default("memory"),
+    queueWorkers: z.number().int().min(1).default(2),
+    queueMaxRetries: z.number().int().min(0).default(3),
+    queueWebhookTimeoutMs: z.number().int().positive().default(30000),
+    queueWebhookRetryAttempts: z.number().int().min(0).default(3),
+    queueJobTimeoutMs: z.number().int().positive().default(300000),
 });
 /** Deep merge: target is mutated, source wins on defined keys */
 function mergeConfig(target, source) {
@@ -465,6 +472,12 @@ export function loadConfigFromEnv() {
         tlsCertPath,
         auditLogPath,
         observabilityEventSinkPath,
+        queueBackend: process.env.QUEUE_BACKEND ?? "memory",
+        queueWorkers: parseInt(process.env.QUEUE_WORKERS_COUNT ?? "2", 10),
+        queueMaxRetries: parseInt(process.env.QUEUE_MAX_RETRIES ?? "3", 10),
+        queueWebhookTimeoutMs: parseInt(process.env.QUEUE_WEBHOOK_TIMEOUT_MS ?? "30000", 10),
+        queueWebhookRetryAttempts: parseInt(process.env.QUEUE_WEBHOOK_RETRY_ATTEMPTS ?? "3", 10),
+        queueJobTimeoutMs: parseInt(process.env.QUEUE_JOB_TIMEOUT_MS ?? "300000", 10),
         flags: {
             ...raw.flags,
             harness_autonomous_execution_enabled: process.env.HARNESS_AUTONOMOUS_EXECUTION_ENABLED === "true",

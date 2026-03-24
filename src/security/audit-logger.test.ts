@@ -21,6 +21,15 @@ import {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Wait until file audit sink queue is drained so temp dirs can be removed safely. */
+async function waitForAuditDrain(): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    const s = getAuditSinkStatus();
+    if (s && s.queueDepth === 0 && !s.isDraining) return;
+    await sleep(10);
+  }
+}
+
 describe("audit-logger", () => {
   beforeEach(() => {
     resetAuditLog();
@@ -259,6 +268,9 @@ describe("audit-logger", () => {
         const status = getAuditSinkStatus();
         expect(status?.backpressureActive).toBe(true);
       } finally {
+        await waitForAuditDrain();
+        setAuditSink(null);
+        setBackpressureCallback(null);
         rmSync(dir, { recursive: true });
       }
     });
@@ -288,6 +300,8 @@ describe("audit-logger", () => {
         status = getAuditSinkStatus();
         expect(status?.backpressureActive).toBe(true);
       } finally {
+        await waitForAuditDrain();
+        setAuditSink(null);
         rmSync(dir, { recursive: true });
       }
     });

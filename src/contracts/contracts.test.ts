@@ -385,13 +385,42 @@ describe("WorkflowDefinition", () => {
     ).toThrow(/cycle/i);
   });
 
-  it("rejects decision step definitions until decision semantics are implemented", () => {
+  it("accepts decision steps when branch targets exist", () => {
+    const withDecision = validateWorkflowDefinition({
+      ...valid,
+      steps: [
+        { step_id: "s1", kind: "engine_call" as const, ref: "execution", input_mapping: {}, depends_on: [] },
+        { step_id: "s2", kind: "engine_call" as const, ref: "synthesis", input_mapping: {}, depends_on: ["s1"] },
+        {
+          step_id: "d1",
+          kind: "decision" as const,
+          ref: "route",
+          depends_on: ["s2"],
+          branches: [{ condition: "score > 0.5", target_step: "s2" }],
+          default_target: "s2",
+        },
+      ],
+    });
+    expect(withDecision.steps).toHaveLength(3);
+    expect(withDecision.steps[2].kind).toBe("decision");
+  });
+
+  it("rejects decision steps with unknown branch targets", () => {
     expect(() =>
       validateWorkflowDefinition({
         ...valid,
-        steps: [{ step_id: "d1", kind: "decision" as const, ref: "route" }],
+        steps: [
+          { step_id: "s1", kind: "engine_call" as const, ref: "execution" },
+          {
+            step_id: "d1",
+            kind: "decision" as const,
+            ref: "route",
+            depends_on: ["s1"],
+            branches: [{ condition: "true", target_step: "missing" }],
+          },
+        ],
       })
-    ).toThrow(/not supported/i);
+    ).toThrow(/unknown branch target/i);
   });
 });
 

@@ -17,7 +17,7 @@ interface MongoClient {
     collection(name: string): {
       insertOne(doc: unknown): Promise<void>;
       insertMany(docs: unknown[]): Promise<void>;
-      findOne(query: unknown): Promise<unknown | null>;
+      findOne(query: unknown): Promise<unknown>;
       find(query: unknown): { toArray(): Promise<unknown[]> };
       updateOne(query: unknown, update: unknown, options?: unknown): Promise<void>;
       deleteOne(query: unknown): Promise<void>;
@@ -342,9 +342,9 @@ export class MongoPersistentStore implements PersistentMemoryStore {
     );
   }
 
-  async cleanupExpired(): Promise<number> {
+  cleanupExpired(): Promise<number> {
     // MongoDB TTL indexes handle this automatically
-    return 0;
+    return Promise.resolve(0);
   }
 
   async close(): Promise<void> {

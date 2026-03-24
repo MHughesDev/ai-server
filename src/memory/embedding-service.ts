@@ -26,15 +26,15 @@ class HashEmbeddingProvider implements EmbeddingProvider {
     this.dimensions = dimensions;
   }
 
-  async generate(texts: string[]): Promise<EmbeddingResult[]> {
-    return texts.map(text => {
+  generate(texts: string[]): Promise<EmbeddingResult[]> {
+    const results = texts.map(text => {
       // Create a deterministic vector based on text hash
       const hash = createHash("sha256").update(text).digest();
       const vector: number[] = [];
       for (let i = 0; i < this.dimensions; i++) {
         // Use hash bytes to generate vector values between -1 and 1
         const byteIndex = i % hash.length;
-        vector.push((hash[byteIndex]! / 128) - 1);
+        vector.push((hash[byteIndex] / 128) - 1);
       }
       return {
         vector,
@@ -42,10 +42,11 @@ class HashEmbeddingProvider implements EmbeddingProvider {
         dimensions: this.dimensions,
       };
     });
+    return Promise.resolve(results);
   }
 
-  async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
-    return { healthy: true };
+  healthCheck(): Promise<{ healthy: boolean; error?: string }> {
+    return Promise.resolve({ healthy: true });
   }
 }
 

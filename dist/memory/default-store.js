@@ -51,9 +51,9 @@ function createEmbeddingProvider(config) {
             return new OpenAiEmbeddingProvider(apiKey, config.model, config.base_url || "https://api.openai.com");
         }
         case "gateway": {
-            // TODO: Implement gateway provider that uses IModelGateway for embeddings
-            // For now, fall back to hash provider with a warning
-            console.warn(`[memory] Embedding provider 'gateway' is not yet implemented. Falling back to hash provider.`);
+            // FUTURE: Gateway embedding provider using IModelGateway for embeddings via model providers
+            // Current: Falls back to hash provider with a warning (hash is deterministic local embeddings)
+            console.warn(`[memory] Embedding provider 'gateway' uses hash fallback until full gateway embeddings are available.`);
             return new HashEmbeddingProvider(config.dimensions);
         }
         case "hash":

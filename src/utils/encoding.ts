@@ -34,7 +34,7 @@ export function parseContentType(contentType: string | undefined): {
     if (key.toLowerCase() === "charset" && value) {
       const normalized = value.toLowerCase().replace(/["']/g, "");
       if (isValidCharset(normalized)) {
-        charset = normalized as Charset;
+        charset = normalized;
       }
     }
   }
@@ -66,11 +66,17 @@ export function validateCharset(text: string, charset: Charset): boolean {
   }
 
   if (charset === "ascii") {
-    return /^[\x00-\x7F]*$/.test(text);
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) > 0x7f) return false;
+    }
+    return true;
   }
 
   if (charset === "iso-8859-1") {
-    return /^[\x00-\xFF]*$/.test(text);
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) > 0xff) return false;
+    }
+    return true;
   }
 
   // For other charsets, assume valid

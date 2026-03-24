@@ -146,7 +146,7 @@ describe("Load and Chaos Tests", () => {
 
       // Ingest all documents
       const ingestResults = await Promise.all(
-        documents.map(doc => store.ingest!(doc))
+        documents.map(doc => store.ingest(doc))
       );
 
       expect(ingestResults).toHaveLength(50);
@@ -262,7 +262,7 @@ describe("Load and Chaos Tests", () => {
       const store = new InMemoryStore();
       
       // First ingest some data
-      await store.ingest!({
+      await store.ingest({
         document_id: "test-doc",
         text: "Test content for availability test",
         scope: "org",
@@ -353,19 +353,24 @@ describe("Load and Chaos Tests", () => {
     it("tracks consecutive failures", async () => {
       let failureCount = 0;
       const mockGateway = {
-        complete: jest.fn().mockImplementation(async () => {
+        complete: jest.fn().mockImplementation((): Promise<{
+          text: string;
+          tokens_in: number;
+          tokens_out: number;
+          model: string;
+        }> => {
           failureCount++;
           if (failureCount <= 5) {
             const error = new Error("Service unavailable") as Error & { code: string };
             error.code = "SERVICE_UNAVAILABLE";
-            throw error;
+            return Promise.reject(error);
           }
-          return {
+          return Promise.resolve({
             text: "Success after failures",
             tokens_in: 10,
             tokens_out: 20,
             model: "mock-model",
-          };
+          });
         }),
       } as unknown as jest.Mocked<IModelGateway>;
 

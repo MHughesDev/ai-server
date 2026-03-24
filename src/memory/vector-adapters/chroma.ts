@@ -128,16 +128,16 @@ export class ChromaAdapter implements VectorStore {
     });
 
     const items: VectorSearchResult[] = [];
-    for (let i = 0; i < results.ids[0]!.length; i++) {
+    for (let i = 0; i < results.ids[0].length; i++) {
       items.push({
         document: {
-          id: results.ids[0]![i]!,
+          id: results.ids[0][i],
           vector: [],
-          content: results.documents[0]![i] ?? "",
-          metadata: results.metadatas[0]![i] ?? {},
+          content: results.documents[0][i] ?? "",
+          metadata: results.metadatas[0][i] ?? {},
         },
-        score: 1 - (results.distances[0]![i] ?? 0),
-        distance: results.distances[0]![i] ?? 0,
+        score: 1 - (results.distances[0][i] ?? 0),
+        distance: results.distances[0][i] ?? 0,
       });
     }
 
@@ -171,8 +171,9 @@ export class ChromaAdapter implements VectorStore {
     }
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.client = null;
     this.collection = null;
+    return Promise.resolve();
   }
 }

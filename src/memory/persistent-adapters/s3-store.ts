@@ -364,18 +364,20 @@ export class S3PersistentStore implements PersistentMemoryStore {
     }
   }
 
-  async setTTL(_key: string, _ttlSeconds: number): Promise<void> {
+  setTTL(_key: string, _ttlSeconds: number): Promise<void> {
     // S3 doesn't natively support TTL; would need lifecycle policies or external cleanup
     console.warn("[s3-store] TTL not directly supported; configure S3 lifecycle policies");
+    return Promise.resolve();
   }
 
-  async cleanupExpired(): Promise<number> {
+  cleanupExpired(): Promise<number> {
     // S3 lifecycle policies handle this automatically
-    return 0;
+    return Promise.resolve(0);
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.client = null;
+    return Promise.resolve();
   }
 
   private scopeToPath(scope_keys: Record<string, string>): string {

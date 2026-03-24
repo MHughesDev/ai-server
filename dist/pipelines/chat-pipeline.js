@@ -55,11 +55,20 @@ class DeadlineExceededError extends Error {
         this.name = "DeadlineExceededError";
     }
 }
-/** Create a deadline promise that rejects after the specified milliseconds */
-function createDeadlinePromise(deadlineMs) {
-    return new Promise((_, reject) => {
-        setTimeout(() => reject(new DeadlineExceededError(deadlineMs)), deadlineMs);
-    });
+async function runWithDeadline(promise, deadlineMs) {
+    let timer;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new DeadlineExceededError(deadlineMs)), deadlineMs);
+            }),
+        ]);
+    }
+    finally {
+        if (timer)
+            clearTimeout(timer);
+    }
 }
 export function createChatPipeline(gateway, options) {
     const executionEngine = createExecutionEngine(gateway);
@@ -167,10 +176,7 @@ export function createChatPipeline(gateway, options) {
                     if (remainingMs <= 0) {
                         throw new DeadlineExceededError(deadlineMs);
                     }
-                    executionResult = await Promise.race([
-                        executionEngine.invoke(executionInv),
-                        createDeadlinePromise(remainingMs),
-                    ]);
+                    executionResult = await runWithDeadline(executionEngine.invoke(executionInv), remainingMs);
                 }
                 else {
                     executionResult = await executionEngine.invoke(executionInv);
@@ -275,10 +281,7 @@ export function createChatPipeline(gateway, options) {
                     if (remainingMs <= 0) {
                         throw new DeadlineExceededError(deadlineMs);
                     }
-                    synthesisResult = await Promise.race([
-                        synthesisEngine.invoke(synthesisInv),
-                        createDeadlinePromise(remainingMs),
-                    ]);
+                    synthesisResult = await runWithDeadline(synthesisEngine.invoke(synthesisInv), remainingMs);
                 }
                 else {
                     synthesisResult = await synthesisEngine.invoke(synthesisInv);

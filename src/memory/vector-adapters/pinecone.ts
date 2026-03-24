@@ -117,7 +117,7 @@ export class PineconeAdapter implements VectorStore {
     const ns = (index as { namespace(name: string): { deleteOne(id: string): Promise<void>; deleteMany(ids: string[]): Promise<void> } }).namespace(namespace);
 
     if (ids.length === 1) {
-      await ns.deleteOne(ids[0]!);
+      await ns.deleteOne(ids[0]);
     } else {
       await ns.deleteMany(ids);
     }
@@ -141,8 +141,9 @@ export class PineconeAdapter implements VectorStore {
     }
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     // Pinecone client doesn't require explicit cleanup
     this.client = null;
+    return Promise.resolve();
   }
 }

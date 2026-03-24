@@ -11,9 +11,9 @@ function cosineSimilarity(a: number[], b: number[]): number {
   let normA = 0;
   let normB = 0;
   for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i]! * b[i]!;
-    normA += a[i]! * a[i]!;
-    normB += b[i]! * b[i]!;
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
   }
   if (normA === 0 || normB === 0) return 0;
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
@@ -24,17 +24,19 @@ export class InMemoryVectorStore implements VectorStore {
 
   constructor(_config: VectorStoreConfig) {}
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     console.log("[vector-store] In-memory vector store initialized");
+    return Promise.resolve();
   }
 
-  async upsert(documents: VectorDocument[]): Promise<void> {
+  upsert(documents: VectorDocument[]): Promise<void> {
     for (const doc of documents) {
       this.documents.set(doc.id, doc);
     }
+    return Promise.resolve();
   }
 
-  async search(
+  search(
     queryVector: number[],
     options: {
       topK: number;
@@ -76,25 +78,27 @@ export class InMemoryVectorStore implements VectorStore {
 
     results.sort((a, b) => b.score - a.score);
 
-    return results.slice(0, options.topK);
+    return Promise.resolve(results.slice(0, options.topK));
   }
 
-  async delete(ids: string[]): Promise<void> {
+  delete(ids: string[]): Promise<void> {
     for (const id of ids) {
       this.documents.delete(id);
     }
+    return Promise.resolve();
   }
 
-  async healthCheck(): Promise<{ healthy: boolean; latencyMs: number; error?: string }> {
+  healthCheck(): Promise<{ healthy: boolean; latencyMs: number; error?: string }> {
     const start = Date.now();
-    return {
+    return Promise.resolve({
       healthy: true,
       latencyMs: Date.now() - start,
-    };
+    });
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.documents.clear();
+    return Promise.resolve();
   }
 
   // For testing
