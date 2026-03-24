@@ -1,8 +1,8 @@
 # 04 Ingress Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 2, 9.1, 18.1, 18.2, 18.9).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (identity binding, endpoint protection, rate limiting, lifecycle hardening).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 2, 9.1, 18.1, 18.2, 18.9).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (identity binding, endpoint protection, rate limiting, lifecycle hardening).
 
 ## Purpose
 Deterministic trust boundary that validates and normalizes requests before cognition begins.

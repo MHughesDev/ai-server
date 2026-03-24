@@ -17,6 +17,15 @@ import type {
   WebhookPayload,
 } from "./types.js";
 import { MemoryQueueBackend } from "./memory-backend.js";
+import { idempotencyCompositeKey } from "./async-idempotency.js";
+
+/** Same key + tenant scope but different request fingerprint (async path only). */
+export class IdempotencyKeyConflictError extends Error {
+  constructor() {
+    super("Idempotency-Key reused with different request body for this tenant scope");
+    this.name = "IdempotencyKeyConflictError";
+  }
+}
 
 export class JobQueueService {
   private backend: QueueBackend;
@@ -25,6 +34,14 @@ export class JobQueueService {
   private isRunning = false;
   private queryHandler: (request: IngressResult) => Promise<ResponseEnvelope>;
   private cleanupInterval?: NodeJS.Timeout;
+  /** In-flight async submits keyed by tenant + Idempotency-Key */
+  private idempotencyInflight = new Map<string, { fingerprint: string; promise: Promise<Job> }>();
+  /** Completed idempotency slots for replay (TTL-pruned) */
+  private idempotencyDone = new Map<
+    string,
+    { jobId: string; fingerprint: string; createdAtMs: number }
+  >();
+  private static readonly IDEMPOTENCY_DONE_TTL_MS = 24 * 60 * 60 * 1000;
 
   constructor(
     config: JobQueueConfig,
@@ -182,16 +199,71 @@ export class JobQueueService {
 
   // Public API methods
 
-  async submitJob(submission: JobSubmission): Promise<Job> {
-    const job = await this.backend.submit({
-      request: submission.request,
-      webhook_url: submission.webhook_url,
-      max_attempts: submission.max_attempts ?? this.config.max_retries,
-      metadata: submission.metadata ?? {},
-    });
+  private pruneIdempotencyDone(): void {
+    const cutoff = Date.now() - JobQueueService.IDEMPOTENCY_DONE_TTL_MS;
+    for (const [k, v] of this.idempotencyDone) {
+      if (v.createdAtMs < cutoff) this.idempotencyDone.delete(k);
+    }
+  }
 
-    console.log(`[job-queue] Submitted job ${job.id}`);
-    return job;
+  async submitJob(submission: JobSubmission): Promise<Job> {
+    const idem = submission.idempotency;
+    if (!idem) {
+      const job = await this.backend.submit({
+        request: submission.request,
+        webhook_url: submission.webhook_url,
+        max_attempts: submission.max_attempts ?? this.config.max_retries,
+        metadata: submission.metadata ?? {},
+      });
+      console.log(`[job-queue] Submitted job ${job.id}`);
+      return job;
+    }
+
+    this.pruneIdempotencyDone();
+    const composite = idempotencyCompositeKey(submission.metadata, idem.key);
+
+    const inflight = this.idempotencyInflight.get(composite);
+    if (inflight) {
+      if (inflight.fingerprint !== idem.fingerprint) {
+        throw new IdempotencyKeyConflictError();
+      }
+      return inflight.promise;
+    }
+
+    const done = this.idempotencyDone.get(composite);
+    if (done) {
+      if (done.fingerprint !== idem.fingerprint) {
+        throw new IdempotencyKeyConflictError();
+      }
+      const existing = await this.backend.get(done.jobId);
+      if (existing) {
+        return { ...existing };
+      }
+      this.idempotencyDone.delete(composite);
+    }
+
+    const promise = this.backend
+      .submit({
+        request: submission.request,
+        webhook_url: submission.webhook_url,
+        max_attempts: submission.max_attempts ?? this.config.max_retries,
+        metadata: submission.metadata ?? {},
+      })
+      .then(job => {
+        this.idempotencyDone.set(composite, {
+          jobId: job.id,
+          fingerprint: idem.fingerprint,
+          createdAtMs: Date.now(),
+        });
+        console.log(`[job-queue] Submitted job ${job.id}`);
+        return job;
+      })
+      .finally(() => {
+        this.idempotencyInflight.delete(composite);
+      });
+
+    this.idempotencyInflight.set(composite, { fingerprint: idem.fingerprint, promise });
+    return promise;
   }
 
   async getJob(jobId: string): Promise<JobResult | null> {

@@ -3,8 +3,8 @@
 ## v1 (2026-02-18)
 
 - Initial versioned schema package (L2-01).
-- **RequestEnvelope**: request_id, caller, input, preferences, optional mode/deadline_ms/idempotency_key, contract_version.
-- **ResponseEnvelope**: request_id, status, output, telemetry, error, optional job_id, mode.
+- **RequestEnvelope**: request_id, caller, input, preferences, optional `mode` (**`sync` only**), optional deadline_ms, contract_version. **Strict** (unknown keys rejected); **`idempotency_key` not supported** in v1 runtime.
+- **ResponseEnvelope**: request_id, status, output, telemetry, error, optional `mode` (**`sync` only**). **`job_id` / async acceptance** are not on this object — use HTTP **202** body from `POST /v1/query/async`.
 - **CanonicalRequest**: internal unified representation (modalities, text, attachments, token_estimate, caller ids).
 - **IntentBundle**: intents, confidence, modalities_detected, complexity, constraints_hints, primary_intent, risk_flags, routing_hints.
 - **PolicyDecision**: allowed (boolean), deny_reason (optional; POLICY_BLOCKED, BUDGET_EXCEEDED, AUTH_INVALID, RATE_LIMITED), allow_tools, deny_tools, memory_scope, max_budgets, safety_profile, redaction_level, audit_level, allowed_pipelines, strategy (L2-03).
@@ -39,6 +39,11 @@
 
 - **Error code taxonomy (client doc):** `src/contracts/ERROR_CODES.md` documents all `ResponseEnvelope.error.code` values with HTTP suggestion, retryable flag, and when each is used. Codes and metadata remain in `errors.ts` (ERROR_CODES, ERROR_TAXONOMY, getErrorMeta). No contract schema change.
 - **SOW verification:** `npm run verify:sow` (lint → typecheck → build → test) is the machine-checkable SOW gate; see `docs/PLANS/Scope-of-Work.md` §4.1 Segment N.
+
+### Additive (2026-03-24) — Async idempotency
+
+- **Error taxonomy:** **`IDEMPOTENCY_KEY_CONFLICT`** (**409**) when **`POST /v1/query/async`** reuses **`Idempotency-Key`** with a different body fingerprint (same tenant scope). Documented in `ERROR_CODES.md`; not a `ResponseEnvelope.error` path.
+- **RequestEnvelope:** still **strict**; body **`idempotency_key`** remains unsupported — use HTTP **`Idempotency-Key`** on the async route only.
 
 ## Version policy
 

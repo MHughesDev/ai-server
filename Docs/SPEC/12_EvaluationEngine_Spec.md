@@ -1,7 +1,7 @@
 # 12 Evaluation Engine Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 10.3, 11.7, 13, 18.12).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 10.3, 11.7, 13, 18.12).
 - Implementation status: `docs/CODEBASE-DOCS-VERIFICATION-REPORT.md` (verified features vs documentation).
 
 ## Purpose

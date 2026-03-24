@@ -64,6 +64,8 @@ describe("observability metrics", () => {
     expect(text).toContain("reactive_chat");
     expect(text).toContain(" 1\n");
     expect(text).toContain(" 42\n");
+    expect(text).toContain("ai_server_metrics_dropped_total");
+    expect(text).toContain('dimension="counter_series"');
   });
 
   it("bounds histogram samples and tracks dropped counts", () => {

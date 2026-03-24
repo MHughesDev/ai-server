@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-07
 - Plan Name: Multimodal Input Path
-- Linked SPEC: `docs/Overview.md` sections `05`, `13`, `14`, `16`; `docs/Architecture_document_Finalized.md` sections `8.5`, milestone 4 subset
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `05`, `13`, `14`, `16`; `docs/ARCHITECTURE/Architecture_document_Finalized.md` sections `8.5`, milestone 4 subset
 - Owner(s): Multimodal Lead
 - Contributors: Runtime, Retrieval, Model Gateway, QA, Security
 - Status: `draft`

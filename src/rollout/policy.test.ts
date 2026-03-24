@@ -6,6 +6,7 @@ import {
   parseRolloutPolicy,
   parseCanaryThresholds,
   validateReleaseConfig,
+  assertProductionReleaseMetadataWhenRollout,
   CanaryThresholdsSchema,
   RolloutPolicySchema,
 } from "./policy.js";
@@ -134,5 +135,47 @@ describe("validateReleaseConfig", () => {
     const r = validateReleaseConfig({ env: "prod" });
     expect(r.valid).toBe(false);
     expect(r.errors[0]).toContain("Invalid env");
+  });
+});
+
+describe("assertProductionReleaseMetadataWhenRollout", () => {
+  it("no-ops when not production", () => {
+    expect(() =>
+      assertProductionReleaseMetadataWhenRollout({
+        env: "dev",
+        flags: { platform_production_rollout_enabled: true },
+        release: {},
+      })
+    ).not.toThrow();
+  });
+
+  it("no-ops when production but rollout disabled", () => {
+    expect(() =>
+      assertProductionReleaseMetadataWhenRollout({
+        env: "production",
+        flags: { platform_production_rollout_enabled: false },
+        release: {},
+      })
+    ).not.toThrow();
+  });
+
+  it("throws when production rollout enabled and no release metadata", () => {
+    expect(() =>
+      assertProductionReleaseMetadataWhenRollout({
+        env: "production",
+        flags: { platform_production_rollout_enabled: true },
+        release: {},
+      })
+    ).toThrow("RELEASE_ID or BUILD_ID");
+  });
+
+  it("allows release_id only", () => {
+    expect(() =>
+      assertProductionReleaseMetadataWhenRollout({
+        env: "production",
+        flags: { platform_production_rollout_enabled: true },
+        release: { release_id: "rel-1" },
+      })
+    ).not.toThrow();
   });
 });

@@ -1,6 +1,6 @@
 # Scope of Work — Centralized Multimodal AI Server
 
-**Source:** `docs/Architecture_document_Finalized.md`  
+**Source:** `docs/ARCHITECTURE/Architecture_document_Finalized.md`  
 **Purpose:** Map the architecture to implementation approach for each part, and define a full Scope of Work so a **coding agent** can execute it (across one or many conversations). The architecture holds full contract shapes and rules; this SOW holds **execution order**, **file paths**, **conventions**, and **verification steps**.  
 **Status:** Finalized for coding agents as an implementation baseline; production-hardening readiness is tracked in `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`.
 
@@ -20,7 +20,7 @@
 
 ## 0.1) How to Use This SOW (Coding Agent Instructions)
 
-- **Authority:** For full contract JSON shapes, engine I/O contracts, workflow catalog, and guardrails, **read the Architecture document** (`docs/Architecture_document_Finalized.md`). This SOW does not repeat those; it references them (e.g. “Architecture §8.6”, “§10.1 Planning Engine”).
+- **Authority:** For full contract JSON shapes, engine I/O contracts, workflow catalog, and guardrails, **read the Architecture document** (`docs/ARCHITECTURE/Architecture_document_Finalized.md`). This SOW does not repeat those; it references them (e.g. “Architecture §8.6”, “§10.1 Planning Engine”).
 - **Entrypoints:** The primary query path is `src/server/routes.ts` (POST /v1/query) → `src/server/query-handler.ts` → validateIngress → canonicalize → extractIntent → control plane → dispatch gate → pipeline/harness. The control plane produces a PipelinePlan; only the workflow runtime (pipelines/ or workflows/) executes workflows and calls engines.
 - **Execution:** Work **phase-by-phase** (M1 → M2 → … → M6). Within a phase, complete tasks in the order given. A phase may span multiple conversations; resume by re-reading the SOW and the current phase’s **Entry criteria** and **Task list**.
 - **Resume:** When resuming, (1) open this SOW and find the current phase (§4.1); (2) check **Entry criteria** are met; (3) continue from the next incomplete **Task**; (4) run **Verification** and satisfy **Exit criteria** before starting the next phase.
@@ -60,7 +60,7 @@ For each major part of the architecture document, the following table states **w
 | **North Star (§1)** | Single `POST /v1/query` API; canonicalize → intent → policy → workflows → gateways; coherent response + telemetry | Single entrypoint in `server/routes.ts` → `query-handler.ts`; flow: ingress → brainstem → control plane → router → pipeline → gateways; response assembly with telemetry | Ingress + Brain Stem done; Orchestrator + workflow runtime partial (L2-02 MVP) |
 | **Core Principles (§2)** | Cognitive boundary, industry-agnostic core, multi-datatype, policy-gated, composability, observability, modality as input property | Enforced by: (1) no AI in ingress/validation, (2) engines only via gateways, (3) workflows as graphs not modality names, (4) contracts + observability events | Design rules; verified via code review + guardrails (§16) |
 | **Layer 1 — Model Primitives (§3)** | Stateless inference: LLMs, classifiers, embeddings, vision/OCR | **Model Gateway** in `src/gateways/model-gateway.ts`; provider abstraction, retries, token/cost accounting; no planning/looping/tools in gateway | Exists; extended per provider and model type |
-| **Layer 2 — Engines (§3, §10)** | 8 engines: Planning, Execution, Evaluation, Tool, Memory, Classification, Synthesis, Condensing; one gateway each; no orchestration | New `src/engines/` with one module per engine; each accepts EngineInvocation, returns EngineResult; gateways called only from engines | **All eight engines done (Segment M):** Execution, Synthesis, Classification, Tool, Evaluation, Memory, Planning, Condensing. See `docs/Engines-and-Contracts.md`. |
+| **Layer 2 — Engines (§3, §10)** | 8 engines: Planning, Execution, Evaluation, Tool, Memory, Classification, Synthesis, Condensing; one gateway each; no orchestration | New `src/engines/` with one module per engine; each accepts EngineInvocation, returns EngineResult; gateways called only from engines | **All eight engines done (Segment M):** Execution, Synthesis, Classification, Tool, Evaluation, Memory, Planning, Condensing. See `docs/REFERENCE/Engines-and-Contracts.md`. |
 | **Layer 3 — Workflows (§3, §11)** | Versioned graphs of engine calls; reactive chat, coding agent, deep research, tool automation, decision, extraction, verification, planning-only, batch | **Workflow registry** + definitions in `src/workflows/registry.ts`; runtime executes WorkflowDefinition via per-pipeline harnesses or workflow runner | All catalog workflows done (Segment M): reactive_chat, coding_agent, deep_research, decision, tool_automation, extraction, verification, planning_only, batch_analysis; nesting via runner |
 | **Layer 4 — Orchestration (§3, §9)** | Ingress (mindless) + Brain Stem (canonicalize + intent) + Policy + Budgets + Workflow selection + Execution supervisor | `ingress/`, `brainstem/`, `controlplane/` (policy, budgets, dispatch), `router/`; orchestrator produces workflow execution spec (PipelinePlan); only orchestrator starts/stops loops, sub-workflows, budgets | Ingress + Brain Stem ✅; control plane + router ✅; workflow nesting later |
 | **External API (§5)** | `POST /v1/query`; `GET /healthz`, `readyz`, `metrics`, `v1/version` | `server/routes.ts` + `query-handler.ts`; health/ready/metrics/version in server | Implemented; version endpoint as needed |
@@ -72,7 +72,7 @@ For each major part of the architecture document, the following table states **w
 | **PolicyDecision (§8.3)** | allowed_workflows, budgets, memory_rules, safety_profile, audit_level | Produced in `controlplane/policy-evaluator.ts`; code-only from caller + rules | L2-01 contracts; L2-03 policy implementation |
 | **Typed Artifact (§8.4)** | Universal envelope: artifact_id, artifact_kind, schema_ref, encoding, content, metadata | Used by all engines; created by code; content from code or model; validation by schema_ref | Contracts; full adoption in engines (Milestone 2) |
 | **Task (§8.5)** | Unit of work: task_id, category, objective, input_artifacts, constraints | From WorkflowDefinition or Planning Engine; consumed by Execution/other engines | With workflow/planning implementation |
-| **EngineInvocation / EngineResult (§8.6)** | Standard input/output for every engine | `engines/base.ts` or shared types; every engine implements same contract | **Implemented:** contracts + engine stubs; see `docs/Engines-and-Contracts.md`. |
+| **EngineInvocation / EngineResult (§8.6)** | Standard input/output for every engine | `engines/base.ts` or shared types; every engine implements same contract | **Implemented:** contracts + engine stubs; see `docs/REFERENCE/Engines-and-Contracts.md`. |
 | **WorkflowDefinition (§8.7)** | workflow_id, version, entry_conditions, steps (engine_call | workflow_call | decision), stop_conditions | JSON definitions in `workflows/definitions/`; registry in `workflows/registry.ts`; runtime resolves steps and dispatches | Milestone 1–2; nesting in Milestone 6 |
 | **Ingress (§9.1)** | TLS, auth, rate limit, payload limits, request ID, no AI | `ingress/validate.ts`, attachments, errors | ✅ Implemented |
 | **Brain Stem (§9.2)** | Canonicalize → CanonicalRequest; intent → IntentBundle; no long loops | `brainstem/canonicalize.ts`, `intent.ts`, `preprocess.ts` | ✅ Implemented |
@@ -263,7 +263,7 @@ Each phase has **entry criteria**, **ordered tasks** with file paths and “done
 
 **Quick verification (before marking L.5 done):** `npm run build` && `npm test`; grep for `ATTACHMENT_REJECTED`, `MULTIMODAL_UNSUPPORTED`, `attachment_reject_total` in `src/` (L.1a); confirm runbook links in `docs/SPEC/22_Runbooks_and_Operations.md`.
 
-**References:** §9 Segment I (Memory), Segment O (Hardening); L2-06 Memory plan; L2-07 Multimodal, L2-08 Rollout; `docs/Runbooks/`, `docs/Runbooks/` (both path forms); `src/server/routes.ts`, `src/rollout/policy.ts`.
+**References:** §9 Segment I (Memory), Segment O (Hardening); L2-06 Memory plan; L2-07 Multimodal, L2-08 Rollout; `docs/OPERATIONS/RUNBOOKS/`, `docs/OPERATIONS/RUNBOOKS/` (both path forms); `src/server/routes.ts`, `src/rollout/policy.ts`.
 
 ---
 
@@ -429,7 +429,7 @@ Each phase has **entry criteria**, **ordered tasks** with file paths and “done
 - [x] **Security:** Policy enforcement, redaction, audit, sandbox, compliance. (L2-05) — *Segment G complete; Segment O.1: L2-05 Phases 0–4 implemented (audit, secret scope, tool deny, abuse tests, security gate); no residual controls.*
 - [x] **Multimodal:** Canonicalization of attachments and structured input. (L2-07) — *Segment L.1 complete: attachment validation, Brain Stem multimodal, router capability checks, runbook linked in SPEC 22.*
 - [x] **Rollout:** Runbooks, health/ready/metrics/version, rollout and rollback. (L2-08) — *Segment L.2–L.5 complete: endpoints confirmed, Query-and-Policy-Failures runbook, on-call/escalation in SPEC 22, rollout policy reference, L2-99 gate documented.*
-- [x] **L2-99 Autonomous harness:** Coding-agent autonomous loop (execution ↔ tool)* → evaluation → synthesis implemented; gated by `harness_autonomous_execution_enabled` (default false). Enable after readiness gate and sign-off. See `docs/Runbooks/Harness-Readiness-Gate.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`.
+- [x] **L2-99 Autonomous harness:** Coding-agent autonomous loop (execution ↔ tool)* → evaluation → synthesis implemented; gated by `harness_autonomous_execution_enabled` (default false). Enable after readiness gate and sign-off. See `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md`, `docs/SPEC/20_Config_and_FeatureFlags.md`.
 - [x] **Closure (Segment N):** Error code taxonomy documented (`src/contracts/errors.ts`, `src/contracts/ERROR_CODES.md`); `npm run verify:sow` (lint → typecheck → build → test) passes; §6 Acceptance Criteria confirmed; lint clean.
 
 ---
@@ -456,16 +456,16 @@ Use this section when implementing or extending the system. Add only what the cu
 | **Feature flags** | Flags for new workflows or engines (e.g. `coding_agent_workflow_enabled`, `memory_engine_enabled`, `harness_autonomous_execution_enabled`) | When adding a new workflow or engine | `src/config/schema.ts` FeatureFlagsSchema; default `false` in production until gated. Document in config/SPEC. L2-99: `harness_autonomous_execution_enabled` enables autonomous (execution ↔ tool)* loop in coding-agent pipeline; env `HARNESS_AUTONOMOUS_EXECUTION_ENABLED`. |
 | **Event types** | New event names if not in Architecture §13 | When adding a new step type or gateway | `observability/events.ts` or equivalent; include in required-events list if observability plan requires it. |
 | **Workflow definitions** | JSON files per workflow | M1 (reactive_chat), M3 (coding_agent), M4 (if needed), M5 (deep_research, decision), etc. | `src/workflows/definitions/<workflow_id>.json`. Conform to WorkflowDefinition schema (§8.7); steps reference engine_type or sub_workflow_id. |
-| **Schema refs** | Central registry or enum for schema_ref URIs (e.g. `schema://workflow_plan@v1`) | When engines produce artifacts with schema_ref | **Done:** `docs/schemas/schema-ref-catalog.md` (Segment O.2). Optional code enum in `contracts/schema-refs.ts` if desired. |
+| **Schema refs** | Central registry or enum for schema_ref URIs (e.g. `schema://workflow_plan@v1`) | When engines produce artifacts with schema_ref | **Done:** `docs/REFERENCE/schemas/schema-ref-catalog.md` (Segment O.2). Optional code enum in `contracts/schema-refs.ts` if desired. |
 | **Engine registry** | Map engine_type string → IEngine implementation | When multiple engines are used by workflow runtime | e.g. `src/engines/registry.ts` or passed into workflow runner; orchestrator or runtime resolves and invokes. |
 | **Lint / guardrails** | Rule or test that engines do not import other engines | M1 or when engines folder exists | ESLint no-restricted-imports for `src/engines/*` importing from `src/engines/*`, or unit test that greps engine files for imports from engines. |
 | **Integration test helpers** | Minimal RequestEnvelope / CanonicalRequest builders for tests | When writing integration tests | e.g. `tests/fixtures/request-builder.ts` or in existing test utils; avoid duplicating full schema in every test. |
-| **Runbooks** | Steps for “query fails”, “tool denied”, “budget exceeded”, “rollback” | L2-08 / rollout | **Done:** `docs/Runbooks/Query-and-Policy-Failures.md` (triage for query failure, tool denied, budget exceeded); rollback in `Release-and-Rollback.md`. Runbook index and on-call/escalation in `docs/SPEC/22_Runbooks_and_Operations.md`. Linked from SOW and Master plan (Segment L.2b complete). |
+| **Runbooks** | Steps for “query fails”, “tool denied”, “budget exceeded”, “rollback” | L2-08 / rollout | **Done:** `docs/OPERATIONS/RUNBOOKS/Query-and-Policy-Failures.md` (triage for query failure, tool denied, budget exceeded); rollback in `Release-and-Rollback.md`. Runbook index and on-call/escalation in `docs/SPEC/22_Runbooks_and_Operations.md`. Linked from SOW and Master plan (Segment L.2b complete). |
 | **CHANGELOG** | Contract or API change entries | When changing RequestEnvelope, ResponseEnvelope, or public contract | `src/contracts/CHANGELOG.md` or project root CHANGELOG; note version and breaking vs additive. |
 
 If the architecture document already specifies something in detail (e.g. exact JSON for EngineResult), do not duplicate it here—implement to the architecture and add only the minimal code and config needed to satisfy the SOW phase.
 
-- **schema_ref catalog (optional):** A single place (e.g. Architecture appendix or `docs/schemas/`) listing all `schema_ref` URIs and artifact kinds for consistent validation across engines. **Done:** `docs/schemas/schema-ref-catalog.md` (Segment O.2).
+- **schema_ref catalog (optional):** A single place (e.g. Architecture appendix or `docs/REFERENCE/schemas/`) listing all `schema_ref` URIs and artifact kinds for consistent validation across engines. **Done:** `docs/REFERENCE/schemas/schema-ref-catalog.md` (Segment O.2).
 - **Error code taxonomy:** Central list of `ResponseEnvelope.error.code` and when each is used (e.g. POLICY_DENIED, BUDGET_EXCEEDED, TOOL_TIMEOUT). Can live in `src/contracts/errors.ts` plus a short doc. See Segment N.1.
 - **Verification script (optional):** A command (e.g. `npm run verify:sow`) that runs lint, type-check, contract tests, and a minimal e2e so “phase complete” is machine-checkable. See Segment N.2.
 
@@ -473,9 +473,9 @@ If the architecture document already specifies something in detail (e.g. exact J
 
 ## 8) References
 
-- **Architecture:** `docs/Architecture_document_Finalized.md`
+- **Architecture:** `docs/ARCHITECTURE/Architecture_document_Finalized.md`
 - **Master plan:** `docs/PLANS/00_Master-Delivery-Plan.md`
-- **Implementation plans:** `docs/PLANS/Implementation-plans/L2-01_Contracts-and-Project-Scaffold.md` through L2-08, L2-99.
+- **Implementation plans:** `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` through L2-08, L2-99.
 - **Architecture milestones (§15):** Milestones 1–6 in Architecture document.
 
 ---
@@ -605,7 +605,7 @@ Use this list for resuming work and tracking progress. Complete segments in orde
 - **Task payload for memory:** EngineInvocation.task for engine_type `"memory"` can carry structured fields (e.g. in task.objective or a task payload): `operation: "retrieve" | "write" | "delete"`, `query_text` (for retrieve), `scope`, and optionally `scope_keys`. For retrieve, call `runRetrieval(store, { query_text, scope, caller, top_k })`; map `RetrievalServiceResult.citations` and `contextText` into the `memory_response` Typed Artifact (artifact_kind `memory_response`, schema_ref as agreed).
 - **Citations:** `CitationSpec` in `src/memory/types.ts` (source, ref, span) maps to ResponseEnvelope citation shape. Synthesis or the pipeline should merge memory citations with any synthesis-generated citations and set `output.citations` on ResponseEnvelope.
 - **Observability:** Emit MEMORY_* events (e.g. MEMORY_RETRIEVAL_START/MEMORY_RETRIEVAL_END or equivalent per Architecture §13) with trace_id, scope, and latency; use existing `observability/events.ts` and redaction for any sensitive payload.
-- **L2-06:** Retrieval semantics, scope enforcement, and fallback behavior are defined in `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`; the Memory Engine is the single call path from workflows into that layer.
+- **L2-06:** Retrieval semantics, scope enforcement, and fallback behavior are defined in `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md`; the Memory Engine is the single call path from workflows into that layer.
 - **Scope enforcement E2E:** `src/server/retrieval.integration.test.ts` includes a test "enforces scope: caller org only receives citations from their org" (two orgs, caller as o1; citations must include only o1 source, not o2).
 
 ---
@@ -630,7 +630,7 @@ Use this list for resuming work and tracking progress. Complete segments in orde
 | **I.3** | `src/memory/` (retention config), `src/config/schema.ts` | Retention/TTL config in schema; stores respect retention where applicable. |
 | **I.4** | — | Build and tests pass; `src/server/retrieval.integration.test.ts` (or equivalent) passes. |
 
-**Plan reference:** `docs/PLANS/Implementation-plans/L2-06_Memory-and-Retrieval-Implementation.md`
+**Plan reference:** `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md`
 
 ---
 
@@ -685,9 +685,9 @@ Use this list for resuming work and tracking progress. Complete segments in orde
 | L.1a | **L2-07 verification:** Confirm attachment validation (type/size/count/mime) in ingress; ATTACHMENT_REJECTED / MULTIMODAL_UNSUPPORTED taxonomy; `attachment_reject_total` metric | ☑ |
 | L.1b | Confirm Brain Stem canonicalization supports multimodal (handles, token_estimate); preprocess for image/PDF per L2-07 Phase 1 | ☑ |
 | L.1c | Confirm router capability checks (`multimodalCapablePipelines`); deterministic MULTIMODAL_UNSUPPORTED when policy has no capable pipeline; config flags `multimodal_input_path_enabled`, `enable_multimodal_pipeline`, `maxAttachmentCount`, `maxAttachmentBytes` | ☑ |
-| L.1d | Confirm runbook `docs/Runbooks/Multimodal-Input-Path.md` exists and is linked from SPEC 22 and SOW §7/§8 | ☑ |
+| L.1d | Confirm runbook `docs/OPERATIONS/RUNBOOKS/Multimodal-Input-Path.md` exists and is linked from SPEC 22 and SOW §7/§8 | ☑ |
 | L.2a | **L2-08 endpoints:** Confirm `GET /healthz`, `GET /readyz`, `GET /metrics`, `GET /v1/version` exist in `src/server/routes.ts`; document contract (e.g. version returns contract_version, api, version, env, optional release_id/build_id) in runbooks or SPEC | ☑ |
-| L.2b | Runbooks: Ensure `docs/Runbooks/` contains (or links) procedures for query failure, tool denied, budget exceeded, rollback; link from SOW §7 and Master plan. Add sections to `Release-and-Rollback.md` or create **Query-and-Policy-Failures.md** (triage steps). Existing: Release-and-Rollback.md, Multimodal-Input-Path.md, Memory-Retrieval-Outage.md, Harness-Readiness-Gate.md. | ☑ |
+| L.2b | Runbooks: Ensure `docs/OPERATIONS/RUNBOOKS/` contains (or links) procedures for query failure, tool denied, budget exceeded, rollback; link from SOW §7 and Master plan. Add sections to `Release-and-Rollback.md` or create **Query-and-Policy-Failures.md** (triage steps). Existing: Release-and-Rollback.md, Multimodal-Input-Path.md, Memory-Retrieval-Outage.md, Harness-Readiness-Gate.md. | ☑ |
 | L.2c | Escalation and ownership: Document on-call owner and escalation path (e.g. Operations → SRE → Security) in runbooks or docs/SPEC/22_Runbooks_and_Operations.md | ☑ |
 | L.3a | **Rollout strategy:** Document rollout and rollback (canary, kill-switch `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`, promotion criteria); reference `src/rollout/policy.ts` and L2-08 Phase 1 | ☑ |
 | L.3b | Document on-call responsibilities and escalation; align with L2-08 §11.2 (Operations on-call, escalation path) | ☑ |
@@ -696,10 +696,10 @@ Use this list for resuming work and tracking progress. Complete segments in orde
 
 **Segment L implementation notes (for coding agent):**
 
-- **L2-07 status:** Plan `L2-07_Multimodal-Input-Path-Implementation.md` is marked *implemented* (Phases 0–4). L.1 tasks are **verification and documentation**: confirm attachment validation in `src/ingress/` (e.g. `attachments.ts`, `validate.ts`), Brain Stem extensions in `src/brainstem/canonicalize.ts` and `preprocess.ts`, router capability checks in `src/router/default-router.ts`, and that runbook `docs/Runbooks/Multimodal-Input-Path.md` exists and is linked. If any gap is found, implement the minimal change to satisfy the SOW; otherwise mark L.1 done.
-- **L2-08 status:** SOW Segment L complete. Endpoints confirmed in `src/server/routes.ts` (healthz, readyz, metrics, v1/version). Rollout policy documented in `src/rollout/policy.ts` and referenced in `docs/Runbooks/Release-and-Rollback.md`. Runbooks: `docs/Runbooks/Query-and-Policy-Failures.md` (query failure, tool denied, budget exceeded), `Release-and-Rollback.md`, `Multimodal-Input-Path.md`, and others; runbook index and on-call/escalation in `docs/SPEC/22_Runbooks_and_Operations.md`.
+- **L2-07 status:** Plan `L2-07_Multimodal-Input-Path-Implementation.md` is marked *implemented* (Phases 0–4). L.1 tasks are **verification and documentation**: confirm attachment validation in `src/ingress/` (e.g. `attachments.ts`, `validate.ts`), Brain Stem extensions in `src/brainstem/canonicalize.ts` and `preprocess.ts`, router capability checks in `src/router/default-router.ts`, and that runbook `docs/OPERATIONS/RUNBOOKS/Multimodal-Input-Path.md` exists and is linked. If any gap is found, implement the minimal change to satisfy the SOW; otherwise mark L.1 done.
+- **L2-08 status:** SOW Segment L complete. Endpoints confirmed in `src/server/routes.ts` (healthz, readyz, metrics, v1/version). Rollout policy documented in `src/rollout/policy.ts` and referenced in `docs/OPERATIONS/RUNBOOKS/Release-and-Rollback.md`. Runbooks: `docs/OPERATIONS/RUNBOOKS/Query-and-Policy-Failures.md` (query failure, tool denied, budget exceeded), `Release-and-Rollback.md`, `Multimodal-Input-Path.md`, and others; runbook index and on-call/escalation in `docs/SPEC/22_Runbooks_and_Operations.md`.
 - **Runbook coverage:** SOW §7 and §4.1 call out runbooks for “query fails”, “tool denied”, “budget exceeded”, “rollback”. Prefer adding sections to `Release-and-Rollback.md` or a single `Query-and-Policy-Failures.md` rather than proliferating many small files; link from SPEC 22 and Master plan.
-- **L.4 (L2-99):** Autonomous harness execution is implemented in `src/pipelines/coding-agent-pipeline.ts` (branch on `harness_autonomous_execution_enabled`); Execution engine returns `proposed_next_action` when task has `suggested_tool_ref`. Enable via `HARNESS_AUTONOMOUS_EXECUTION_ENABLED=true` only after readiness gate and sign-off. See `docs/PLANS/Implementation-plans/L2-99_*` and `docs/Runbooks/Harness-Readiness-Gate.md`.
+- **L.4 (L2-99):** Autonomous harness execution is implemented in `src/pipelines/coding-agent-pipeline.ts` (branch on `harness_autonomous_execution_enabled`); Execution engine returns `proposed_next_action` when task has `suggested_tool_ref`. Enable via `HARNESS_AUTONOMOUS_EXECUTION_ENABLED=true` only after readiness gate and sign-off. See `docs/PLANS/implementation/L2-99_*` and `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md`.
 - **References:** Architecture §6.1 (RequestEnvelope input/attachments), §8.1 (CanonicalRequest), §8.4 (Typed Artifact); `docs/SPEC/22_Runbooks_and_Operations.md`; L2-07 Phase 0–4 task lists; L2-08 Phase 0–3 and §13 Implementation Summary.
 
 **Segment L — File paths and verification (quick reference for coding agent):**
@@ -709,18 +709,18 @@ Use this list for resuming work and tracking progress. Complete segments in orde
 | **L.1a** | `src/ingress/validate.ts`, `src/ingress/attachments.ts` | Attachment validation (type/size/count/mime) in ingress; error codes ATTACHMENT_REJECTED, MULTIMODAL_UNSUPPORTED; metric `attachment_reject_total` in `src/observability/metrics.ts`. |
 | **L.1b** | `src/brainstem/canonicalize.ts`, `src/brainstem/preprocess.ts` | CanonicalRequest supports multimodal (handles, token_estimate); preprocess provides token estimates per attachment type (L2-07 Phase 1). |
 | **L.1c** | `src/router/default-router.ts`, `src/config/schema.ts` | Router checks `multimodalCapablePipelines`; MULTIMODAL_UNSUPPORTED when no capable pipeline; flags: `multimodal_input_path_enabled`, `enable_multimodal_pipeline`, `maxAttachmentCount`, `maxAttachmentBytes`. |
-| **L.1d** | `docs/Runbooks/Multimodal-Input-Path.md` | Runbook exists; linked from SPEC 22 and SOW §7/§8. |
+| **L.1d** | `docs/OPERATIONS/RUNBOOKS/Multimodal-Input-Path.md` | Runbook exists; linked from SPEC 22 and SOW §7/§8. |
 | **L.2a** | `src/server/routes.ts` | GET /healthz, /readyz, /metrics, /v1/version implemented; version contract (contract_version, api, version, env, optional release_id/build_id) documented in runbooks or SPEC. |
-| **L.2b** | `docs/Runbooks/`, `docs/Runbooks/Release-and-Rollback.md` or new `Query-and-Policy-Failures.md` | Runbooks for query failure, tool denied, budget exceeded, rollback present or linked (sections in Release-and-Rollback or new Query-and-Policy-Failures.md); link from SOW §7 and Master plan. |
+| **L.2b** | `docs/OPERATIONS/RUNBOOKS/`, `docs/OPERATIONS/RUNBOOKS/Release-and-Rollback.md` or new `Query-and-Policy-Failures.md` | Runbooks for query failure, tool denied, budget exceeded, rollback present or linked (sections in Release-and-Rollback or new Query-and-Policy-Failures.md); link from SOW §7 and Master plan. |
 | **L.2c** | `docs/SPEC/22_Runbooks_and_Operations.md` or runbooks | On-call owner and escalation path (e.g. Operations → SRE → Security) documented. |
 | **L.3a** | `src/rollout/policy.ts`, L2-08 plan | Rollout/rollback documented: canary, kill-switch PLATFORM_PRODUCTION_ROLLOUT_ENABLED, promotion criteria; reference rollout policy and L2-08 Phase 1. |
 | **L.3b** | Runbooks or SPEC 22 | On-call responsibilities and escalation aligned with L2-08 §11.2. |
-| **L.4** | L2-99 plan, `docs/Runbooks/Harness-Readiness-Gate.md`, `src/config/schema.ts` (harness_autonomous_execution_enabled) | Autonomous harness implemented; gated by flag; enable only after Segment L.2–L.3 and security/observability sign-off. |
+| **L.4** | L2-99 plan, `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md`, `src/config/schema.ts` (harness_autonomous_execution_enabled) | Autonomous harness implemented; gated by flag; enable only after Segment L.2–L.3 and security/observability sign-off. |
 | **L.5** | — | `npm run build`, `npm test` pass; integration tests for version endpoint and L2-07/L2-08 paths as needed. |
 
 **Segment L plan references:**  
-- L2-07: `docs/PLANS/Implementation-plans/L2-07_Multimodal-Input-Path-Implementation.md`  
-- L2-08: `docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
+- L2-07: `docs/PLANS/implementation/L2-07_Multimodal-Input-Path-Implementation.md`  
+- L2-08: `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md`
 
 **Segment L verification commands (run before marking L.5 done):**  
 `npm run build` && `npm test`; optionally: `curl -s http://localhost:<port>/v1/version` (or use integration test); grep for `ATTACHMENT_REJECTED`, `MULTIMODAL_UNSUPPORTED`, `attachment_reject_total` in `src/` to confirm L.1a; confirm runbook links in `docs/SPEC/22_Runbooks_and_Operations.md`.
@@ -804,14 +804,14 @@ Execute after Segment N (and preferably after Segment I if Memory Gateway expans
 | # | Task | Done |
 |---|------|------|
 | O.1 | **L2-05 residual:** Review L2-05 plan for any security controls not yet implemented (isolation, sandbox, compliance); implement as needed for production sign-off | ☑ |
-| O.2 | **Schema ref catalog (optional):** Add a single place listing `schema_ref` URIs and artifact kinds (e.g. Architecture appendix or `docs/schemas/`) for consistent validation across engines (§7) | ☑ |
+| O.2 | **Schema ref catalog (optional):** Add a single place listing `schema_ref` URIs and artifact kinds (e.g. Architecture appendix or `docs/REFERENCE/schemas/`) for consistent validation across engines (§7) | ☑ |
 | O.3 | **Runbooks / ops:** Add or update runbooks per §7 and L2-08 if new workflows or gateways introduce new failure modes | ☑ |
 | O.4 | Run verification: `npm run build`, `npm test`, `npm run verify:sow`; update §5 checklist (Security, Memory Gateway) when applicable | ☑ |
 
 **Segment O implementation notes:**
 
 - **O.1:** L2-05 plan (Phases 0–4) is fully implemented: threat/control baseline, audit + secret scope (Phase 1), tool gateway hard controls (Phase 2), abuse/compliance validation (Phase 3), security gate and handoff (Phase 4). Segment G delivered allowlists from policy, redaction_level, TOOL_ACCESS audit. No residual controls required for current production sign-off; §5 Security row marked complete.
-- **O.2:** Catalog added at `docs/schemas/schema-ref-catalog.md` listing all `schema_ref` URIs and artifact kinds; referenced from §7.
+- **O.2:** Catalog added at `docs/REFERENCE/schemas/schema-ref-catalog.md` listing all `schema_ref` URIs and artifact kinds; referenced from §7.
 - **O.3:** Runbook index in SPEC 22 covers query/tool/budget (Query-and-Policy-Failures), rollout (Release-and-Rollback), memory (Memory-Retrieval-Outage), multimodal, harness gate, observability. Security/audit incidents triaged via Query-and-Policy-Failures and escalation path (Operations → SRE → Security); no new runbook file required.
 
 **References:** §5 Deliverables Checklist (Security, Memory Gateway); §7 What Might Need to Be Added; L2-05, L2-06, L2-08 plans.

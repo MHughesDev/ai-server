@@ -1,7 +1,7 @@
 # 15 Model Gateway Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 10, 12, 18.5).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 10, 12, 18.5).
 - Implementation status: `docs/CODEBASE-DOCS-VERIFICATION-REPORT.md` (verified features vs documentation).
 
 ## Purpose

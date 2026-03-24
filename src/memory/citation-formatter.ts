@@ -1,6 +1,6 @@
 /**
  * Citation formatter – build response citations from retrieval hits.
- * @see L2-06 Phase 2, MEM-005, Docs/SPEC/17
+ * @see L2-06 Phase 2, MEM-005, docs/SPEC/17_MemoryAbstraction_Spec.md
  */
 
 import type { RetrievalHit } from "./types.js";

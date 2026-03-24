@@ -1,6 +1,6 @@
 /**
  * RequestEnvelope – external API contract for POST /v1/query.
- * @see docs/SPEC/02_API_Contracts.md, docs/Overview.md
+ * @see docs/SPEC/02_API_Contracts.md, docs/ARCHITECTURE/Overview.md
  */
 
 import { z } from "zod";

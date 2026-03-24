@@ -135,6 +135,60 @@ describe("bootstrap", () => {
       "Production rollout requires TLS_KEY_PATH and TLS_CERT_PATH"
     );
   });
+
+  it("fails production rollout when RELEASE_ID and BUILD_ID are unset", () => {
+    process.env.NODE_ENV = "production";
+    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    process.env.REQUIRE_AUTH_HEADER = "true";
+    process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
+    process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
+    process.env.TLS_KEY_PATH = "/tmp/key.pem";
+    process.env.TLS_CERT_PATH = "/tmp/cert.pem";
+    process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
+    delete process.env.RELEASE_ID;
+    delete process.env.BUILD_ID;
+    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: "openai1",
+        kind: "openai_compatible",
+        default_model: "gpt-4o-mini",
+        api_key_env: "OPENAI_API_KEY",
+      },
+    ]);
+    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
+      chat: { default: { provider: "openai1", model: "gpt-4o-mini" } },
+    });
+    process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
+      {
+        issuer: "https://idp.example.com",
+        audience: "ai-server-token-exchange",
+        jwt_algorithm: "HS256",
+        jwt_secret: "not-default-external-idp-secret",
+        claim_mapping: {},
+      },
+    ]);
+    process.env.AUTH_APP_REGISTRY_JSON = JSON.stringify([
+      {
+        client_id: "client-prod",
+        client_secret: "client-secret-prod",
+        app_id: "app-prod",
+        allowed_issuers: ["https://idp.example.com"],
+        allowed_scopes: ["query:invoke"],
+      },
+    ]);
+    expect(() => bootstrap()).toThrow(
+      "Production rollout requires RELEASE_ID or BUILD_ID for traceability"
+    );
+  });
+
+  it("fails in production when AUDIT_LOG_PATH parent directory does not exist", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
+    delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
+    expect(() => bootstrap()).toThrow("Production sink parent directory must exist");
+  });
 });
 
 describe("getConfig", () => {

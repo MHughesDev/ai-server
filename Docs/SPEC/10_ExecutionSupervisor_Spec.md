@@ -1,7 +1,7 @@
 # 10 Execution Supervisor Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 3, 9.3, 16, 18.4).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 3, 9.3, 16, 18.4).
 - Implementation status: `docs/CODEBASE-DOCS-VERIFICATION-REPORT.md` (verified features vs documentation).
 
 ## Purpose

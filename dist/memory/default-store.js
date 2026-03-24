@@ -1,7 +1,7 @@
 /**
  * Default memory store for the server – production-ready implementation with Redis support.
  * L2-06 Segment I: Memory gateway composes vector + structured + object stores; getDefaultStore returns gateway vector store.
- * @see L2-06, Docs/SPEC/17
+ * @see L2-06, docs/SPEC/17_MemoryAbstraction_Spec.md
  */
 import { createMemoryGateway } from "./memory-gateway.js";
 import { InMemoryStore } from "./in-memory-store.js";

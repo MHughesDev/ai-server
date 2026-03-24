@@ -3,7 +3,7 @@
  * @see L2-05 Phase 1, SEC-002
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +16,9 @@ import {
   createFileAuditSink,
   getAuditSinkStatus,
   setBackpressureCallback,
+  setAuditMemoryCapForTests,
+  verifyAuditLogFileIntegrity,
+  shutdownPersistentAuditFileSink,
   type AuditLogEntry,
 } from "./audit-logger.js";
 
@@ -77,6 +80,21 @@ describe("audit-logger", () => {
       payload: {},
     });
     expect(verifyAuditIntegrity()).toEqual({ valid: true });
+  });
+
+  it("trims in-memory audit ring and verifyAuditIntegrity checks retained suffix chain", () => {
+    setAuditMemoryCapForTests(5);
+    for (let i = 0; i < 8; i++) {
+      writeAuditEvent({
+        event_type: `E${i}`,
+        request_id: `r${i}`,
+        timestamp_iso: new Date().toISOString(),
+        payload: { i },
+      });
+    }
+    const snap = getAuditLogSnapshot();
+    expect(snap.length).toBe(5);
+    expect(verifyAuditIntegrity().valid).toBe(true);
   });
 
   it("verifyAuditIntegrity detects tampering of payload", () => {
@@ -302,6 +320,109 @@ describe("audit-logger", () => {
       } finally {
         await waitForAuditDrain();
         setAuditSink(null);
+        rmSync(dir, { recursive: true });
+      }
+    });
+  });
+
+  describe("verifyAuditLogFileIntegrity (on-disk chain)", () => {
+    it("returns file_not_found for missing path", async () => {
+      const r = await verifyAuditLogFileIntegrity(join(tmpdir(), "no-such-audit-log-xyz"));
+      expect(r.valid).toBe(false);
+      expect(r.error).toBe("file_not_found");
+    });
+
+    it("validates drained file sink output", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "audit-disk-"));
+      const filePath = join(dir, "audit.jsonl");
+      try {
+        setAuditSink(createFileAuditSink(filePath));
+        writeAuditEvent({
+          event_type: "A",
+          request_id: "r1",
+          timestamp_iso: new Date().toISOString(),
+          payload: { x: 1 },
+        });
+        writeAuditEvent({
+          event_type: "B",
+          request_id: "r2",
+          timestamp_iso: new Date().toISOString(),
+          payload: { y: 2 },
+        });
+        await waitForAuditDrain();
+        const r = await verifyAuditLogFileIntegrity(filePath);
+        expect(r).toEqual({ valid: true, linesRead: 2 });
+      } finally {
+        setAuditSink(null);
+        rmSync(dir, { recursive: true });
+      }
+    });
+
+    it("detects tampered line on disk", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "audit-tamper-"));
+      const filePath = join(dir, "audit.jsonl");
+      try {
+        setAuditSink(createFileAuditSink(filePath));
+        writeAuditEvent({
+          event_type: "OK",
+          request_id: "r1",
+          timestamp_iso: new Date().toISOString(),
+          payload: {},
+        });
+        await waitForAuditDrain();
+        let raw = readFileSync(filePath, "utf8");
+        raw = raw.replace('"OK"', '"NOPE"');
+        writeFileSync(filePath, raw, "utf8");
+        const r = await verifyAuditLogFileIntegrity(filePath);
+        expect(r.valid).toBe(false);
+        expect(r.error).toBe("hash_mismatch");
+      } finally {
+        setAuditSink(null);
+        rmSync(dir, { recursive: true });
+      }
+    });
+
+    it("accepts empty file", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "audit-empty-"));
+      const filePath = join(dir, "empty.jsonl");
+      try {
+        writeFileSync(filePath, "", "utf8");
+        const r = await verifyAuditLogFileIntegrity(filePath);
+        expect(r).toEqual({ valid: true, linesRead: 0 });
+      } finally {
+        rmSync(dir, { recursive: true });
+      }
+    });
+  });
+
+  describe("shutdownPersistentAuditFileSink", () => {
+    it("drains file sink queue then stops file writes", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "audit-shut-"));
+      const path = join(dir, "a.jsonl");
+      try {
+        const sink = createFileAuditSink(path);
+        setAuditSink(sink);
+        writeAuditEvent({
+          event_type: "X",
+          request_id: "r",
+          timestamp_iso: new Date().toISOString(),
+          payload: {},
+        });
+        await shutdownPersistentAuditFileSink();
+        await waitForAuditDrain();
+        const afterShut = readFileSync(path, "utf8");
+        expect(afterShut.trim().length).toBeGreaterThan(0);
+        writeAuditEvent({
+          event_type: "Y",
+          request_id: "r2",
+          timestamp_iso: new Date().toISOString(),
+          payload: {},
+        });
+        await sleep(150);
+        expect(readFileSync(path, "utf8")).toBe(afterShut);
+      } finally {
+        setAuditSink(null);
+        resetAuditLog();
         rmSync(dir, { recursive: true });
       }
     });

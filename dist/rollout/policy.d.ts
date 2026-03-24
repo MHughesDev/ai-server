@@ -1,6 +1,6 @@
 /**
  * Rollout policy parsing and validation – canary thresholds, promotion/abort criteria.
- * @see docs/PLANS/Implementation-plans/L2-08_Rollout-and-Operational-Readiness-Implementation.md
+ * @see docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md
  * @see docs/SPEC/20_Config_and_FeatureFlags.md
  */
 import { z } from "zod";

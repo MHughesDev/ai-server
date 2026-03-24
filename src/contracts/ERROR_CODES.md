@@ -16,7 +16,8 @@ Clients should use the `code` field on `ResponseEnvelope.error` for stable handl
 | **RETRIEVAL_UNAVAILABLE** | 503 | Yes | Memory/retrieval store unavailable; response may be degraded. |
 | **ATTACHMENT_REJECTED** | 400 | No | Attachment validation failed (type, size, count, or mime). |
 | **MULTIMODAL_UNSUPPORTED** | 400 | No | Multimodal request but no capable pipeline allowed by policy. |
+| **IDEMPOTENCY_KEY_CONFLICT** | 409 | No | `POST /v1/query/async`: same `Idempotency-Key` (per tenant scope) already used with a different request body. |
 
 **Usage:** Prefer mapping server responses to these codes rather than free-form messages. For HTTP status, use `getErrorMeta(code).httpStatus` when propagating to the client.
 
-**References:** Architecture §6.2 (ResponseEnvelope), SOW §7 / Segment N.1, `Docs/SPEC/02_API_Contracts.md`.
+**References:** Architecture §6.2 (ResponseEnvelope), SOW §7 / Segment N.1, `docs/SPEC/02_API_Contracts.md`.

@@ -1,6 +1,6 @@
 /**
  * Readiness scorecard calculator and threshold logic (L2-99).
- * @see docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Section 7.1
+ * @see docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Section 7.1
  */
 import { READINESS_DIMENSIONS } from "./types.js";
 const DEFAULT_WEIGHTS = {

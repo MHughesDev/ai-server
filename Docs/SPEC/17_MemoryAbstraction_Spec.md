@@ -1,8 +1,8 @@
 # 17 Memory Abstraction Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 10.5, 12, 18.7).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (in-memory defaults, retrieval quality, timeout/context bounds, contract completeness).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 10.5, 12, 18.7).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (in-memory defaults, retrieval quality, timeout/context bounds, contract completeness).
 
 ## Purpose
 Unified memory interface for retrieval and persistence with strict scope governance.

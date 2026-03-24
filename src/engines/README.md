@@ -5,7 +5,7 @@ Bounded, reusable building blocks that operate on **Typed Artifacts**. Each engi
 ## Interface
 
 - **`IEngine`** (`base.ts`): `invoke(inv: EngineInvocation): Promise<EngineResult>`
-- All engines consume **EngineInvocation** and return **EngineResult** (see `src/contracts/` and `docs/Engines-and-Contracts.md`).
+- All engines consume **EngineInvocation** and return **EngineResult** (see `src/contracts/` and `docs/REFERENCE/Engines-and-Contracts.md`).
 
 ## Modules (M1)
 
@@ -27,5 +27,5 @@ Pipelines (e.g. `pipelines/chat-pipeline.ts`) create engines (e.g. `createExecut
 ## References
 
 - Contracts: `src/contracts/engine-invocation.ts`, `engine-result.ts`, `task.ts`, `typed-artifact.ts`
-- Doc: `docs/Engines-and-Contracts.md`
+- Doc: `docs/REFERENCE/Engines-and-Contracts.md`
 - Architecture: §8.6, §9.5, §10

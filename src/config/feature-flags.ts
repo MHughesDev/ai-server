@@ -268,6 +268,20 @@ export function getFeatureFlagService(): FeatureFlagService | null {
   return featureFlagService;
 }
 
+/**
+ * Same resolution as `isFeatureFlagEnabled` in `routes.ts` and `query-handler.ts`:
+ * `FeatureFlagService.evaluateFlag` when initialized (admin overrides + org/app/user context),
+ * else `config.flags[name]`.
+ */
+export function resolveFeatureFlagEnabled(
+  flagName: keyof FeatureFlags,
+  config: Config,
+  context?: { org_id?: string; app_id?: string; user_id?: string }
+): boolean {
+  const service = getFeatureFlagService();
+  return service?.evaluateFlag(flagName, context).enabled ?? config.flags[flagName];
+}
+
 export function resetFeatureFlags(): void {
   if (featureFlagService) {
     void featureFlagService.stop();

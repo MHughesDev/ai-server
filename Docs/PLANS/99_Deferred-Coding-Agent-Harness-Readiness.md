@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-99
 - Plan Name: Deferred Coding Agent Harness Readiness Gate
-- Linked SPEC: `docs/Overview.md` sections `13`, `16`, `19`, `21`, `22`; `docs/Architecture_document_Finalized.md` milestone 3 (deferred)
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `13`, `16`, `19`, `21`, `22`; `docs/ARCHITECTURE/Architecture_document_Finalized.md` milestone 3 (deferred)
 - Owner(s): Platform Lead
 - Contributors: Runtime, Security, Ops, QA, Product
 - Status: `draft`

@@ -433,6 +433,7 @@ describe("Error taxonomy", () => {
     expect(ERROR_CODES).toContain("TOOL_TIMEOUT");
     expect(ERROR_CODES).toContain("MODEL_FAILURE");
     expect(ERROR_CODES).toContain("INTERNAL_ERROR");
+    expect(ERROR_CODES).toContain("IDEMPOTENCY_KEY_CONFLICT");
   });
 
   it("isErrorCode identifies valid codes", () => {
@@ -445,5 +446,6 @@ describe("Error taxonomy", () => {
     expect(meta.httpStatus).toBe(429);
     expect(meta.retryable).toBe(true);
     expect(ERROR_TAXONOMY.INVALID_PAYLOAD.retryable).toBe(false);
+    expect(getErrorMeta("IDEMPOTENCY_KEY_CONFLICT").httpStatus).toBe(409);
   });
 });

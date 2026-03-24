@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-08
 - Plan Name: Rollout and Operational Readiness
-- Linked SPEC: `docs/Overview.md` sections `20`, `21`, `22`; `docs/Architecture_document_Finalized.md` rollout and milestone acceptance notes
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `20`, `21`, `22`; `docs/ARCHITECTURE/Architecture_document_Finalized.md` rollout and milestone acceptance notes
 - Owner(s): Operations Lead
 - Contributors: Platform, Runtime, Security, Observability, QA, Product
 - Status: `draft`

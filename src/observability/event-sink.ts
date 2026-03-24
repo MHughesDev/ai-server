@@ -7,6 +7,7 @@
 
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 import type { TelemetryEvent } from "./events.js";
 
 /** Sink for telemetry events; e.g. file append or OTEL exporter. */
@@ -34,6 +35,8 @@ export interface FileEventSinkOptions {
   maxRotatedFiles?: number;
   /** L2-04: Backpressure threshold (0-1), default 0.8 */
   backpressureThreshold?: number;
+  /** When true, `fsync` after each append (env `OBSERVABILITY_EVENT_SINK_FSYNC=true` in `server/index.ts`). */
+  fsyncAfterEachWrite?: boolean;
 }
 
 /** L2-04: Global backpressure state */
@@ -72,6 +75,7 @@ export function createFileEventSink(
   const maxFileSizeBytes = options.maxFileSizeBytes ?? 10 * 1024 * 1024;
   const maxRotatedFiles = options.maxRotatedFiles ?? 3;
   const backpressureThreshold = options.backpressureThreshold ?? 0.8;
+  const fsyncAfterEachWrite = options.fsyncAfterEachWrite === true;
   const queue: string[] = [];
   let droppedEvents = 0;
   let draining = false;
@@ -118,6 +122,9 @@ export function createFileEventSink(
         if (!line) break;
         await maybeRotate(Buffer.byteLength(line));
         await appendFile(filePath, line, "utf8");
+        if (fsyncAfterEachWrite) {
+          await syncFileToDisk(filePath);
+        }
       }
       lastError = null;
     } catch (err) {
@@ -185,6 +192,9 @@ export function createFileEventSink(
       }
       if (queue.length === 0) return;
       await appendFile(filePath, queue.join(""), "utf8");
+      if (fsyncAfterEachWrite) {
+        await syncFileToDisk(filePath);
+      }
       queue.length = 0;
     },
   };

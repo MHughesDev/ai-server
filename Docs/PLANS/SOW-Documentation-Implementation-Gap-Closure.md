@@ -8,7 +8,8 @@
 | Repository | `ai-server` |
 | Date | 2026-03-02 |
 | Prepared by | Coding agent |
-| Primary Inputs | `docs/SPEC/00-22`, `docs/PLANS/Scope-of-Work.md`, `docs/PLANS/00_Master-Delivery-Plan.md`, `docs/Production-Readiness-Gaps-Report.md`, `src/**` |
+| Primary Inputs | `docs/SPEC/00-22`, `docs/PLANS/Scope-of-Work.md`, `docs/PLANS/00_Master-Delivery-Plan.md`, `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`, `src/**` |
+| Parity audit | [`docs/TARGET/Code-Docs-Discrepancy-Register.md`](../TARGET/Code-Docs-Discrepancy-Register.md) — row-level code vs doc findings (2026-03-24) |
 | Objective | Close production-impacting gaps between documented target behavior and current runtime behavior |
 | Success Definition | Documentation and runtime behavior align for identity, governance, execution, observability, memory, and operations |
 
@@ -47,9 +48,11 @@ This SOW defines the remaining work to align the documented architecture/operati
 
 ### Open Gaps (Current) - Post Agent 3 Updates (2026-03-06)
 
-- **Critical:** Identity trust boundary, token exchange flow, body-trusted caller context, stub model gateway in main query path.
-- **High:** Tool execution remains stub delegate in query path, workflow policy/catalog misalignment, async contract drift.
-- **Medium:** Memory retrieval timeout/context caps, in-memory-only defaults, sync sink writes, static readiness checks, flag-to-runtime drift.
+- **2026-03-24 parity pass:** Several items below were overstated vs code — **token exchange**, **caller strict-match**, **query rate limits**, and **dependency-aware health** are implemented; see [`Code-Docs-Discrepancy-Register.md`](../TARGET/Code-Docs-Discrepancy-Register.md) and updated gap rows §4.
+- **2026-03-24 follow-on:** Audit/event file sinks use **async queued `appendFile`** (not sync); **production** validates sink parent dir + file writability at bootstrap; optional **`AUDIT_LOG_FSYNC`** / **`OBSERVABILITY_EVENT_SINK_FSYNC`** for per-append durability.
+- **Critical:** Residual identity/auth edge cases (`GAP-AUTH-003`), stub model gateway when provider not configured.
+- **High:** Tool execution defaults, workflow policy/catalog misalignment, async **contract** vs **`POST /v1/query`** sync `mode` where product expects otherwise.
+- **Medium:** Memory retrieval context caps, in-memory-only defaults, flag-to-runtime drift for niche paths.
 
 ### Closed/Reduced by Agent 3 (2026-03-06)
 
@@ -73,32 +76,32 @@ This SOW defines the remaining work to align the documented architecture/operati
 
 | Gap ID | Severity | Documentation Expectation | Current Implementation Evidence | Required Outcome |
 |---|---|---|---|---|
-| GAP-AUTH-001 | Critical | `POST /token/exchange` trust boundary exists (`docs/SPEC/02`, `04`, `19`) | No `/token/exchange` route in `src/server/routes.ts` | Implement token exchange endpoint and mint/verify server AI JWT |
-| GAP-AUTH-002 | Critical | Caller context derived from verified claims (`docs/SPEC/02`, `04`, `07`, `19`) | `validateIngress` uses body `caller` directly in `src/ingress/validate.ts` | Bind caller context to verified token claims and reject mismatch |
-| GAP-AUTH-003 | High | Production auth boundary with deterministic deny (`docs/SPEC/04`, `19`) | Query auth is header-presence only (`requireAuthHeader`) in `src/ingress/validate.ts` | Implement real JWT validation (issuer, aud, exp, scopes, claim mapping) |
-| GAP-AUTH-004 | High | Deterministic 429 rate limit/quota behavior (`docs/SPEC/04`, `02`) | No rate limit middleware in `src/server/routes.ts` | Add ingress rate limiting and quota enforcement with `RATE_LIMITED` mapping |
-| GAP-API-001 | High | Async mode only when lifecycle exists (`docs/SPEC/02`, `13`) | Contracts expose async/idempotency, runtime is sync-only (`src/contracts/*`, `src/server/*`) | Either implement async jobs + idempotency or narrow contracts/docs to sync-only |
-| GAP-API-002 | High | API fields documented must match runtime (`docs/SPEC/02`) | Request/response field drift (`timestamp`, `safety_profile`, `contract_version`, telemetry fields) vs `src/contracts/request-envelope.ts` and `src/contracts/response-envelope.ts` | Reconcile contract schemas, docs, and response assembly |
+| GAP-AUTH-001 | ~~Critical~~ **Closed** | `POST /token/exchange` trust boundary exists (`docs/SPEC/02`, `04`, `19`) | **Implemented:** `POST /token/exchange` in `src/server/routes.ts` (see also `src/server/auth.ts`) — **verified 2026-03-24** | ~~Implement token exchange~~ **DONE** |
+| GAP-AUTH-002 | ~~Critical~~ **Closed** | Caller context derived from verified claims (`docs/SPEC/02`, `04`, `07`, `19`) | **`validateIngress`** enforces **`assertCallerStrictMatch`** when `verifiedCallerContext` is supplied (`src/ingress/validate.ts`) — **verified 2026-03-24** | ~~Bind caller context~~ **DONE** (keep monitoring edge cases) |
+| GAP-AUTH-003 | ~~High~~ **Medium** | Production auth boundary with deterministic deny (`docs/SPEC/04`, `19`) | **Partial:** AI JWT verification and query path wiring exist (`auth.ts`, `routes.ts`); `requireAuthHeader` remains an ingress option — re-verify against SPEC 04 for any remaining “presence only” paths | Close any remaining production gaps per SPEC 04 |
+| GAP-AUTH-004 | ~~High~~ **Closed** | Deterministic 429 rate limit/quota behavior (`docs/SPEC/04`, `02`) | **`checkQueryRateLimitAsync`** on `/v1/query` and `/v1/query/async` (`src/server/routes.ts`) — **verified 2026-03-24** | ~~Add ingress rate limiting~~ **DONE** (tune config/backends) |
+| GAP-API-001 | ~~High~~ **Partial** | Async mode only when lifecycle exists (`docs/SPEC/02`, `13`) | **HTTP async jobs** when `JobQueueService` configured: `/v1/query/async`, `/v1/jobs*`. **`POST /v1/query`** still **`mode: "sync"`**. Optional **`Idempotency-Key`** on **`POST /v1/query/async`** (in-process dedupe; SPEC 02 + OpenAPI) — **2026-03-24** | Optional: cross-replica idempotency store; future **`ResponseEnvelope.mode`** if product needs it |
+| GAP-API-002 | ~~High~~ **Partial** | API fields documented must match runtime (`docs/SPEC/02`) | **Ingress + success envelopes:** Zod **`RequestEnvelopeSchema`** / **`ResponseEnvelopeSchema`**, **`openapi.yaml`**, SPEC 02 aligned **2026-03-24**. **Remaining:** some **error** bodies (e.g. middleware `408`/`499`, MVP 404 plain JSON) are not full `ResponseEnvelope` — document as-as-built or narrow over time | Keep OpenAPI/SPEC 02 in sync with `routes.ts` / `query-handler.ts`; optional error-envelope harmonization |
 | GAP-MODEL-001 | ~~Critical~~ High | Provider-backed model gateway (`docs/SPEC/15`) | **Partially implemented** (Agent 3, 2026-03-06): Circuit breaker, health checks, fallback provider added to `src/gateways/model-gateway.ts`. `OpenAiCompatibleModelGateway` exists for real providers. `StubModelGateway` still default in query handler pending production config | Wire production provider config and retire stub default |
 | GAP-MODEL-002 | ~~High~~ Medium | Capability + scope model selection (`docs/SPEC/15`) | **Implemented** (Agent 3, 2026-03-06): `CAPABILITY_TAXONOMY` added with chat, classification, vision, embedding, code, summarization, extraction, reasoning capabilities. `resolveModelRoute()` exists for scope-based routing | Add provider config in schema and verify end-to-end |
 | GAP-TOOL-001 | ~~High~~ Medium | Real side-effecting tool execution under policy (`docs/SPEC/16`) | **Partially implemented**: `ExecutableToolGateway` exists with `web_search`, `file_write_preview`, `stub_tool`. **Still uses** `StubAllowedToolGateway` in query path pending production enablement | Enable `ExecutableToolGateway` in production configuration |
 | GAP-TOOL-002 | ~~High~~ Medium | Sandbox controls enforce timeout/network/fs and identity attribution (`docs/SPEC/16`, `19`) | **Implemented** (Agent 3, 2026-03-06): `AllowlistToolGateway` enforces `timeout_ms`, `network_access`, `filesystem_access`. Tool metadata `requires_network`/`requires_filesystem` checked. **Caller identity** passed from `tool_engine.ts` with org_id, app_id, user_id, session_id, roles, trace_id | Verify sandbox enforcement in integration tests |
-| GAP-POLICY-001 | High | Policy allowlist synchronized with workflow catalog (`docs/SPEC/07`, `14`) | `evaluatePolicy` omits `tool_automation`, `extraction`, `verification`, `planning_only`, `batch_analysis` while registry includes them | Align allowed pipelines with registered workflow policy intent |
+| GAP-POLICY-001 | ~~High~~ **Closed** | Policy allowlist synchronized with workflow catalog (`docs/SPEC/07`, `14`) | **`evaluatePolicy`** uses **`listRegisteredWorkflowIds()`** for `allowed_pipelines` (`policy-evaluator.ts`) — **verified 2026-03-24** | ~~Align allowlist~~ **DONE**; monitor router selection coverage |
 | GAP-WORKFLOW-001 | ~~High~~ Closed | Decision steps supported (`docs/SPEC/14`) | ~~`decision` step is no-op~~ **Implemented** (Agent 3, 2026-03-06): Decision step branching with condition evaluation (`score > 0.8`, `passed == true`, etc.) in `src/workflows/runner.ts` | ~~Implement decision-step semantics~~ **COMPLETE** |
 | GAP-WORKFLOW-002 | ~~High~~ Closed | Invalid dependency refs and cycles rejected (`docs/SPEC/10`, `14`) | ~~`sortSteps` returns partial order without hard failure~~ **Implemented** (Agent 3, 2026-03-06): DFS-based cycle detection and dependency validation in `WorkflowDefinitionSchema` at registration time | ~~Add graph validation~~ **COMPLETE** |
 | GAP-WORKFLOW-003 | ~~High~~ Closed | Central `stop_conditions` enforcement (`docs/SPEC/10`, `14`) | ~~`max_iterations`/`deadline_ms` not centrally enforced~~ **Implemented** (Agent 3, 2026-03-06): `runWorkflow()` enforces `max_iterations`, `deadline_ms`, and `cost_budget_usd` centrally with accumulated cost tracking | ~~Enforce global stop conditions~~ **COMPLETE** |
 | GAP-BUDGET-001 | ~~High~~ Medium | Runtime enforces deadline and cost budgets (`docs/SPEC/06`, `09`) | **Implemented** (Agent 3, 2026-03-06): `runWorkflow()` in `src/workflows/runner.ts` enforces `deadline_ms`, `max_iterations`, and `cost_budget_usd` with real-time accumulated cost tracking. **Still needs** enforcement in non-workflow paths | Verify budget enforcement across all pipeline paths |
-| GAP-BUDGET-002 | Medium | Flags map to behavior (`docs/SPEC/20`) | Parse-only flags in `src/config/schema.ts` (e.g., `enable_async_jobs`, `enable_web_tool`, `enable_strict_verifier`, `enable_cost_caps`, `contracts_v1_enabled`, `control_plane_enforcement_enabled`, `platform_production_rollout_enabled`, `governance_harness_readiness_gate_active`) | Wire or remove/retire flags to eliminate drift |
+| GAP-BUDGET-002 | ~~Medium~~ **Partial** | Flags map to behavior (`docs/SPEC/20`) | **2026-03-24:** Matrix in **`docs/SPEC/20_Config_and_FeatureFlags.md`**; **`resolveFeatureFlagEnabled`** used on query/routes/policy/coding-agent paths per matrix. **Remaining static:** bootstrap/preflight + `server/index.ts` emitter where SPEC 20 notes | Tighten any remaining static reads if admin overrides must apply there |
 | GAP-BUDGET-003 | Medium | Tenant cost controls durable/shared (`docs/SPEC/09`) | Process-local usage map in `src/controlplane/tenant-budget.ts` | Move tenant budget accounting to shared durable backend |
-| GAP-MEM-001 | High | Retrieval timeout and bounded context (`docs/SPEC/17`) | No timeout/context cap in `src/memory/retrieval-service.ts` | Add retrieval deadline and deterministic truncation strategy |
+| GAP-MEM-001 | ~~High~~ **Partial** | Retrieval timeout and bounded context (`docs/SPEC/17`) | **`runRetrieval`** uses **`retrieval_timeout_ms`** / `withTimeoutOrDegraded` (`retrieval-service.ts`) — **verified 2026-03-24** | Tighten max context / token caps vs SPEC if still short |
 | GAP-MEM-002 | High | Persistent/vector retrieval for production (`docs/SPEC/17`) | Default in-memory lexical store in `src/memory/default-store.ts` and `src/memory/in-memory-store.ts` | Add production store adapter and embedding/vector retrieval path |
 | GAP-MEM-003 | Medium | Config retention is runtime enforced (`docs/SPEC/17`, `20`) | `memoryRetention` parsed but not wired into default store creation | Apply retention config in store construction path |
 | GAP-MEM-004 | Medium | Bounded ingestion behavior (`docs/SPEC/17`) | No per-ingest chunk cap in `src/memory/in-memory-store.ts` | Add hard ingest caps and reject/trim behavior |
-| GAP-OBS-001 | Medium | Non-blocking bounded sinks (`docs/SPEC/18`, `22`) | `appendFileSync` in `src/observability/event-sink.ts` and `src/security/audit-logger.ts` | Replace with async queued writers + rotation/backpressure |
-| GAP-OBS-002 | Medium | Bounded long-running memory usage (`docs/SPEC/18`) | Unbounded histogram/capture growth in `src/observability/metrics.ts` and `src/observability/emitter.ts` | Bound cardinality and capture buffers with reset/export strategy |
-| GAP-SEC-001 | Medium | Integrity-preserving audit writes under concurrency (`docs/SPEC/19`) | Hash-chain writes are non-atomic in `src/security/audit-logger.ts` | Introduce single-writer locking/queue for audit entry sequencing |
-| GAP-OPS-001 | Medium | Dependency-aware readiness (`docs/SPEC/22`) | `/healthz` and `/readyz` static success in `src/server/routes.ts` | Add dependency probes and 503 semantics |
-| GAP-OPS-002 | Medium | Production endpoint protection is enforced (`docs/SPEC/04`, `22`) | Operational endpoint protection is optional when token unset in `src/server/routes.ts` | Add production fail-fast guard for operational endpoint protection |
+| GAP-OBS-001 | ~~Medium~~ **Closed** | Non-blocking bounded sinks (`docs/SPEC/18`, `22`) | **`createFileEventSink`** / **`createFileAuditSink`**: async **`appendFile`**, bounded queues, rotation, backpressure — **verified 2026-03-24** | ~~Replace sync sinks~~ **DONE** (optional `*_FSYNC` env for durability) |
+| GAP-OBS-002 | ~~Medium~~ **Partial** | Bounded long-running memory usage (`docs/SPEC/18`) | Metrics/emitter use **series caps**, capture ring, Prometheus drop counters (`metrics.ts`, `emitter.ts`) — **2026-03-24** | Monitor cardinality under load; tune caps |
+| GAP-SEC-001 | ~~Medium~~ **Closed** | Integrity-preserving audit writes under concurrency (`docs/SPEC/19`) | **`writeAuditEventAsync`** + lock; **`verifyAuditLogFileIntegrity`** for on-disk JSONL — **2026-03-24** | ~~Single-writer~~ **DONE** (optional fsync + ops verify) |
+| GAP-OPS-001 | ~~Medium~~ **Closed** | Dependency-aware readiness (`docs/SPEC/22`) | **`checkOperationalDependenciesAsync`** drives `/healthz` and `/readyz` with **503** when unhealthy/not ready — **verified 2026-03-24** | ~~Add dependency probes~~ **DONE** (configure `DependenciesConfig`) |
+| GAP-OPS-002 | ~~Medium~~ **Closed** | Production endpoint protection is enforced (`docs/SPEC/04`, `22`) | **`bootstrap()`** throws if **`NODE_ENV=production`** and **`OPERATIONAL_BEARER_TOKEN`** unset; `isOperationalAccessAllowed` then always requires matching Bearer on `/healthz`, `/readyz`, `/metrics`, `/admin/*`, etc. — **verified 2026-03-24** | ~~Fail-fast production~~ **DONE** (dev/staging may omit token → routes allow per `routes.ts`) |
 | GAP-DOC-001 | Medium | Plan status reflects runtime truth | `docs/PLANS/Scope-of-Work.md` and `docs/PLANS/00_Master-Delivery-Plan.md` contain "complete" language while critical runtime stubs remain | Update plan status and checklists to distinguish implemented vs production-ready |
 | GAP-DOC-002 | Medium | Config/flag naming consistency | Master plan references `platform.master_rollout_enabled`; runtime uses `platform_production_rollout_enabled` (`src/config/schema.ts`) | Normalize naming and references across docs and code |
 
@@ -108,15 +111,17 @@ This SOW defines the remaining work to align the documented architecture/operati
 
 ## WP-1 Identity and Trust Boundary (Critical Path)
 
-**Covers:** `GAP-AUTH-001` to `GAP-AUTH-004`, `GAP-OPS-002`  
+**Covers:** `GAP-AUTH-001` to `GAP-AUTH-004` (operational bearer: **`GAP-OPS-002` closed** — production bootstrap)  
 **Objective:** Enforce production-grade identity, caller binding, and ingress controls.
+
+> **2026-03-24 audit:** `/token/exchange`, caller strict-match when verified context is present, and ingress rate limiting on query routes are **implemented**; see gap register rows for `GAP-AUTH-001`–`004`. **`GAP-OPS-002` closed:** production requires operational bearer. Remaining: **`GAP-AUTH-003`** nuances.
 
 - Implement `/token/exchange` endpoint and AI JWT minting flow.
 - Add IdP/app registry for issuer, JWKS, audience, and claim mapping.
 - Derive caller context from verified claims; reject body/claim mismatch.
 - Require AI JWT on `/v1/query` in production profile.
 - Add deterministic ingress rate limiting returning `RATE_LIMITED`.
-- Add production bootstrap guard to prevent unprotected operational endpoints.
+- ~~Add production bootstrap guard~~ **Done** — `OPERATIONAL_BEARER_TOKEN` required in production (`bootstrap/index.ts`).
 
 **Exit Criteria**
 
@@ -133,8 +138,8 @@ This SOW defines the remaining work to align the documented architecture/operati
 **Objective:** Remove contract drift and make runtime semantics explicit.
 
 - Make an explicit product decision:
-  - **Path A:** implement async queue lifecycle (`accepted`, `job_id`, `GET /v1/jobs/{job_id}`, idempotency), or
-  - **Path B:** narrow contracts/docs to sync-only behavior.
+  - **Path A:** finish async/idempotency semantics to match contracts (HTTP job API exists when queue is configured; **`POST /v1/query`** remains sync with `mode: "sync"`), or
+  - **Path B:** narrow contracts/docs to as-built (sync query + optional job API).
 - Align `RequestEnvelope` and `ResponseEnvelope` fields with documented spec.
 - Ensure telemetry contract fields are either implemented or removed from docs.
 
@@ -211,16 +216,18 @@ This SOW defines the remaining work to align the documented architecture/operati
 **Covers:** `GAP-OBS-001`, `GAP-OBS-002`, `GAP-SEC-001`, `GAP-OPS-001`  
 **Objective:** Remove operational fragility and unbounded growth paths.
 
-- Replace sync sink writes with async queued sinks and rotation policies.
-- Add bounded in-memory metric/capture policies.
-- Add single-writer serialization for audit hash-chain integrity.
-- Implement dependency checks for `/healthz` and `/readyz`.
+> **2026-03-24:** Async queued file sinks + rotation/backpressure are **implemented**; audit hash-chain uses **async lock** + optional **`verifyAuditLogFileIntegrity`** / **`AUDIT_LOG_FSYNC`**; metrics/emitter use **caps**; **`/healthz`/`/readyz`** dependency checks **implemented** (`GAP-OPS-001` closed). Remaining: tune caps under load, optional stricter sink durability policy.
+
+- ~~Replace sync sink writes~~ **Done** — async `appendFile` queues; optional `*_FSYNC` env vars.
+- Bounded in-memory metric/capture policies — **largely done**; continue tuning.
+- Audit integrity — **done** for in-process + on-disk verify helper; optional fsync.
+- Dependency checks — **done**.
 
 **Exit Criteria**
 
-- Sink writes are non-blocking under normal operations.
-- Long-running process memory growth is bounded.
-- Readiness accurately reflects dependency health.
+- Sink writes are non-blocking under normal operations (**met**; optional fsync mode excepted).
+- Long-running process memory growth is bounded (**partially met** — monitor).
+- Readiness accurately reflects dependency health (**met**).
 
 ---
 

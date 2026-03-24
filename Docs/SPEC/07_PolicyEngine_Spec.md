@@ -1,8 +1,8 @@
 # 07 Policy Engine Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 8.3, 9.3, 16, 18.1, 18.3).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (identity binding, allowlist alignment, runtime gate enforcement).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 8.3, 9.3, 16, 18.1, 18.3).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (identity binding, allowlist alignment, runtime gate enforcement).
 
 ## Purpose
 Deterministic policy evaluation that translates identity, tenant rules, and risk posture into enforceable execution constraints.
@@ -29,3 +29,5 @@ Deterministic policy evaluation that translates identity, tenant rules, and risk
 - Caller identity must be token-bound (not body-trusted).
 - Unknown issuer, invalid claims, or scope mismatch fail closed.
 - Policy allowlist and registered workflow catalog must remain aligned.
+
+**As-built (2026-03-24):** `evaluatePolicy` in `src/controlplane/policy-evaluator.ts` sets `allowed_pipelines` from `listRegisteredWorkflowIds()` in `src/workflows/registry.ts`, so the default allowlist tracks registered workflow ids (router still must select a workflow matching intent).

@@ -1,8 +1,8 @@
 # 06 Control Plane Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 3, 9.3, 16, 18.3, 18.4).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (runtime enforcement and control-path hardening).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 3, 9.3, 16, 18.3, 18.4).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (runtime enforcement and control-path hardening).
 
 ## Purpose
 Control runtime that governs execution decisions and constraints without directly generating end-user outputs.

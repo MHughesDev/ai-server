@@ -70,9 +70,9 @@ Handle these in your client:
 
 ## Where to Go Deeper
 
-- **Full API contracts and types:** `docs/SPEC/02_API_Contracts.md` or `Docs/SPEC/02_API_Contracts.md`
-- **Overview and canonical types:** `docs/Overview.md` or `Docs/Overview.md`
-- **Architecture:** `docs/Architecture.md` or `Docs/Architecture.md`
+- **Full API contracts and types:** `docs/SPEC/02_API_Contracts.md`
+- **Overview and documentation index:** `docs/ARCHITECTURE/Overview.md`
+- **Architecture (finalized):** `docs/ARCHITECTURE/Architecture_document_Finalized.md`
 - **Contract changelog and version policy:** `src/contracts/CHANGELOG.md`
 
 Use **`/v1/version`** at startup or in your build to confirm contract and API version compatibility with your client.

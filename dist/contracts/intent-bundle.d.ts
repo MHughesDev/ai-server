@@ -1,6 +1,6 @@
 /**
  * IntentBundle – internal Brain Stem output (intent + confidence + complexity).
- * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.2)
+ * @see docs/ARCHITECTURE/Overview.md, docs/ARCHITECTURE/Architecture_document_Finalized.md (6.2)
  */
 import { z } from "zod";
 declare const ComplexitySchema: z.ZodObject<{

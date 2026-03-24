@@ -1,8 +1,8 @@
 # 00 System Overview
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Section 18 defines production target state).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Section 18 defines production target state).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Purpose
 Centralized AI server with a single primary endpoint (`POST /v1/query`) that applies deterministic governance before any AI execution, then runs the selected workflow through model/tool/memory gateways with full traceability.

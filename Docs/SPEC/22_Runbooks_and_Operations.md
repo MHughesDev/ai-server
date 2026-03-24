@@ -1,8 +1,8 @@
 # 22 Runbooks and Operations
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 13, 18.2, 18.8, 18.9, 18.12).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (endpoint protection, sink durability, lifecycle hardening, rollout enforcement).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 13, 18.2, 18.8, 18.9, 18.12).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (endpoint protection, sink durability, lifecycle hardening, rollout enforcement).
 
 ## Operational Endpoints
 - `GET /healthz`
@@ -15,13 +15,13 @@ Production target: these endpoints must be protected by auth/mTLS/private networ
 ## Runbook Index
 | Runbook | Path | Purpose |
 |---|---|---|
-| Query and Policy Failures | `docs/Runbooks/Query-and-Policy-Failures.md` | Query errors, policy/tool denies, budget failures |
-| Release and Rollback | `docs/Runbooks/Release-and-Rollback.md` | Release execution, canary, rollback, emergency mitigation |
-| Multimodal Input Path | `docs/Runbooks/Multimodal-Input-Path.md` | Attachment validation and capability mismatch triage |
-| Memory and Retrieval Outage | `docs/Runbooks/Memory-Retrieval-Outage.md` | Retrieval degradation, citation quality, scope concerns |
-| Harness Readiness Gate | `docs/Runbooks/Harness-Readiness-Gate.md` | L2-99 governance gate and autonomous harness enablement |
-| Observability and Eval | `docs/Runbooks/Observability-and-Eval.md` | Events, metrics, eval regression, alert tuning |
-| CI Bootstrap Troubleshooting | `docs/Runbooks/CI-Bootstrap-Troubleshooting.md` | CI/build/bootstrap incident handling |
+| Query and Policy Failures | `docs/OPERATIONS/RUNBOOKS/Query-and-Policy-Failures.md` | Query errors, policy/tool denies, budget failures |
+| Release and Rollback | `docs/OPERATIONS/RUNBOOKS/Release-and-Rollback.md` | Release execution, canary, rollback, emergency mitigation |
+| Multimodal Input Path | `docs/OPERATIONS/RUNBOOKS/Multimodal-Input-Path.md` | Attachment validation and capability mismatch triage |
+| Memory and Retrieval Outage | `docs/OPERATIONS/RUNBOOKS/Memory-Retrieval-Outage.md` | Retrieval degradation, citation quality, scope concerns |
+| Harness Readiness Gate | `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md` | L2-99 governance gate and autonomous harness enablement |
+| Observability and Eval | `docs/OPERATIONS/RUNBOOKS/Observability-and-Eval.md` | Events, metrics, eval regression, alert tuning |
+| CI Bootstrap Troubleshooting | `docs/OPERATIONS/RUNBOOKS/CI-Bootstrap-Troubleshooting.md` | CI/build/bootstrap incident handling |
 
 ## On-Call and Escalation
 - Primary owner: operations/platform on-call.

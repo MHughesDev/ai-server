@@ -1,8 +1,8 @@
 # 16 Tool Gateway Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 10.4, 12, 16, 18.6).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (stub delegate and sandbox control completeness).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 10.4, 12, 16, 18.6).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (stub delegate and sandbox control completeness).
 
 ## Purpose
 Secure, policy-gated, sandboxed tool execution boundary used only by Tool Engine.

@@ -1,7 +1,7 @@
 /**
  * Governance module for L2-99 Harness Readiness Gate.
  * Scorecard calculation, evidence validation, and decision types.
- * @see docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md
+ * @see docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md
  */
 
 export {

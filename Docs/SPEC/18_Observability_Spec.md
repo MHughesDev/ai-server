@@ -1,8 +1,8 @@
 # 18 Observability Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Section 13 and Section 18.8).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (event retention, sink durability/backpressure, sampling, bounded cardinality).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Section 13 and Section 18.8).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (event retention, sink durability/backpressure, sampling, bounded cardinality).
 
 ## Purpose
 Provide end-to-end traceability for governance decisions, workflow execution, costs, and failures.
@@ -39,3 +39,8 @@ Provide end-to-end traceability for governance decisions, workflow execution, co
 - Event/audit sinks are non-blocking and operationally bounded.
 - Sink settings are config-validated before serving production traffic.
 - Metrics/cardinality and in-memory capture buffers are bounded for long-running services.
+
+**As-built (2026-03-24):**
+- **Metrics:** `src/observability/metrics.ts` caps counter series (`MAX_COUNTER_SERIES`), histogram series, and per-series samples; exposes drop counts as `ai_server_metrics_dropped_total{dimension=…}` in Prometheus text; optional `exportAndResetCounters()` for counter scrape+reset.
+- **Emitter capture:** `createEmitter` uses `maxCaptureSize` (default 1000) with FIFO eviction (`emitter.ts`).
+- **Event/audit file sinks:** async `appendFile` + bounded queues + rotation (`event-sink.ts`, `audit-logger.ts`). **Production:** `assertProductionSinkPathsWritable` in bootstrap when paths are set (`sink-paths.ts`). Optional **`AUDIT_LOG_FSYNC`** / **`OBSERVABILITY_EVENT_SINK_FSYNC`** → per-append `fsync` (`sync-file-to-disk.ts`). **Shutdown:** `SIGINT`/`SIGTERM` — drain audit file queue via **`shutdownPersistentAuditFileSink`**, then **`IEventSink.close()`** for the event file sink (`server/index.ts`).

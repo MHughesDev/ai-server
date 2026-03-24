@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-04
 - Plan Name: Observability and Evaluation System
-- Linked SPEC: `docs/Overview.md` sections `12`, `18`, `21`, `22`
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `12`, `18`, `21`, `22`
 - Owner(s): Observability Lead
 - Contributors: Runtime, Control Plane, QA, Security, SRE
 - Status: `complete`
@@ -11,7 +11,7 @@
 - Created: 2026-02-18
 - Last Updated: 2026-02-26
 - Review Cadence: Weekly
-- Implementation: L2-04 implementation plan complete; event schema, redaction, trace context, metrics (including Prometheus exposition at GET /metrics), WORKFLOW_START/END and ENGINE_* with cost/latency, span hierarchy acceptance tests, eval harness and runbook in place. See `docs/PLANS/Implementation-plans/L2-04_Observability-and-Evaluation-Implementation.md` section 14.
+- Implementation: L2-04 implementation plan complete; event schema, redaction, trace context, metrics (including Prometheus exposition at GET /metrics), WORKFLOW_START/END and ENGINE_* with cost/latency, span hierarchy acceptance tests, eval harness and runbook in place. See `docs/PLANS/implementation/L2-04_Observability-and-Evaluation-Implementation.md` section 14.
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose

@@ -1,6 +1,6 @@
 /**
  * Readiness scorecard calculator and threshold logic (L2-99).
- * @see docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Section 7.1
+ * @see docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Section 7.1
  */
 import type { CategoryScore, EvidenceItem, ReadinessDimension, ReadinessScorecard, RiskEntry, ScorecardThresholds } from "./types.js";
 /** Default thresholds per L2-99 constraints (critical security, evidence completeness) */

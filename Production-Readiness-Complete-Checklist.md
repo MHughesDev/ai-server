@@ -513,11 +513,11 @@ Each agent must produce a brief handoff document for Agent 6:
 
 ### 11.2 Runbooks & Operations
 - [x] Create runbook for each alert type (what to do when X fires)
-  - `docs/Runbooks/Alert-Canary-Failure.md` - Canary failure response procedures
-  - `docs/Runbooks/Alert-Health-Check-Degradation.md` - Health check degradation response
+  - `docs/OPERATIONS/RUNBOOKS/Alert-Canary-Failure.md` - Canary failure response procedures
+  - `docs/OPERATIONS/RUNBOOKS/Alert-Health-Check-Degradation.md` - Health check degradation response
   - Decision matrices, escalation paths, rollback procedures included
 - [x] Document infrastructure-as-code examples (Terraform/K8s/CloudFormation)
-  - `docs/Runbooks/Infrastructure-as-Code-Examples.md` comprehensive guide
+  - `docs/OPERATIONS/RUNBOOKS/Infrastructure-as-Code-Examples.md` comprehensive guide
   - Kubernetes manifests (deployment, service, ingress, HPA, PDB)
   - Terraform (EKS, VPC, ElastiCache, ALB, Secrets Manager)
   - Docker Compose for local development
@@ -528,7 +528,7 @@ Each agent must produce a brief handoff document for Agent 6:
   - AWS resource pricing for small/medium/large/enterprise scales
   - Scaling cost projections table
 - [x] Write deployment runbook with step-by-step procedures
-  - `docs/Runbooks/Deployment-Runbook.md` complete deployment guide
+  - `docs/OPERATIONS/RUNBOOKS/Deployment-Runbook.md` complete deployment guide
   - Pre-deployment checklist
   - Standard deployment (blue/green), canary deployment, Helm deployment
   - Post-deployment verification scripts

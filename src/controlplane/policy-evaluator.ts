@@ -7,6 +7,7 @@ import type { PolicyDecision, MaxBudgets } from "../contracts/policy-decision.js
 import type { PolicyDenyReason } from "../contracts/policy-decision.js";
 import type { PolicyInput } from "./policy-input.js";
 import { getConfig } from "../bootstrap/index.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { listRegisteredWorkflowIds } from "../workflows/registry.js";
 
 /** Parse comma-separated env list; empty string or unset => [] */
@@ -63,7 +64,14 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   const allowTools = allowedPipelines.includes("coding_agent") ? ["stub_tool"] : [];
   let memoryScope: "user" | "project" | "org" | "none" = "none";
   try {
-    memoryScope = getConfig().flags.enable_org_memory ? "org" : "none";
+    const cfg = getConfig();
+    memoryScope = resolveFeatureFlagEnabled("enable_org_memory", cfg, {
+      org_id: caller.orgId,
+      app_id: caller.appId,
+      user_id: caller.userId,
+    })
+      ? "org"
+      : "none";
   } catch {
     // Unit tests may not call bootstrap(); keep none
   }

@@ -50,6 +50,14 @@ export interface JobSubmission {
     user_id?: string;
     trace_id?: string;
   };
+  /**
+   * When set (from Idempotency-Key on POST /v1/query/async), duplicate submits with the same
+   * tenant scope + key + body fingerprint return the same job; mismatched body → conflict.
+   */
+  idempotency?: {
+    key: string;
+    fingerprint: string;
+  };
 }
 
 export interface JobResult {

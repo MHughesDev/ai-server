@@ -9,7 +9,7 @@
  * data foundation and can rely on canonical request, intent, policy, plan, caller,
  * and optional retrieval context without re-deriving from raw request.
  *
- * @see docs/SPEC/02_API_Contracts.md, docs/Architecture_document_Finalized.md (orchestration flow)
+ * @see docs/SPEC/02_API_Contracts.md, docs/ARCHITECTURE/Architecture_document_Finalized.md (orchestration flow)
  * @see L2-99 Deferred Coding Agent Harness Readiness Gate
  */
 import { z } from "zod";

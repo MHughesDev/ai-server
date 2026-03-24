@@ -1,8 +1,8 @@
 # 14 Pipelines Catalog
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 11, 16, 18.4).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 11, 16, 18.4).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Terminology
 - Architecture term: **workflow**.

@@ -275,9 +275,9 @@ export const ConfigSchema = z.object({
   tlsKeyPath: z.string().min(1).optional(),
   /** HTTPS: path to TLS certificate file; when set with tlsKeyPath, HTTPS server is started */
   tlsCertPath: z.string().min(1).optional(),
-  /** Optional persistent audit sink path (validated). */
+  /** Optional persistent audit sink (`AUDIT_LOG_PATH`). Production: parent dir must exist and be writable (`assertProductionSinkPathsWritable`). Optional `AUDIT_LOG_FSYNC=true` for per-append fsync. */
   auditLogPath: z.string().min(1).optional(),
-  /** Optional persistent observability event sink path (validated). */
+  /** Optional observability NDJSON sink (`OBSERVABILITY_EVENT_SINK_PATH`). Same production rules. Optional `OBSERVABILITY_EVENT_SINK_FSYNC=true`. */
   observabilityEventSinkPath: z.string().min(1).optional(),
   /** Gap 3A: Async job queue configuration */
   queueBackend: z.enum(["memory", "redis", "postgres"]).default("memory"),

@@ -1,8 +1,8 @@
 # 03 Component Map
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 3, 9, 10, 11, 12).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 3, 9, 10, 11, 12).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Layered Components
 - **Layer 4 (Orchestration and governance):** Ingress, Brain Stem, policy evaluation, budget/resource controls, router/dispatch gate, execution supervision.

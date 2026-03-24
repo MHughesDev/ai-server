@@ -79,13 +79,13 @@ Created `openapi.yaml` with:
 
 ### 6. Alert-Specific Runbooks (Phase 11.2)
 
-Created `docs/Runbooks/`:
+Created `docs/OPERATIONS/RUNBOOKS/`:
 - `Alert-Canary-Failure.md` - Canary failure response procedures
 - `Alert-Health-Check-Degradation.md` - Health check issues response
 
 ### 7. Infrastructure as Code Examples (Phase 11.2)
 
-Created `docs/Runbooks/Infrastructure-as-Code-Examples.md` with:
+Created `docs/OPERATIONS/RUNBOOKS/Infrastructure-as-Code-Examples.md` with:
 - Kubernetes manifests (deployment, service, ingress, HPA, PDB)
 - Terraform configuration (EKS, VPC, ElastiCache, ALB)
 - Docker Compose for local development
@@ -95,7 +95,7 @@ Created `docs/Runbooks/Infrastructure-as-Code-Examples.md` with:
 
 ### 8. Deployment Runbook (Phase 11.2)
 
-Created `docs/Runbooks/Deployment-Runbook.md` with:
+Created `docs/OPERATIONS/RUNBOOKS/Deployment-Runbook.md` with:
 - Pre-deployment checklist
 - Standard deployment procedures (blue/green, canary)
 - Helm deployment
@@ -170,10 +170,10 @@ src/testing/load-chaos.test.ts              (NEW)
 src/testing/contract-compatibility.test.ts   (NEW)
 src/testing/integration-mocked.test.ts       (NEW)
 openapi.yaml                                 (NEW)
-docs/Runbooks/Alert-Canary-Failure.md        (NEW)
-docs/Runbooks/Alert-Health-Check-Degradation.md (NEW)
-docs/Runbooks/Infrastructure-as-Code-Examples.md (NEW)
-docs/Runbooks/Deployment-Runbook.md          (NEW)
+docs/OPERATIONS/RUNBOOKS/Alert-Canary-Failure.md        (NEW)
+docs/OPERATIONS/RUNBOOKS/Alert-Health-Check-Degradation.md (NEW)
+docs/OPERATIONS/RUNBOOKS/Infrastructure-as-Code-Examples.md (NEW)
+docs/OPERATIONS/RUNBOOKS/Deployment-Runbook.md          (NEW)
 ```
 
 ### Modified Files
@@ -217,10 +217,10 @@ Before Agent 6 completes integration:
 | Document | Location | Purpose |
 |----------|----------|---------|
 | OpenAPI Spec | `openapi.yaml` | API documentation, client generation |
-| Canary Failure Runbook | `docs/Runbooks/Alert-Canary-Failure.md` | Incident response |
-| Health Check Runbook | `docs/Runbooks/Alert-Health-Check-Degradation.md` | Incident response |
-| IaC Examples | `docs/Runbooks/Infrastructure-as-Code-Examples.md` | Deployment guides |
-| Deployment Runbook | `docs/Runbooks/Deployment-Runbook.md` | Release procedures |
+| Canary Failure Runbook | `docs/OPERATIONS/RUNBOOKS/Alert-Canary-Failure.md` | Incident response |
+| Health Check Runbook | `docs/OPERATIONS/RUNBOOKS/Alert-Health-Check-Degradation.md` | Incident response |
+| IaC Examples | `docs/OPERATIONS/RUNBOOKS/Infrastructure-as-Code-Examples.md` | Deployment guides |
+| Deployment Runbook | `docs/OPERATIONS/RUNBOOKS/Deployment-Runbook.md` | Release procedures |
 | dist/ Decision | `README.md` | Build artifact policy |
 
 ---

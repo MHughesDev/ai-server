@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-05
 - Plan Name: Security, Isolation, and Compliance Controls
-- Linked SPEC: `docs/Overview.md` sections `07`, `16`, `19`, `22`
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `07`, `16`, `19`, `22`
 - Owner(s): Security Lead
 - Contributors: Platform, Runtime, Control Plane, SRE, Compliance
 - Status: `draft`

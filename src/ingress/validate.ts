@@ -25,7 +25,7 @@ export interface IngressValidateOptions {
   contentLength?: number;
   /** Optional request id from header (normalized into envelope if envelope missing) */
   requestIdHeader?: string;
-  /** Auth stub: if true and authHeader missing, reject with AUTH_INVALID */
+  /** If true and authHeader missing, reject with AUTH_INVALID */
   requireAuthHeader?: boolean;
   /** Auth header value expected (e.g. Bearer token) */
   authHeader?: string;

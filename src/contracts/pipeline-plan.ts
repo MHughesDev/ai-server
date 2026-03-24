@@ -1,6 +1,6 @@
 /**
  * PipelinePlan – internal Router output (concrete execution setup).
- * @see docs/Overview.md, docs/Architecture_document_Finalized.md (6.4), SPEC 13
+ * @see docs/ARCHITECTURE/Overview.md, docs/ARCHITECTURE/Architecture_document_Finalized.md (6.4), SPEC 13
  */
 
 import { z } from "zod";

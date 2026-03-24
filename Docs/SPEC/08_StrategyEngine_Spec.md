@@ -1,7 +1,7 @@
 # 08 Strategy Engine Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 3, 9.3, 11, 16).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 3, 9.3, 11, 16).
 - Implementation status: `docs/CODEBASE-DOCS-VERIFICATION-REPORT.md` (verified features vs documentation).
 
 ## Purpose

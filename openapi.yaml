@@ -14,6 +14,12 @@ info:
     checks are not applied (still use network controls in production).
 
     **Async jobs:** Job endpoints return `503` with `ASYNC_NOT_AVAILABLE` when no queue is configured.
+
+    **Sync vs async semantics:** `POST /v1/query` completes in one HTTP response and returns a `ResponseEnvelope`
+    whose `mode` is always **`sync`** when present. Async work is **not** selected via `RequestEnvelope.mode`
+    (`async` / `auto` are rejected). Use **`POST /v1/query/async`** for job acceptance (`202` + `job_id`), then
+    poll **`GET /v1/jobs/{jobId}`**. Optional header **`Idempotency-Key`** on **`POST /v1/query/async`** deduplicates job creation per tenant scope (see that path). JSON body **`idempotency_key`** and other unknown keys remain rejected (strict `RequestEnvelope`).
+    Canonical JSON shapes match `src/contracts/request-envelope.ts` and `response-envelope.ts` (Zod).
   version: "2024-01-01"
   contact:
     name: AI Server Team
@@ -164,6 +170,9 @@ paths:
   /v1/query:
     post:
       summary: Synchronous query (primary entrypoint)
+      description: |
+        Returns `ResponseEnvelope` on success. When `runtime_mvp_query_chat_enabled` is off, returns **404**
+        with body `{ "error": "MVP query endpoint not enabled" }` (not a full `ResponseEnvelope`).
       operationId: postV1Query
       tags: [Query]
       security:
@@ -176,11 +185,17 @@ paths:
               $ref: "#/components/schemas/RequestEnvelope"
       responses:
         "200":
-          description: Response envelope
+          description: Response envelope (`mode` is `sync` when present)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResponseEnvelope"
+        "404":
+          description: MVP query disabled (non-envelope error body)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MvpQueryDisabledResponse"
         "4XX":
           description: Rejection / policy / rate limit
         "5XX":
@@ -199,6 +214,15 @@ paths:
           required: false
           schema:
             type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: |
+            When present, duplicate submits with the same key and identical logical body (caller + input + preferences + mode + deadline + contract_version; not `request_id`) return the same `job_id`.
+            Same key with a different body returns 409 `IDEMPOTENCY_KEY_CONFLICT`. Scoped by caller org/app/user. Max 256 characters after trim.
+          schema:
+            type: string
+            maxLength: 256
       requestBody:
         required: true
         content:
@@ -211,17 +235,11 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: accepted
-                  job_id:
-                    type: string
-                  status_url:
-                    type: string
-                  created_at:
-                    type: string
+                $ref: "#/components/schemas/JobAccepted"
+        "400":
+          description: Invalid payload (e.g. Idempotency-Key too long)
+        "409":
+          description: Idempotency-Key reused with a different request body
         "503":
           description: Async not available or rollout disabled
 
@@ -469,108 +487,244 @@ components:
         When unset, the server does not enforce this scheme on operational routes.
 
   schemas:
-    RequestEnvelope:
+    RequestCaller:
       type: object
-      required:
-        - version
-        - request_id
-        - timestamp
-        - intent
+      additionalProperties: false
+      required: [app_id, user_id, org_id]
       properties:
-        version:
-          type: string
-        request_id:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-        intent:
-          $ref: "#/components/schemas/IntentBundle"
-        pipeline_hint:
-          type: object
-          additionalProperties: true
-
-    IntentBundle:
-      type: object
-      required:
-        - intent_id
-        - scope
-        - input_artifacts
-      properties:
-        intent_id:
-          type: string
-        scope:
-          $ref: "#/components/schemas/Scope"
-        input_artifacts:
-          type: array
-          items:
-            $ref: "#/components/schemas/TypedArtifact"
-        context_artifacts:
-          type: array
-          items:
-            $ref: "#/components/schemas/TypedArtifact"
-        policy_constraints:
-          type: object
-          additionalProperties: true
-
-    Scope:
-      type: object
-      required:
-        - org_id
-        - app_id
-        - user_id
-      properties:
-        org_id:
-          type: string
         app_id:
           type: string
+          minLength: 1
         user_id:
           type: string
-        project_id:
+          minLength: 1
+        org_id:
+          type: string
+          minLength: 1
+        session_id:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+          default: []
+
+    RequestAttachment:
+      type: object
+      additionalProperties: false
+      required: [id, type]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum: [image, pdf, json, other]
+        content_b64:
+          type: string
+        uri:
+          type: string
+          format: uri
+        meta:
+          type: object
+          additionalProperties: false
+          properties:
+            filename:
+              type: string
+            mime:
+              type: string
+
+    RequestInput:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestAttachment"
+          default: []
+        structured:
+          type: object
+          additionalProperties: true
+
+    RequestPreferences:
+      type: object
+      additionalProperties: false
+      required: [response_format, verbosity, stream]
+      properties:
+        response_format:
+          type: string
+          enum: [text, json, markdown]
+        verbosity:
+          type: string
+          enum: [low, medium, high]
+        stream:
+          type: boolean
+
+    RequestEnvelope:
+      type: object
+      additionalProperties: false
+      description: |
+        Strict ingress body for `POST /v1/query` and `POST /v1/query/async` (matches Zod `RequestEnvelopeSchema`).
+        Unknown keys (e.g. `idempotency_key`, top-level `timestamp`) are rejected. `mode` may only be `"sync"` or omitted.
+      required: [request_id, caller]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        caller:
+          $ref: "#/components/schemas/RequestCaller"
+        input:
+          $ref: "#/components/schemas/RequestInput"
+          default: {}
+        preferences:
+          $ref: "#/components/schemas/RequestPreferences"
+        mode:
+          type: string
+          enum: [sync]
+        deadline_ms:
+          type: integer
+          minimum: 1
+        contract_version:
+          type: string
+          default: "v1"
+
+    ResponseCitation:
+      type: object
+      additionalProperties: false
+      required: [source, ref]
+      properties:
+        source:
+          type: string
+        ref:
+          type: string
+        span:
           type: string
 
-    TypedArtifact:
+    ResponseOutputAttachment:
       type: object
-      required:
-        - artifact_id
-        - artifact_kind
-        - schema_ref
-        - encoding
-        - content
+      additionalProperties: false
       properties:
+        artifact_uri:
+          type: string
         artifact_id:
           type: string
         artifact_kind:
           type: string
-        schema_ref:
+
+    ResponseOutput:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
           type: string
-        encoding:
+        structured:
+          type: object
+          additionalProperties: true
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResponseCitation"
+          default: []
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResponseOutputAttachment"
+          default: []
+
+    ResponseTelemetry:
+      type: object
+      additionalProperties: false
+      properties:
+        pipeline:
           type: string
-        content:
+        models_used:
+          type: array
+          items:
+            type: string
+          default: []
+        tool_calls:
+          type: integer
+          minimum: 0
+          default: 0
+        tokens_in:
+          type: integer
+          minimum: 0
+          default: 0
+        tokens_out:
+          type: integer
+          minimum: 0
+          default: 0
+        cost_usd_est:
+          type: number
+          minimum: 0
+          default: 0
+        latency_ms:
+          type: integer
+          minimum: 0
+          default: 0
+
+    ResponseErrorNested:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        detail:
           type: object
           additionalProperties: true
 
     ResponseEnvelope:
       type: object
-      required:
-        - version
-        - request_id
-        - timestamp
-        - status
+      additionalProperties: false
+      description: |
+        Success path for `POST /v1/query` (matches Zod `ResponseEnvelopeSchema`). `mode` is always `sync` when present.
+      required: [request_id, status]
       properties:
-        version:
-          type: string
         request_id:
           type: string
-        timestamp:
-          type: string
-          format: date-time
+          format: uuid
         status:
           type: string
-        trace_id:
-          type: string
+          enum: [ok, blocked, error]
+        output:
+          $ref: "#/components/schemas/ResponseOutput"
+        telemetry:
+          $ref: "#/components/schemas/ResponseTelemetry"
         error:
-          $ref: "#/components/schemas/ErrorDetail"
+          $ref: "#/components/schemas/ResponseErrorNested"
+        mode:
+          type: string
+          enum: [sync]
+
+    MvpQueryDisabledResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: MVP query endpoint not enabled
+
+    JobAccepted:
+      type: object
+      additionalProperties: false
+      required: [status, job_id, status_url, created_at]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        job_id:
+          type: string
+        status_url:
+          type: string
+        created_at:
+          type: string
 
     ErrorDetail:
       type: object

@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-02
 - Plan Name: MVP Runtime (Single Endpoint + Chat)
-- Linked SPEC: `docs/Overview.md` sections `02`, `04`, `05`, `15`, `18`; `docs/Architecture_document_Finalized.md` milestone 1
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` sections `02`, `04`, `05`, `15`, `18`; `docs/ARCHITECTURE/Architecture_document_Finalized.md` milestone 1
 - Owner(s): Runtime Lead
 - Contributors: API, Model Gateway, Observability, QA
 - Status: `draft`

@@ -22,8 +22,10 @@ function sanitizeLabelKey(key: string): string {
   return ALLOWED_LABELS.has(key) ? key : "unknown";
 }
 
-/** In-memory counters (for GET /metrics and tests).
- * PRODUCTION: Counters and histogram arrays grow unbounded with label combinations; long-lived processes may need bounded cardinality, periodic export-and-reset, or a fixed-size reservoir for histogram values.
+/** In-memory counters and histograms for GET /metrics (see `MAX_*` caps below).
+ * New counter/histogram **series** beyond the cap are dropped (counters increment `droppedCounterSeries`).
+ * Per-series histogram samples use a fixed reservoir (`shift` oldest) when over cap.
+ * Use `exportAndResetCounters()` for periodic scrape+reset of counter values.
  */
 const counters: Map<string, number> = new Map();
 const histograms: Map<string, number[]> = new Map();
@@ -144,6 +146,18 @@ export function getPrometheusText(): string {
     lines.push(`${countName}${formatLabels(labels)} ${data.count}`);
     lines.push(`${sumName}${formatLabels(labels)} ${data.sum}`);
   }
+
+  const drops = getMetricsInternalStats();
+  lines.push("# TYPE ai_server_metrics_dropped_total counter");
+  lines.push(
+    `ai_server_metrics_dropped_total{dimension="counter_series"} ${drops.droppedCounterSeries}`
+  );
+  lines.push(
+    `ai_server_metrics_dropped_total{dimension="histogram_series"} ${drops.droppedHistogramSeries}`
+  );
+  lines.push(
+    `ai_server_metrics_dropped_total{dimension="histogram_sample"} ${drops.droppedHistogramSamples}`
+  );
 
   return lines.length ? lines.join("\n") + "\n" : "# No metrics yet\n";
 }

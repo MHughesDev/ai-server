@@ -1,6 +1,6 @@
 /**
  * Evidence validation for L2-99 readiness gate (completeness and freshness).
- * @see docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Phase 1
+ * @see docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md Phase 1
  */
 import { READINESS_DIMENSIONS } from "./types.js";
 /** Default max age for evidence in days before considered stale */

@@ -2,8 +2,8 @@
 
 **Purpose:** Actionable list of tasks to clean up the codebase and finalize the server backend before release or handoff.  
 **Source:** Full codebase review (src/, docs/, config, tests, build).  
-**Last updated:** 2026-02-27.  
-**Completed this session:** §1.1–1.2 (paths, .gitignore), §2 (zod, CONFIG_FILE comment), §5.1–5.2 (runbook/SPEC links, Architecture canonical = `docs/Architecture_document_Finalized.md`), §6.1 (verify:sow passed).
+**Last updated:** 2026-03-24.  
+**Completed this session:** §1.1–1.2 (paths, .gitignore), §2 (zod, CONFIG_FILE comment), §5.1–5.2 (runbook/SPEC links, Architecture canonical = `docs/ARCHITECTURE/Architecture_document_Finalized.md`), §6.1 (verify:sow passed). **2026-03-24:** Docs restructured per `docs/TARGET/docs-move-map.md` — `docs/OPERATIONS/`, `docs/OPERATIONS/RUNBOOKS/`, `docs/ARCHITECTURE/`, `docs/REFERENCE/`, `docs/PLANS/implementation/`, `docs/START-HERE.md`.
 
 ---
 
@@ -11,13 +11,11 @@
 
 ### 1.1 Standardize documentation paths
 
-- [x] **Use a single docs path everywhere:** The repo has one docs folder at `docs/` (lowercase). Many references use `Docs/` (capital D), which can break on case-sensitive systems (e.g. Linux).
-- [x] **In `README.md`:** Replace `Docs/PLANS/...` links with `docs/PLANS/...` (lines 13–14 currently use `Docs/`).
-- [x] **In `src/`:** Replace all `@see Docs/...` with `@see docs/...` in JSDoc. Affected areas:
-  - `src/contracts/*.ts`, `src/config/schema.ts`, `src/memory/*.ts`, `src/observability/*.ts`, `src/router/*.ts`, `src/controlplane/*.ts`, `src/brainstem/*.ts`, `src/pipelines/*.ts`, `src/gateways/*.ts`, `src/server/*.ts`, `src/security/*.ts`, `src/rollout/*.ts`, `src/ingress/*.ts`, `src/eval/*.ts`
-- [x] **In `docs/`:** Replace internal links that use `Docs/` with `docs/` in:
-  - Scope-of-Work.md, 00_Master-Delivery-Plan.md, SPEC 20/22, Runbooks (Harness-Readiness-Gate, Release-and-Rollback, Query-and-Policy-Failures), and L2-01 through L2-99 implementation/handoff docs.
-- [x] **Architecture references:** Some contracts reference `Docs/Architecture.md`. Confirm whether to point to `docs/Architecture_document_Finalized.md` or keep a redirect/symlink; then update `src/contracts/pipeline-plan.ts`, `response-envelope.ts`, etc. to the chosen path.
+- [x] **Use a single docs path everywhere:** Canonical tree is `docs/` (lowercase). On Windows, `Docs/` may alias the same folder; links and `@see` should use `docs/` for Linux CI.
+- [x] **Layout (2026-03-24):** Architecture and overview → `docs/ARCHITECTURE/`; production readiness + deploy → `docs/OPERATIONS/`; runbooks → `docs/OPERATIONS/RUNBOOKS/`; deep reference → `docs/REFERENCE/`; L2 write-ups → `docs/PLANS/implementation/`; bootstrap → `docs/START-HERE.md`. See `docs/TARGET/docs-move-map.md`.
+- [x] **In `README.md` / `AGENTS.md`:** Links updated to new paths.
+- [x] **In `src/`:** JSDoc `@see` uses `docs/ARCHITECTURE/...`, `docs/SPEC/...`, `docs/PLANS/implementation/...` as applicable.
+- [x] **In `docs/`:** Internal links updated; SPEC 22 runbook index points at `docs/OPERATIONS/RUNBOOKS/`.
 
 ### 1.2 Git and build artifacts
 
@@ -89,12 +87,12 @@
 ### 5.1 Cross-references
 
 - [x] **Runbook links:** In Release-and-Rollback and other runbooks, use a single docs path (e.g. `docs/SPEC/20_Config_and_FeatureFlags.md`) and align with the path standard chosen in §1.1.
-- [ ] **SPEC 22 and SOW:** Verify runbook index and “Runbooks and Operations” links point to existing files under `docs/Runbooks/` and use the chosen path casing.
+- [ ] **SPEC 22 and SOW:** Verify runbook index and “Runbooks and Operations” links point to existing files under `docs/OPERATIONS/RUNBOOKS/` and use the chosen path casing.
 
 ### 5.2 Stale or duplicate docs
 
-- [ ] **Known-Gaps:** `docs/PLANS/Implementation-plans/Known-Gaps-Consolidated.md` was deleted; ensure no broken links remain to it and that any consolidated gaps are reflected in Scope-of-Work §7 or the Master plan.
-- [x] **Architecture.md vs Architecture_document_Finalized.md:** Both exist under `docs/`. Decide which is canonical and update all references; consider redirect or single file to avoid confusion. Canonical set to `docs/Architecture_document_Finalized.md`.
+- [ ] **Known-Gaps:** `docs/PLANS/implementation/Known-Gaps-Consolidated.md` was deleted; ensure no broken links remain to it and that any consolidated gaps are reflected in Scope-of-Work §7 or the Master plan.
+- [x] **Architecture.md vs Architecture_document_Finalized.md:** Both exist under `docs/`. Decide which is canonical and update all references; consider redirect or single file to avoid confusion. Canonical set to `docs/ARCHITECTURE/Architecture_document_Finalized.md`.
 
 ---
 
@@ -119,7 +117,7 @@
 
 ### 7.2 Runbooks
 
-- [ ] **Runbook index:** Ensure SPEC 22 (or equivalent) lists all runbooks (Query-and-Policy-Failures, Release-and-Rollback, Harness-Readiness-Gate, Observability-and-Eval, Memory-Retrieval-Outage, etc.) with correct paths and that each file exists under `docs/Runbooks/`.
+- [ ] **Runbook index:** Ensure SPEC 22 (or equivalent) lists all runbooks (Query-and-Policy-Failures, Release-and-Rollback, Harness-Readiness-Gate, Observability-and-Eval, Memory-Retrieval-Outage, etc.) with correct paths and that each file exists under `docs/OPERATIONS/RUNBOOKS/`.
 
 ---
 
@@ -144,5 +142,5 @@
 
 - **Scope of Work:** `docs/PLANS/Scope-of-Work.md` (§4.1 execution, §7 gaps, §9 segmented tasks).
 - **Verification command:** `npm run verify:sow`
-- **Architecture:** `docs/Architecture_document_Finalized.md`
+- **Architecture:** `docs/ARCHITECTURE/Architecture_document_Finalized.md`
 - **Config/feature flags:** `docs/SPEC/20_Config_and_FeatureFlags.md`

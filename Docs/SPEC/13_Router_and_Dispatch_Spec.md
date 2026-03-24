@@ -1,7 +1,7 @@
 # 13 Router and Dispatch Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 9.3, 11, 16, 18.4, 18.10).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 9.3, 11, 16, 18.4, 18.10).
 - Implementation status: `docs/CODEBASE-DOCS-VERIFICATION-REPORT.md` (verified features vs documentation).
 
 ## Purpose

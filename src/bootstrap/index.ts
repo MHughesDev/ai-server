@@ -6,8 +6,12 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
+import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
-import { validateReleaseConfig } from "../rollout/policy.js";
+import {
+  assertProductionReleaseMetadataWhenRollout,
+  validateReleaseConfig,
+} from "../rollout/policy.js";
 import { createJobQueueService, type JobQueueService } from "../queue/job-queue.js";
 import { setJobQueueService } from "../server/routes.js";
 import { initializeFeatureFlags, resetFeatureFlags } from "../config/feature-flags.js";
@@ -82,6 +86,7 @@ export function bootstrap(): Config {
       "OPERATIONAL_BEARER_TOKEN is required in production to protect operational endpoints"
     );
   }
+  assertProductionSinkPathsWritable(config);
   if (config.env === "production" && config.flags.platform_production_rollout_enabled) {
     const syntheticProviders = config.model_gateway.providers
       .filter((p) => p.kind === "stub" || p.kind === "framed_echo")
@@ -101,6 +106,7 @@ export function bootstrap(): Config {
   if (!releaseValidation.valid) {
     console.warn("[bootstrap] release config:", releaseValidation.errors.join("; "));
   }
+  assertProductionReleaseMetadataWhenRollout(config);
   // Gap 3A: Initialize async job queue if configured
   if (process.env.QUEUE_WORKERS_COUNT) {
     jobQueue = createJobQueueService(config, async (request) => {

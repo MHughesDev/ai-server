@@ -1,6 +1,6 @@
 /**
  * Evaluation harness – baseline dataset and regression runner.
- * @see L2-04 Phase 2, Docs/SPEC/12_EvaluationEngine_Spec.md, Docs/SPEC/21_Test_and_Eval_Plan.md
+ * @see L2-04 Phase 2, docs/SPEC/12_EvaluationEngine_Spec.md, docs/SPEC/21_Test_and_Eval_Plan.md
  */
 
 export * from "./types.js";

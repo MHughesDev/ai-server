@@ -54,7 +54,7 @@ curl http://localhost:3000/healthz
 
 ## Environment Variables
 
-See `../docs/Production-Deployment-Guide.md` for complete configuration reference.
+See `../docs/OPERATIONS/Production-Deployment-Guide.md` for complete configuration reference.
 
 ## Production Checklist
 

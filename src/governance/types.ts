@@ -1,6 +1,6 @@
 /**
  * Governance types for L2-99 Harness Readiness Gate.
- * @see docs/PLANS/Implementation-plans/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md
+ * @see docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md
  */
 
 /** Readiness dimensions per L2-99 Section 2.1 */

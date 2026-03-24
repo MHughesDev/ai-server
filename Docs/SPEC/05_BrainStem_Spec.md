@@ -1,8 +1,8 @@
 # 05 Brain Stem Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 2, 8.1, 8.2, 9.2).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 2, 8.1, 8.2, 9.2).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Purpose
 First cognitive layer that converts validated request input into routing-ready internal contracts.

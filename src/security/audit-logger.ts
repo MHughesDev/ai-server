@@ -5,8 +5,11 @@
  */
 
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { createInterface } from "node:readline";
+import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 import type { AuditEvent } from "./types.js";
 
 export interface AuditLogEntry extends AuditEvent {
@@ -17,6 +20,9 @@ export interface AuditLogEntry extends AuditEvent {
 
 /** Optional persistent sink; when set, each entry is written after in-memory append */
 let persistentSink: ((entry: AuditLogEntry) => void | Promise<void>) | null = null;
+
+/** Registered by `createFileAuditSink` for graceful shutdown (drain queue, then stop accepts). */
+let fileAuditSinkShutdownHook: (() => Promise<void>) | null = null;
 
 export interface AuditSinkStatus {
   queueDepth: number;
@@ -34,6 +40,11 @@ export interface FileAuditSinkOptions {
   maxRotatedFiles?: number;
   /** L2-04: Backpressure threshold percentage (0-1), default 0.8 */
   backpressureThreshold?: number;
+  /**
+   * When true, `fsync` the audit file after each append (durability; high latency).
+   * Enable with env `AUDIT_LOG_FSYNC=true` in `server/index.ts`.
+   */
+  fsyncAfterEachWrite?: boolean;
 }
 
 let currentAuditSinkStatus: AuditSinkStatus | null = null;
@@ -45,6 +56,19 @@ export function setAuditSink(
   sink: ((entry: AuditLogEntry) => void | Promise<void>) | null
 ): void {
   persistentSink = sink;
+  if (sink === null) {
+    fileAuditSinkShutdownHook = null;
+  }
+}
+
+/**
+ * Wait for the file audit sink queue (from `createFileAuditSink`) to drain, then stop accepting new file writes.
+ * Safe to call when no file sink was configured (no-op).
+ */
+export async function shutdownPersistentAuditFileSink(): Promise<void> {
+  const hook = fileAuditSinkShutdownHook;
+  if (!hook) return;
+  await hook();
 }
 
 /** L2-04: Set callback for backpressure events */
@@ -61,10 +85,11 @@ export function createFileAuditSink(
   const maxFileSizeBytes = options.maxFileSizeBytes ?? 10 * 1024 * 1024;
   const maxRotatedFiles = options.maxRotatedFiles ?? 3;
   const backpressureThreshold = options.backpressureThreshold ?? 0.8;
+  const fsyncAfterEachWrite = options.fsyncAfterEachWrite === true;
   const queue: string[] = [];
   let droppedEntries = 0;
   let draining = false;
-  const closed = false;
+  let closed = false;
   let lastError: string | null = null;
   let backpressureActive = false;
 
@@ -108,14 +133,17 @@ export function createFileAuditSink(
   }
 
   async function drainQueue(): Promise<void> {
-    if (draining || closed) return;
+    if (draining) return;
     draining = true;
     try {
-      while (queue.length > 0 && !closed) {
+      while (queue.length > 0) {
         const line = queue.shift();
         if (!line) break;
         await maybeRotate(Buffer.byteLength(line));
         await appendFile(filePath, line, "utf8");
+        if (fsyncAfterEachWrite) {
+          await syncFileToDisk(filePath);
+        }
       }
       lastError = null;
     } catch (err) {
@@ -133,13 +161,31 @@ export function createFileAuditSink(
         lastError,
         backpressureActive,
       };
-      if (queue.length > 0 && !closed) {
+      if (queue.length > 0) {
         setImmediate(() => {
           void drainQueue();
         });
       }
     }
   }
+
+  fileAuditSinkShutdownHook = async () => {
+    try {
+      const deadline = Date.now() + 30_000;
+      while ((queue.length > 0 || draining) && Date.now() < deadline) {
+        if (queue.length > 0 && !draining) {
+          void drainQueue();
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (queue.length > 0 || draining) {
+        console.warn("[audit] file sink did not fully drain before shutdown timeout");
+      }
+      closed = true;
+    } finally {
+      fileAuditSinkShutdownHook = null;
+    }
+  };
 
   return (entry: AuditLogEntry) => {
     if (closed) return;
@@ -183,7 +229,19 @@ export function getAuditSinkStatus(): AuditSinkStatus | null {
   return currentAuditSinkStatus;
 }
 
-/** In-memory append-only store; production would use persistent tamper-evident sink */
+/** Default cap on in-memory audit ring (file sink retains full chain on disk). */
+const DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES = 10_000;
+let maxInMemoryAuditEntries = DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES;
+
+/**
+ * Test/support: shrink in-memory cap to exercise trimming without 10k writes.
+ * @internal
+ */
+export function setAuditMemoryCapForTests(cap: number): void {
+  maxInMemoryAuditEntries = Math.max(1, cap);
+}
+
+/** In-memory ring for tests and debugging; bounded for long-lived processes. */
 const log: AuditLogEntry[] = [];
 let sequenceId = 0;
 let lastHash = "genesis";
@@ -213,6 +271,13 @@ function releaseAuditLock(): void {
   }
 }
 
+function appendInMemoryAuditEntry(full: AuditLogEntry): void {
+  while (log.length >= maxInMemoryAuditEntries) {
+    log.shift();
+  }
+  log.push(full);
+}
+
 function hashPayload(entry: Omit<AuditLogEntry, "event_hash">): string {
   const payload = JSON.stringify({
     sequence_id: entry.sequence_id,
@@ -240,7 +305,7 @@ export async function writeAuditEventAsync(event: AuditEvent): Promise<AuditLogE
     };
     const eventHash = hashPayload(entry);
     const full: AuditLogEntry = { ...entry, event_hash: eventHash };
-    log.push(full);
+    appendInMemoryAuditEntry(full);
 
     if (persistentSink) {
       try {
@@ -282,7 +347,7 @@ export function writeAuditEvent(event: AuditEvent): void {
       };
       const eventHash = hashPayload(entry);
       const full: AuditLogEntry = { ...entry, event_hash: eventHash };
-      log.push(full);
+      appendInMemoryAuditEntry(full);
       if (persistentSink) {
         try {
           const result = persistentSink(full);
@@ -303,12 +368,140 @@ export function writeAuditEvent(event: AuditEvent): void {
 }
 
 /**
- * Verify integrity of the audit log: chain of previous_event_hash and event_hash.
- * Returns true if all entries are consistent.
+ * Verify integrity of the in-memory audit window: recomputed `event_hash` for each entry
+ * and `previous_event_hash` links between consecutive rows. If the window was trimmed,
+ * the first row is anchored on its stored `previous_event_hash` (may not be `"genesis"`).
  */
+export interface AuditFileVerifyResult {
+  valid: boolean;
+  /** Non-empty JSON lines processed (blank lines skipped) */
+  linesRead: number;
+  firstInvalidLine?: number;
+  /** Machine-oriented reason when invalid */
+  error?: "invalid_json" | "missing_fields" | "hash_mismatch" | "chain_break" | "file_not_found" | "read_error";
+  detail?: string;
+}
+
+/**
+ * Verify tamper-evident hash chain in an on-disk audit file (newline-delimited JSON).
+ * Checks each line’s recomputed `event_hash` and that `previous_event_hash` matches the prior line’s `event_hash`.
+ * Does **not** join rotated segments (`.1`, `.2`, …); verify each file separately or merge for a full history audit.
+ */
+export async function verifyAuditLogFileIntegrity(filePath: string): Promise<AuditFileVerifyResult> {
+  let stream: ReturnType<typeof createReadStream> | undefined;
+  try {
+    await access(filePath, constants.R_OK);
+  } catch {
+    return { valid: false, linesRead: 0, error: "file_not_found" };
+  }
+
+  stream = createReadStream(filePath, { encoding: "utf8" });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+  let lineNo = 0;
+  let jsonLineIndex = 0;
+  let prevEventHash: string | null = null;
+
+  try {
+    for await (const line of rl) {
+      lineNo++;
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+      jsonLineIndex++;
+
+      let entry: AuditLogEntry;
+      try {
+        entry = JSON.parse(trimmed) as AuditLogEntry;
+      } catch {
+        return {
+          valid: false,
+          linesRead: jsonLineIndex,
+          firstInvalidLine: lineNo,
+          error: "invalid_json",
+        };
+      }
+
+      if (
+        typeof entry.sequence_id !== "number" ||
+        typeof entry.previous_event_hash !== "string" ||
+        typeof entry.event_hash !== "string" ||
+        typeof entry.event_type !== "string" ||
+        typeof entry.request_id !== "string" ||
+        typeof entry.timestamp_iso !== "string" ||
+        entry.payload === undefined ||
+        typeof entry.payload !== "object" ||
+        entry.payload === null ||
+        Array.isArray(entry.payload)
+      ) {
+        return {
+          valid: false,
+          linesRead: jsonLineIndex,
+          firstInvalidLine: lineNo,
+          error: "missing_fields",
+        };
+      }
+
+      if (jsonLineIndex > 1) {
+        if (entry.previous_event_hash !== prevEventHash) {
+          return {
+            valid: false,
+            linesRead: jsonLineIndex,
+            firstInvalidLine: lineNo,
+            error: "chain_break",
+          };
+        }
+      }
+
+      const withoutHash: Omit<AuditLogEntry, "event_hash"> = {
+        sequence_id: entry.sequence_id,
+        previous_event_hash: entry.previous_event_hash,
+        event_type: entry.event_type,
+        request_id: entry.request_id,
+        timestamp_iso: entry.timestamp_iso,
+        payload: entry.payload,
+      };
+      if (hashPayload(withoutHash) !== entry.event_hash) {
+        return {
+          valid: false,
+          linesRead: jsonLineIndex,
+          firstInvalidLine: lineNo,
+          error: "hash_mismatch",
+        };
+      }
+
+      prevEventHash = entry.event_hash;
+    }
+  } catch (err) {
+    return {
+      valid: false,
+      linesRead: jsonLineIndex,
+      error: "read_error",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    rl.close();
+    stream?.destroy();
+  }
+
+  return { valid: true, linesRead: jsonLineIndex };
+}
+
 export function verifyAuditIntegrity(): { valid: boolean; firstInvalidIndex?: number } {
-  let prevHash = "genesis";
-  for (let i = 0; i < log.length; i++) {
+  if (log.length === 0) return { valid: true };
+  const first = log[0];
+  const firstWithoutHash: Omit<AuditLogEntry, "event_hash"> = {
+    sequence_id: first.sequence_id,
+    previous_event_hash: first.previous_event_hash,
+    event_type: first.event_type,
+    request_id: first.request_id,
+    timestamp_iso: first.timestamp_iso,
+    payload: first.payload,
+  };
+  if (hashPayload(firstWithoutHash) !== first.event_hash) {
+    return { valid: false, firstInvalidIndex: 0 };
+  }
+  let prevHash = first.event_hash;
+  for (let i = 1; i < log.length; i++) {
     const entry = log[i];
     if (entry.previous_event_hash !== prevHash) {
       return { valid: false, firstInvalidIndex: i };
@@ -318,7 +511,6 @@ export function verifyAuditIntegrity(): { valid: boolean; firstInvalidIndex?: nu
       previous_event_hash: entry.previous_event_hash,
       event_type: entry.event_type,
       request_id: entry.request_id,
-      trace_id: entry.trace_id,
       timestamp_iso: entry.timestamp_iso,
       payload: entry.payload,
     };
@@ -350,4 +542,6 @@ export function resetAuditLog(): void {
   auditLockQueue.length = 0;
   currentAuditSinkStatus = null;
   backpressureCallback = null;
+  maxInMemoryAuditEntries = DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES;
+  fileAuditSinkShutdownHook = null;
 }

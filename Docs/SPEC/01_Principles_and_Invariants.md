@@ -1,8 +1,8 @@
 # 01 Principles and Invariants
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 2, 3, 16, 18).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 2, 3, 16, 18).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Non-Negotiable Invariants
 - Ingress is deterministic and non-cognitive.

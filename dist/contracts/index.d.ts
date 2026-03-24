@@ -1,6 +1,6 @@
 /**
  * Contracts package – versioned schemas and validators for external and internal APIs.
- * @see docs/PLANS/Implementation-plans/L2-01_Contracts-and-Project-Scaffold.md
+ * @see docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md
  */
 export * from "./request-envelope.js";
 export * from "./response-envelope.js";

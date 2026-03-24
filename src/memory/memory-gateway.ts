@@ -1,7 +1,7 @@
 /**
  * Memory Gateway – composes vector (IMemoryStore), structured, and object stores with scope and retention.
  * L2-06 Segment I: Single facade for vector + structured + object store backends.
- * @see Architecture §12, Docs/SPEC/17_MemoryAbstraction_Spec.md
+ * @see Architecture §12, docs/SPEC/17_MemoryAbstraction_Spec.md
  */
 
 import type { IMemoryStore, IStructuredStore, IObjectStore } from "./memory-abstraction.js";

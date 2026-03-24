@@ -30,11 +30,15 @@ import {
 } from "./rate-limit.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 import { RequestQueue, sendBackpressureResponse, handleCors } from "./transport.js";
-import type { JobQueueService } from "../queue/job-queue.js";
+import { type JobQueueService, IdempotencyKeyConflictError } from "../queue/job-queue.js";
+import {
+  fingerprintAsyncQueryEnvelope,
+  MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH,
+} from "../queue/async-idempotency.js";
 import type { JobStatus } from "../queue/types.js";
 import type { FeatureFlags } from "../config/schema.js";
 import type { FlagScope } from "../config/feature-flags.js";
-import { getFeatureFlagService } from "../config/feature-flags.js";
+import { getFeatureFlagService, resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { runProductionPreflight } from "./preflight.js";
 
 // Global request queue for backpressure (Phase 7.1)
@@ -330,11 +334,29 @@ async function processRequest(
         throw createRateLimitedRejection(rateLimitDecision);
       }
 
+      let idempotencyKey: string | undefined;
+      const idemHeaderRaw = getHeaderValue(req.headers["idempotency-key"]);
+      if (idemHeaderRaw !== undefined) {
+        const trimmed = idemHeaderRaw.trim();
+        if (trimmed.length > MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH) {
+          sendJson(res, 400, {
+            status: "error",
+            error: {
+              code: "INVALID_PAYLOAD",
+              message: `Idempotency-Key exceeds max length (${MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH})`,
+            },
+          });
+          return;
+        }
+        if (trimmed.length > 0) {
+          idempotencyKey = trimmed;
+        }
+      }
+
       // Extract webhook URL from headers if provided
       const webhookUrl = req.headers["x-webhook-url"] as string | undefined;
 
-      // Submit async job
-      const job = await jobQueueService.submitJob({
+      const submission = {
         request: ingressResult,
         webhook_url: webhookUrl,
         max_attempts: 3,
@@ -344,7 +366,18 @@ async function processRequest(
           user_id: ingressResult.callerContext.userId,
           trace_id: requestIdHeader,
         },
-      });
+        ...(idempotencyKey
+          ? {
+              idempotency: {
+                key: idempotencyKey,
+                fingerprint: fingerprintAsyncQueryEnvelope(ingressResult.envelope),
+              },
+            }
+          : {}),
+      };
+
+      // Submit async job
+      const job = await jobQueueService.submitJob(submission);
 
       sendJson(res, 202, {
         status: "accepted",
@@ -355,6 +388,16 @@ async function processRequest(
     } catch (err) {
       if (isIngressRejection(err)) {
         sendErrorRejection(res, err);
+        return;
+      }
+      if (err instanceof IdempotencyKeyConflictError) {
+        sendJson(res, 409, {
+          status: "error",
+          error: {
+            code: "IDEMPOTENCY_KEY_CONFLICT",
+            message: "Idempotency-Key already used for a different request body",
+          },
+        });
         return;
       }
       sendJson(res, 500, {
@@ -682,8 +725,7 @@ function isFeatureFlagEnabled(
   config: ReturnType<typeof getConfig>,
   context?: { org_id?: string; app_id?: string; user_id?: string }
 ): boolean {
-  const service = getFeatureFlagService();
-  return service?.evaluateFlag(flagName, context).enabled ?? config.flags[flagName];
+  return resolveFeatureFlagEnabled(flagName, config, context);
 }
 
 function isOperationalAccessAllowed(

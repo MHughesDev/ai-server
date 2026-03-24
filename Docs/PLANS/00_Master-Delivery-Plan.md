@@ -3,7 +3,7 @@
 ## 0) Document Control
 - Plan ID: PLAN-00
 - Plan Name: Master Delivery Plan (Harness Deferred)
-- Linked SPEC: `docs/Overview.md` or `docs/Overview.md`, `docs/Architecture.md` or `docs/Architecture_document_Finalized.md`
+- Linked SPEC: `docs/ARCHITECTURE/Overview.md` or `docs/ARCHITECTURE/Overview.md`, `docs/Architecture.md` or `docs/ARCHITECTURE/Architecture_document_Finalized.md`
 - Implementation status and gaps: SOW §2.6 (Contract and Type Gaps), §7 (What Might Need to Be Added); see `docs/PLANS/Scope-of-Work.md`.
 - Owner(s): Tech Lead, Platform Lead
 - Contributors: API, Runtime, Security, Ops, QA
@@ -42,7 +42,7 @@ Coordinate platform work so the system reaches production-ready status only afte
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- Blocking plans/specs/services: Finalized architecture contracts from `docs/Overview.md` / `docs/Overview.md` and `docs/Architecture.md` / `docs/Architecture_document_Finalized.md`.
+- Blocking plans/specs/services: Finalized architecture contracts from `docs/ARCHITECTURE/Overview.md` / `docs/ARCHITECTURE/Overview.md` and `docs/Architecture.md` / `docs/ARCHITECTURE/Architecture_document_Finalized.md`.
 
 ### 3.2 Downstream Consumers
 - Plans/features blocked by this plan: Plan 99 (Deferred Coding Agent Harness), product integrations.

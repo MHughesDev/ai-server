@@ -1,8 +1,8 @@
 # 21 Test and Eval Plan
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 13, 18.8, 18.12).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md` (coverage gaps, eval dataset size, alert simulation work).
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 13, 18.8, 18.12).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` (coverage gaps, eval dataset size, alert simulation work).
 
 ## Test Pyramid
 - **Unit:** contracts, policy logic, gateway behavior, workflow/engine registries.

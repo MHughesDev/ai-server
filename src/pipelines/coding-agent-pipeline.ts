@@ -19,6 +19,7 @@ import { getObservability } from "../observability/index.js";
 import { redact, type RedactionLevel } from "../observability/redact.js";
 import { writeAuditEvent } from "../security/audit-logger.js";
 import { getConfig } from "../bootstrap/index.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { randomUUID } from "node:crypto";
 
 const DEFAULT_MAX_HARNESS_ITERATIONS = 10;
@@ -164,7 +165,15 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       let autonomousMode = false;
       try {
         autonomousMode =
-          getConfig().flags.harness_autonomous_execution_enabled === true && allowlist.length > 0;
+          resolveFeatureFlagEnabled(
+            "harness_autonomous_execution_enabled",
+            getConfig(),
+            {
+              org_id: input.caller.org_id,
+              app_id: input.caller.app_id,
+              user_id: input.caller.user_id,
+            }
+          ) && allowlist.length > 0;
       } catch {
         /* bootstrap not called in tests */
       }
@@ -229,7 +238,15 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         const auditLevel = input.policy?.audit_level ?? "summary";
         let securityAuditEnabled = false;
         try {
-          securityAuditEnabled = getConfig().flags.security_hard_controls_enabled;
+          securityAuditEnabled = resolveFeatureFlagEnabled(
+            "security_hard_controls_enabled",
+            getConfig(),
+            {
+              org_id: input.caller.org_id,
+              app_id: input.caller.app_id,
+              user_id: input.caller.user_id,
+            }
+          );
         } catch {
           /* bootstrap not called in tests */
         }

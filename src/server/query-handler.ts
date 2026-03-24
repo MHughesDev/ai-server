@@ -40,7 +40,7 @@ import {
   METRIC_RETRIEVAL_HITS_TOTAL,
 } from "../observability/metrics.js";
 import { getConfig } from "../bootstrap/index.js";
-import { getFeatureFlagService } from "../config/feature-flags.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { writeAuditEvent } from "../security/audit-logger.js";
 import { redact, type RedactionLevel } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
@@ -133,9 +133,8 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
     app_id: ingressResult.callerContext.appId,
     user_id: ingressResult.callerContext.userId,
   };
-  const flagService = getFeatureFlagService();
   const isFlagEnabled = (flagName: keyof typeof config.flags): boolean =>
-    flagService?.evaluateFlag(flagName, flagContext).enabled ?? config.flags[flagName];
+    resolveFeatureFlagEnabled(flagName, config, flagContext);
   const multimodalInputPathEnabled =
     isFlagEnabled("multimodal_input_path_enabled") && isFlagEnabled("enable_multimodal_pipeline");
   const observabilityEnabled = isFlagEnabled("observability_required_events_v1");

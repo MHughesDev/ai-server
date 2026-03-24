@@ -1,6 +1,6 @@
 /**
  * ResponseEnvelope – external API contract for POST /v1/query response.
- * @see docs/SPEC/02_API_Contracts.md, docs/Architecture_document_Finalized.md
+ * @see docs/SPEC/02_API_Contracts.md, docs/ARCHITECTURE/Architecture_document_Finalized.md
  */
 import { z } from "zod";
 const CitationSchema = z.object({

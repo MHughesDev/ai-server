@@ -1,8 +1,8 @@
 # 11 Failure Manager Spec
 
 ## Source Alignment
-- Normative architecture: `docs/Architecture_document_Finalized.md` (Sections 13, 16, 18.3, 18.9, 18.10).
-- Current-state gaps: `docs/Production-Readiness-Gaps-Report.md`.
+- Normative architecture: `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Sections 13, 16, 18.3, 18.9, 18.10).
+- Current-state gaps: `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 ## Purpose
 Provide deterministic failure classification and bounded recovery behavior across governance, workflow, and gateway failures.
