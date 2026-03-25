@@ -14,7 +14,11 @@ import {
 } from "../rollout/policy.js";
 import { createJobQueueService, type JobQueueService } from "../queue/job-queue.js";
 import { setJobQueueService } from "../server/routes.js";
-import { initializeFeatureFlags, resetFeatureFlags } from "../config/feature-flags.js";
+import {
+  initializeFeatureFlags,
+  resetFeatureFlags,
+  resolveFeatureFlagEnabled,
+} from "../config/feature-flags.js";
 
 let config: Config | null = null;
 let jobQueue: JobQueueService | null = null;
@@ -67,7 +71,7 @@ function assertProductionReadiness(cfg: Config): void {
     );
   }
   if (
-    cfg.flags.observability_required_events_v1 &&
+    resolveFeatureFlagEnabled("observability_required_events_v1", cfg) &&
     cfg.observability_trace_sample_rate >= 1
   ) {
     throw new Error(

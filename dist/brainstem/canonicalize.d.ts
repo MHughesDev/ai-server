@@ -4,9 +4,11 @@
  */
 import type { RequestEnvelope } from "../contracts/request-envelope.js";
 import type { CanonicalRequest } from "../contracts/canonical-request.js";
+import type { CallerContext } from "../ingress/types.js";
 /**
  * Build CanonicalRequest from validated RequestEnvelope.
  * Normalizes text (trim, single string), maps attachments to handles with token estimates, sets modalities.
+ * Caller identity fields come from `callerContext` (ingress output): verified JWT claims when present, else envelope-derived (dev/eval).
  */
-export declare function canonicalize(envelope: RequestEnvelope): CanonicalRequest;
+export declare function canonicalize(envelope: RequestEnvelope, callerContext: CallerContext): CanonicalRequest;
 //# sourceMappingURL=canonicalize.d.ts.map

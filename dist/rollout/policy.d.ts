@@ -81,7 +81,9 @@ export declare function parseRolloutPolicy(input: unknown): RolloutPolicy;
 export declare function parseCanaryThresholds(input: Record<string, unknown>): CanaryThresholds;
 /**
  * Validate release config for deployment: env, optional release_id/build_id.
- * Used by pipeline validation (L2-08 Phase 0).
+ * **Soft check:** production without `release_id`/`build_id` yields `valid: false` (bootstrap logs a **warn**).
+ * **Hard check:** when `platform_production_rollout_enabled` is true in production, bootstrap also calls
+ * `assertProductionReleaseMetadataWhenRollout` and **throws** if both are missing.
  */
 export declare function validateReleaseConfig(config: {
     env: string;
@@ -91,4 +93,18 @@ export declare function validateReleaseConfig(config: {
     valid: boolean;
     errors: string[];
 };
+/**
+ * Fail-fast when production rollout is enabled but neither `RELEASE_ID` nor `BUILD_ID` is set.
+ * Soft check for production without rollout remains `validateReleaseConfig` + warn in bootstrap.
+ */
+export declare function assertProductionReleaseMetadataWhenRollout(config: {
+    env: string;
+    flags: {
+        platform_production_rollout_enabled: boolean;
+    };
+    release?: {
+        release_id?: string;
+        build_id?: string;
+    } | null;
+}): void;
 //# sourceMappingURL=policy.d.ts.map

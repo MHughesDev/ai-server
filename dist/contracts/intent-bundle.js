@@ -12,6 +12,11 @@ const ConstraintsHintsSchema = z.object({
     needs_web: z.boolean().optional(),
     needs_files: z.boolean().optional(),
     needs_code: z.boolean().optional(),
+    /**
+     * Set in brain stem when the canonical request requires attachment-capable pipelines (image/file).
+     * Router uses this as a **capability gate** only (WANT-007); pipeline choice stays intent/risk/hint-driven.
+     */
+    needs_attachment_processing: z.boolean().optional(),
 });
 export const IntentBundleSchema = z.object({
     intents: z.array(z.string()).min(1),

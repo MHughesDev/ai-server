@@ -138,6 +138,7 @@ const AuthConfigSchema = z
     ai_jwt_issuer: z.string().min(1).default("ai-server"),
     ai_jwt_audience: z.string().min(1).default("ai-server-query"),
     ai_jwt_secret: z.string().min(1).default("dev-ai-jwt-secret"),
+    /** Mint TTL; verify path caps exp−iat at same max (`AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS` in `auth.ts`). */
     ai_jwt_ttl_seconds: z.number().int().min(60).max(3600).default(900),
     query_required_scopes: z.array(z.string().min(1)).min(1).default(["query:invoke"]),
     idp_registry: z.array(AuthIdpRegistryEntrySchema).min(1).default(DEFAULT_AUTH_IDP_REGISTRY),
@@ -235,9 +236,9 @@ export const ConfigSchema = z.object({
     tlsKeyPath: z.string().min(1).optional(),
     /** HTTPS: path to TLS certificate file; when set with tlsKeyPath, HTTPS server is started */
     tlsCertPath: z.string().min(1).optional(),
-    /** Optional persistent audit sink path (validated). */
+    /** Optional persistent audit sink (`AUDIT_LOG_PATH`). Production: parent dir must exist and be writable (`assertProductionSinkPathsWritable`). Optional `AUDIT_LOG_FSYNC=true` for per-append fsync. */
     auditLogPath: z.string().min(1).optional(),
-    /** Optional persistent observability event sink path (validated). */
+    /** Optional observability NDJSON sink (`OBSERVABILITY_EVENT_SINK_PATH`). Same production rules. Optional `OBSERVABILITY_EVENT_SINK_FSYNC=true`. */
     observabilityEventSinkPath: z.string().min(1).optional(),
     /** Gap 3A: Async job queue configuration */
     queueBackend: z.enum(["memory", "redis", "postgres"]).default("memory"),

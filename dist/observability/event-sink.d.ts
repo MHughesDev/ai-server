@@ -28,6 +28,8 @@ export interface FileEventSinkOptions {
     maxRotatedFiles?: number;
     /** L2-04: Backpressure threshold (0-1), default 0.8 */
     backpressureThreshold?: number;
+    /** When true, `fsync` after each append (env `OBSERVABILITY_EVENT_SINK_FSYNC=true` in `server/index.ts`). */
+    fsyncAfterEachWrite?: boolean;
 }
 /** L2-04: Set callback for backpressure events */
 export declare function setEventBackpressureCallback(callback: (() => void) | null): void;

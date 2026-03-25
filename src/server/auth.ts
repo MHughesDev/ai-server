@@ -273,6 +273,45 @@ function assertClientCredentials(
 /** Clock skew tolerance in seconds (L2-05: 5-10s leeway for exp/nbf claims) */
 const CLOCK_SKEW_TOLERANCE_SECONDS = 10;
 
+/**
+ * Upper bound on exp−iat for AI JWTs accepted on `/v1/query` (WANT-011 / short-lived tokens).
+ * Keep aligned with `AuthConfigSchema` `ai_jwt_ttl_seconds` `.max()`.
+ */
+const AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS = 3600;
+
+/**
+ * AI JWTs used for query must include iat, sane exp−iat, and sub aligned with user_id (SPEC 19–style binding).
+ */
+function assertAiJwtQueryShape(payload: JwtPayload, nowMs: number): void {
+  const nowSec = Math.floor(nowMs / 1000);
+  const iat = getRequiredNumberClaim(payload, "iat");
+  if (!Number.isInteger(iat)) {
+    rejectAuth("Invalid token claim", { claim: "iat" });
+  }
+  if (iat > nowSec + CLOCK_SKEW_TOLERANCE_SECONDS) {
+    rejectAuth("Token issued in the future", { iat, now: nowSec });
+  }
+  const exp = getRequiredNumberClaim(payload, "exp");
+  if (!Number.isInteger(exp)) {
+    rejectAuth("Invalid token claim", { claim: "exp" });
+  }
+  if (exp <= iat) {
+    rejectAuth("Invalid token lifetime", { exp, iat });
+  }
+  const lifetimeSec = exp - iat;
+  if (lifetimeSec > AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS) {
+    rejectAuth("Token lifetime exceeds maximum", {
+      max_seconds: AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS,
+      lifetime_seconds: lifetimeSec,
+    });
+  }
+  const userId = getRequiredStringClaim(payload, "user_id");
+  const sub = getRequiredStringClaim(payload, "sub");
+  if (sub !== userId) {
+    rejectAuth("Token subject does not match user_id claim");
+  }
+}
+
 function assertStandardClaims(
   payload: JwtPayload,
   expectedIssuer: string,
@@ -496,6 +535,7 @@ export function verifyQueryCallerFromAuthHeader(
     config.auth.ai_jwt_audience,
     nowMs
   );
+  assertAiJwtQueryShape(parsed.payload, nowMs);
   const scopes = parseScopesValue(parsed.payload.scopes ?? parsed.payload.scope, "scopes");
   const missingScopes = config.auth.query_required_scopes.filter(
     (scope) => !scopes.includes(scope)

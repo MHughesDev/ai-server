@@ -53,7 +53,7 @@ export declare const CanonicalRequestSchema: z.ZodObject<{
     structured: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     /** Estimated input tokens for budgeting */
     token_estimate: z.ZodDefault<z.ZodNumber>;
-    /** Original caller/context identifiers (pass-through) */
+    /** Caller identity from ingress `CallerContext` (JWT claims when authenticated; never body-only in that path). */
     caller_app_id: z.ZodString;
     caller_user_id: z.ZodString;
     caller_org_id: z.ZodString;

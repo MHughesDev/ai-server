@@ -2,6 +2,7 @@
  * Job queue idempotency (POST /v1/query/async semantics).
  */
 
+import { jest } from "@jest/globals";
 import { JobQueueService, IdempotencyKeyConflictError } from "./job-queue.js";
 import { MemoryQueueBackend } from "./memory-backend.js";
 import type { IngressResult } from "../ingress/types.js";
@@ -93,7 +94,11 @@ describe("JobQueueService idempotency", () => {
   });
 
   it("merges concurrent duplicate submits into one job", async () => {
-    const svc = new JobQueueService(queueConfig, async () => stubResponse, new MemoryQueueBackend());
+    const svc = new JobQueueService(
+      queueConfig,
+      () => Promise.resolve(stubResponse),
+      new MemoryQueueBackend()
+    );
     const meta = { org_id: "o", app_id: "a", user_id: "u" };
     const req = makeIngress("parallel");
     const fp = "fp-p";
@@ -105,7 +110,11 @@ describe("JobQueueService idempotency", () => {
   });
 
   it("rejects concurrent submit with same key but different fingerprint", async () => {
-    const svc = new JobQueueService(queueConfig, async () => stubResponse, new MemoryQueueBackend());
+    const svc = new JobQueueService(
+      queueConfig,
+      () => Promise.resolve(stubResponse),
+      new MemoryQueueBackend()
+    );
     const meta = { org_id: "o", app_id: "a", user_id: "u" };
     const p1 = svc.submitJob({
       request: makeIngress("one"),
@@ -118,8 +127,10 @@ describe("JobQueueService idempotency", () => {
       idempotency: { key: "same", fingerprint: "fp2" },
     });
     const results = await Promise.allSettled([p1, p2]);
-    const rejected = results.filter(r => r.status === "rejected");
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected"
+    );
     expect(rejected.length).toBe(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(IdempotencyKeyConflictError);
+    expect(rejected[0].reason).toBeInstanceOf(IdempotencyKeyConflictError);
   });
 });

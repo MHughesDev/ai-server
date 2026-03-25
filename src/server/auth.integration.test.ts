@@ -292,6 +292,52 @@ describe("token exchange and query auth", () => {
       await closeServer(server);
     }
   });
+
+  it("rejects AI JWT without iat, with excessive lifetime, or sub/user_id mismatch (WANT-011)", async () => {
+    const { server, port } = await createTestServer();
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const withoutIat = signJwtHs256(
+        {
+          iss: AUTH_AI_ISSUER,
+          aud: AUTH_AI_AUDIENCE,
+          sub: "user-1",
+          user_id: "user-1",
+          org_id: "org-1",
+          app_id: AUTH_APP_ID,
+          scope: "query:invoke",
+          scopes: ["query:invoke"],
+          exp: nowSec + 300,
+        },
+        AUTH_AI_SECRET
+      );
+      const noIatRes = await httpPost(port, "/v1/query", validQueryBody, {
+        Authorization: `Bearer ${withoutIat}`,
+      });
+      expect(noIatRes.statusCode).toBe(401);
+
+      const tooLong = createAiToken({ iat: nowSec, exp: nowSec + 4000 });
+      const longLifeRes = await httpPost(port, "/v1/query", validQueryBody, {
+        Authorization: `Bearer ${tooLong}`,
+      });
+      expect(longLifeRes.statusCode).toBe(401);
+      expect(JSON.parse(longLifeRes.body).error?.detail?.max_seconds).toBe(3600);
+
+      const subMismatch = createAiToken({ sub: "other-subject" });
+      const subRes = await httpPost(port, "/v1/query", validQueryBody, {
+        Authorization: `Bearer ${subMismatch}`,
+      });
+      expect(subRes.statusCode).toBe(401);
+
+      const zeroLifetime = createAiToken({ iat: nowSec, exp: nowSec });
+      const orderRes = await httpPost(port, "/v1/query", validQueryBody, {
+        Authorization: `Bearer ${zeroLifetime}`,
+      });
+      expect(orderRes.statusCode).toBe(401);
+    } finally {
+      await closeServer(server);
+    }
+  });
 });
 
 describe("ingress rate limiting", () => {
@@ -328,8 +374,8 @@ describe("JWT clock skew tolerance (L2-05)", () => {
     const { server, port } = await createTestServer();
     try {
       const nowSec = Math.floor(Date.now() / 1000);
-      // Token expired 5 seconds ago (within 10s tolerance)
-      const token = createAiToken({ exp: nowSec - 5 });
+      // exp 5s ago (within skew) but iat earlier so exp > iat and lifetime ≤ max (WANT-011)
+      const token = createAiToken({ iat: nowSec - 400, exp: nowSec - 5 });
       const query = await httpPost(port, "/v1/query", validQueryBody, {
         Authorization: `Bearer ${token}`,
       });

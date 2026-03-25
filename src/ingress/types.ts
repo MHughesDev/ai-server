@@ -5,7 +5,7 @@
 
 import type { RequestEnvelope } from "../contracts/index.js";
 
-/** Output of successful ingress: validated envelope + caller context */
+/** Validated envelope plus caller context: policy, rate limits, and `canonicalize` identity fields (verified JWT when `validateIngress` received `verifiedCallerContext`). */
 export interface IngressResult {
   envelope: RequestEnvelope;
   callerContext: CallerContext;

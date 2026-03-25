@@ -9,6 +9,7 @@ import { createReadStream } from "node:fs";
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createInterface } from "node:readline";
+import { finished } from "node:stream/promises";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 import type { AuditEvent } from "./types.js";
 
@@ -388,14 +389,13 @@ export interface AuditFileVerifyResult {
  * Does **not** join rotated segments (`.1`, `.2`, …); verify each file separately or merge for a full history audit.
  */
 export async function verifyAuditLogFileIntegrity(filePath: string): Promise<AuditFileVerifyResult> {
-  let stream: ReturnType<typeof createReadStream> | undefined;
   try {
     await access(filePath, constants.R_OK);
   } catch {
     return { valid: false, linesRead: 0, error: "file_not_found" };
   }
 
-  stream = createReadStream(filePath, { encoding: "utf8" });
+  const stream = createReadStream(filePath, { encoding: "utf8" });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
 
   let lineNo = 0;
@@ -480,7 +480,8 @@ export async function verifyAuditLogFileIntegrity(filePath: string): Promise<Aud
     };
   } finally {
     rl.close();
-    stream?.destroy();
+    stream.destroy();
+    await finished(stream).catch(() => undefined);
   }
 
   return { valid: true, linesRead: jsonLineIndex };

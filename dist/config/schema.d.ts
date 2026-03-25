@@ -274,6 +274,7 @@ declare const AuthConfigSchema: z.ZodDefault<z.ZodObject<{
     ai_jwt_issuer: z.ZodDefault<z.ZodString>;
     ai_jwt_audience: z.ZodDefault<z.ZodString>;
     ai_jwt_secret: z.ZodDefault<z.ZodString>;
+    /** Mint TTL; verify path caps exp−iat at same max (`AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS` in `auth.ts`). */
     ai_jwt_ttl_seconds: z.ZodDefault<z.ZodNumber>;
     query_required_scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     idp_registry: z.ZodDefault<z.ZodArray<z.ZodEffects<z.ZodObject<{
@@ -637,6 +638,7 @@ export declare const ConfigSchema: z.ZodObject<{
         ai_jwt_issuer: z.ZodDefault<z.ZodString>;
         ai_jwt_audience: z.ZodDefault<z.ZodString>;
         ai_jwt_secret: z.ZodDefault<z.ZodString>;
+        /** Mint TTL; verify path caps exp−iat at same max (`AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS` in `auth.ts`). */
         ai_jwt_ttl_seconds: z.ZodDefault<z.ZodNumber>;
         query_required_scopes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
         idp_registry: z.ZodDefault<z.ZodArray<z.ZodEffects<z.ZodObject<{
@@ -1136,9 +1138,9 @@ export declare const ConfigSchema: z.ZodObject<{
     tlsKeyPath: z.ZodOptional<z.ZodString>;
     /** HTTPS: path to TLS certificate file; when set with tlsKeyPath, HTTPS server is started */
     tlsCertPath: z.ZodOptional<z.ZodString>;
-    /** Optional persistent audit sink path (validated). */
+    /** Optional persistent audit sink (`AUDIT_LOG_PATH`). Production: parent dir must exist and be writable (`assertProductionSinkPathsWritable`). Optional `AUDIT_LOG_FSYNC=true` for per-append fsync. */
     auditLogPath: z.ZodOptional<z.ZodString>;
-    /** Optional persistent observability event sink path (validated). */
+    /** Optional observability NDJSON sink (`OBSERVABILITY_EVENT_SINK_PATH`). Same production rules. Optional `OBSERVABILITY_EVENT_SINK_FSYNC=true`. */
     observabilityEventSinkPath: z.ZodOptional<z.ZodString>;
     /** Gap 3A: Async job queue configuration */
     queueBackend: z.ZodDefault<z.ZodEnum<["memory", "redis", "postgres"]>>;

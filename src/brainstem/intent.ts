@@ -7,6 +7,15 @@ import type { CanonicalRequest } from "../contracts/canonical-request.js";
 import type { IntentBundle } from "../contracts/intent-bundle.js";
 
 /**
+ * Whether canonical input requires a pipeline that can handle non-text attachments (capability signal).
+ * WANT-007: modality names are interpreted here only; the router consumes `constraints_hints`, not raw modalities.
+ */
+function attachmentCapabilityRequired(canonical: CanonicalRequest): boolean {
+  const modalities = canonical.modalities ?? ["text"];
+  return modalities.some((m) => m === "image" || m === "file");
+}
+
+/**
  * Extract intent for MVP: chat-first. All text requests get primary_intent "chat"
  * with high confidence; default-safe for routing to reactive_chat pipeline.
  * When user text suggests tool use, set complexity.tool_likelihood for coding_agent routing (M3).
@@ -27,13 +36,17 @@ export function extractIntent(canonical: CanonicalRequest): IntentBundle {
   if (decisionHint) routingHints.push("decision");
   if (/\bcomposite\b|nested workflow|workflow_call/i.test(text)) routingHints.push("composite_example");
 
+  const modalities = canonical.modalities?.length ? [...canonical.modalities] : ["text"];
+  const needsAttachment = attachmentCapabilityRequired(canonical);
+
   return {
     intents: ["chat"],
     confidence: 1,
-    modalities_detected: ["text"],
+    modalities_detected: modalities,
     primary_intent: "chat",
     risk_flags: [],
     routing_hints: routingHints,
     ...(toolHint && { complexity: { tool_likelihood: 0.8 } }),
+    ...(needsAttachment ? { constraints_hints: { needs_attachment_processing: true } } : {}),
   };
 }

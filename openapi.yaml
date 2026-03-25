@@ -17,8 +17,9 @@ info:
 
     **Sync vs async semantics:** `POST /v1/query` completes in one HTTP response and returns a `ResponseEnvelope`
     whose `mode` is always **`sync`** when present. Async work is **not** selected via `RequestEnvelope.mode`
-    (`async` / `auto` are rejected). Use **`POST /v1/query/async`** for job acceptance (`202` + `job_id`), then
-    poll **`GET /v1/jobs/{jobId}`**. Optional header **`Idempotency-Key`** on **`POST /v1/query/async`** deduplicates job creation per tenant scope (see that path). JSON body **`idempotency_key`** and other unknown keys remain rejected (strict `RequestEnvelope`).
+    (`async` / `auto` are rejected). Use **`POST /v1/query/async`** for job submission: **`202`** + `job_id` when
+    enqueued, or **`200`** + `ResponseEnvelope` when governance blocks before enqueue (same gate as sync), then
+    poll **`GET /v1/jobs/{jobId}`** for accepted jobs. Optional header **`Idempotency-Key`** on **`POST /v1/query/async`** deduplicates job creation per tenant scope (see that path). JSON body **`idempotency_key`** and other unknown keys remain rejected (strict `RequestEnvelope`).
     Canonical JSON shapes match `src/contracts/request-envelope.ts` and `response-envelope.ts` (Zod).
   version: "2024-01-01"
   contact:
@@ -230,6 +231,13 @@ paths:
             schema:
               $ref: "#/components/schemas/RequestEnvelope"
       responses:
+        "200":
+          description: |
+            Governance blocked the request before enqueue (same `ResponseEnvelope` as `POST /v1/query` when `status` is `blocked` or `error`); no job is created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
         "202":
           description: Job accepted
           content:

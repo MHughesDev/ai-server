@@ -353,6 +353,7 @@ describe("audit-logger", () => {
         const r = await verifyAuditLogFileIntegrity(filePath);
         expect(r).toEqual({ valid: true, linesRead: 2 });
       } finally {
+        await shutdownPersistentAuditFileSink();
         setAuditSink(null);
         rmSync(dir, { recursive: true });
       }
@@ -377,6 +378,7 @@ describe("audit-logger", () => {
         expect(r.valid).toBe(false);
         expect(r.error).toBe("hash_mismatch");
       } finally {
+        await shutdownPersistentAuditFileSink();
         setAuditSink(null);
         rmSync(dir, { recursive: true });
       }

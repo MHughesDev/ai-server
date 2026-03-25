@@ -12,10 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("tenant-budget", () => {
-  beforeEach(() => {
-    resetTenantBudgets();
+  beforeEach(async () => {
+    await resetTenantBudgets();
     delete process.env.TENANT_COST_CAP_USD_PER_HOUR;
     delete process.env.TENANT_BUDGET_STORE_PATH;
+    delete process.env.TENANT_BUDGET_POSTGRES_URL;
+    delete process.env.TENANT_BUDGET_POSTGRES_TABLE;
   });
 
   it("allows when cap is unset (0)", async () => {
@@ -60,13 +62,13 @@ describe("tenant-budget", () => {
     try {
       process.env.TENANT_BUDGET_STORE_PATH = storePath;
       process.env.TENANT_COST_CAP_USD_PER_HOUR = "10";
-      resetTenantBudgets();
+      await resetTenantBudgets();
       await recordTenantUsage("org1", { cost_usd: 2.5 });
       const serialized = readFileSync(storePath, "utf8");
       expect(serialized).toContain("org1");
       await expect(checkTenantBudget("org1")).resolves.toEqual({ allowed: true });
     } finally {
-      resetTenantBudgets();
+      await resetTenantBudgets();
       rmSync(dir, { recursive: true, force: true });
       delete process.env.TENANT_BUDGET_STORE_PATH;
     }

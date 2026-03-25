@@ -74,7 +74,9 @@ export function parseCanaryThresholds(input) {
 }
 /**
  * Validate release config for deployment: env, optional release_id/build_id.
- * Used by pipeline validation (L2-08 Phase 0).
+ * **Soft check:** production without `release_id`/`build_id` yields `valid: false` (bootstrap logs a **warn**).
+ * **Hard check:** when `platform_production_rollout_enabled` is true in production, bootstrap also calls
+ * `assertProductionReleaseMetadataWhenRollout` and **throws** if both are missing.
  */
 export function validateReleaseConfig(config) {
     const errors = [];
@@ -89,5 +91,19 @@ export function validateReleaseConfig(config) {
         valid: errors.length === 0,
         errors,
     };
+}
+/**
+ * Fail-fast when production rollout is enabled but neither `RELEASE_ID` nor `BUILD_ID` is set.
+ * Soft check for production without rollout remains `validateReleaseConfig` + warn in bootstrap.
+ */
+export function assertProductionReleaseMetadataWhenRollout(config) {
+    if (config.env !== "production" || !config.flags.platform_production_rollout_enabled) {
+        return;
+    }
+    const rid = config.release?.release_id?.trim();
+    const bid = config.release?.build_id?.trim();
+    if (!rid && !bid) {
+        throw new Error("Production rollout requires RELEASE_ID or BUILD_ID for traceability");
+    }
 }
 //# sourceMappingURL=policy.js.map

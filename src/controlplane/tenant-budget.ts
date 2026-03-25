@@ -18,6 +18,8 @@ interface TenantBudgetBackend {
   get(orgId: string): Promise<UsageEntry[]>;
   set(orgId: string, entries: UsageEntry[]): Promise<void>;
   reset(): Promise<void>;
+  /** Close pools / handles when backend is swapped (tests, reload). */
+  dispose(): Promise<void>;
 }
 
 class InMemoryTenantBudgetBackend implements TenantBudgetBackend {
@@ -35,6 +37,10 @@ class InMemoryTenantBudgetBackend implements TenantBudgetBackend {
 
   reset(): Promise<void> {
     this.usage.clear();
+    return Promise.resolve();
+  }
+
+  dispose(): Promise<void> {
     return Promise.resolve();
   }
 }
@@ -69,6 +75,10 @@ class FileTenantBudgetBackend implements TenantBudgetBackend {
 
   reset(): Promise<void> {
     this.writeAll({});
+    return Promise.resolve();
+  }
+
+  dispose(): Promise<void> {
     return Promise.resolve();
   }
 }
@@ -109,6 +119,103 @@ class UpstashRedisTenantBudgetBackend implements TenantBudgetBackend {
     // Best-effort global reset disabled for shared backends.
     await Promise.resolve();
   }
+
+  dispose(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+interface PgPoolLike {
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
+  end: () => Promise<void>;
+}
+
+/**
+ * Durable tenant usage rows for cross-request cost caps (WANT-017 / Architecture §18.3).
+ * Requires optional dependency `pg` (`npm install pg`). Connection: **`TENANT_BUDGET_POSTGRES_URL`**.
+ */
+class PostgresTenantBudgetBackend implements TenantBudgetBackend {
+  private pool: PgPoolLike | null = null;
+  private readonly initPromise: Promise<void>;
+  private readonly tableName: string;
+
+  constructor(
+    private readonly connectionString: string,
+    tableName = "ai_tenant_budget_usage"
+  ) {
+    this.tableName = tableName.replace(/[^a-zA-Z0-9_]/g, "_") || "ai_tenant_budget_usage";
+    this.initPromise = this.ensureSchema();
+  }
+
+  private async ensureSchema(): Promise<void> {
+    const pg = (await import("pg")) as { Pool: new (cfg: object) => PgPoolLike };
+    this.pool = new pg.Pool({
+      connectionString: this.connectionString,
+      max: 5,
+    });
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${this.tableName} (
+        org_id TEXT PRIMARY KEY,
+        entries JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+
+  private async poolReady(): Promise<PgPoolLike> {
+    await this.initPromise;
+    if (!this.pool) throw new Error("PostgreSQL pool not initialized");
+    return this.pool;
+  }
+
+  async get(orgId: string): Promise<UsageEntry[]> {
+    const pool = await this.poolReady();
+    const { rows } = await pool.query(`SELECT entries FROM ${this.tableName} WHERE org_id = $1`, [
+      orgId,
+    ]);
+    const row = rows[0] as { entries?: unknown } | undefined;
+    if (!row?.entries) return [];
+    const raw = row.entries;
+    const parsed = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is UsageEntry =>
+        e != null &&
+        typeof e === "object" &&
+        typeof (e as UsageEntry).ts === "number" &&
+        typeof (e as UsageEntry).cost_usd === "number"
+    );
+  }
+
+  async set(orgId: string, entries: UsageEntry[]): Promise<void> {
+    const pool = await this.poolReady();
+    if (entries.length === 0) {
+      await pool.query(`DELETE FROM ${this.tableName} WHERE org_id = $1`, [orgId]);
+      return;
+    }
+    await pool.query(
+      `INSERT INTO ${this.tableName} (org_id, entries, updated_at)
+       VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (org_id) DO UPDATE SET entries = EXCLUDED.entries, updated_at = NOW()`,
+      [orgId, JSON.stringify(entries)]
+    );
+  }
+
+  async reset(): Promise<void> {
+    try {
+      const pool = await this.poolReady();
+      await pool.query(`DELETE FROM ${this.tableName}`);
+    } catch {
+      /* pool may not exist yet */
+    }
+  }
+
+  async dispose(): Promise<void> {
+    if (this.pool) {
+      await this.pool.end();
+      this.pool = null;
+    }
+  }
 }
 
 let backend: TenantBudgetBackend | null = null;
@@ -118,8 +225,17 @@ function getBackend(): TenantBudgetBackend {
   const filePath = process.env.TENANT_BUDGET_STORE_PATH?.trim();
   const redisUrl = process.env.TENANT_BUDGET_REDIS_REST_URL?.trim();
   const redisToken = process.env.TENANT_BUDGET_REDIS_REST_TOKEN?.trim();
+  const postgresUrl = process.env.TENANT_BUDGET_POSTGRES_URL?.trim();
   if (redisUrl && redisToken) {
     backend = new UpstashRedisTenantBudgetBackend(redisUrl, redisToken);
+    return backend;
+  }
+  if (postgresUrl) {
+    const customTable = process.env.TENANT_BUDGET_POSTGRES_TABLE?.trim();
+    backend = new PostgresTenantBudgetBackend(
+      postgresUrl,
+      customTable && customTable.length > 0 ? customTable : undefined
+    );
     return backend;
   }
   backend = filePath ? new FileTenantBudgetBackend(filePath) : new InMemoryTenantBudgetBackend();
@@ -181,11 +297,14 @@ export async function checkTenantBudget(orgId: string): Promise<{ allowed: boole
   return { allowed: total < cap };
 }
 
-/** Reset tenant usage (for tests). */
-export function resetTenantBudgets(): void {
+/** Reset tenant usage and release backend resources (for tests). */
+export async function resetTenantBudgets(): Promise<void> {
   const current = backend;
   backend = null;
-  if (current) {
-    void current.reset();
+  if (!current) return;
+  try {
+    await current.reset();
+  } finally {
+    await current.dispose();
   }
 }

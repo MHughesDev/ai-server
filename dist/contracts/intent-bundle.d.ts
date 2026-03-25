@@ -20,14 +20,21 @@ declare const ConstraintsHintsSchema: z.ZodObject<{
     needs_web: z.ZodOptional<z.ZodBoolean>;
     needs_files: z.ZodOptional<z.ZodBoolean>;
     needs_code: z.ZodOptional<z.ZodBoolean>;
+    /**
+     * Set in brain stem when the canonical request requires attachment-capable pipelines (image/file).
+     * Router uses this as a **capability gate** only (WANT-007); pipeline choice stays intent/risk/hint-driven.
+     */
+    needs_attachment_processing: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     needs_web?: boolean | undefined;
     needs_files?: boolean | undefined;
     needs_code?: boolean | undefined;
+    needs_attachment_processing?: boolean | undefined;
 }, {
     needs_web?: boolean | undefined;
     needs_files?: boolean | undefined;
     needs_code?: boolean | undefined;
+    needs_attachment_processing?: boolean | undefined;
 }>;
 export declare const IntentBundleSchema: z.ZodObject<{
     intents: z.ZodArray<z.ZodString, "many">;
@@ -50,14 +57,21 @@ export declare const IntentBundleSchema: z.ZodObject<{
         needs_web: z.ZodOptional<z.ZodBoolean>;
         needs_files: z.ZodOptional<z.ZodBoolean>;
         needs_code: z.ZodOptional<z.ZodBoolean>;
+        /**
+         * Set in brain stem when the canonical request requires attachment-capable pipelines (image/file).
+         * Router uses this as a **capability gate** only (WANT-007); pipeline choice stays intent/risk/hint-driven.
+         */
+        needs_attachment_processing: z.ZodOptional<z.ZodBoolean>;
     }, "strip", z.ZodTypeAny, {
         needs_web?: boolean | undefined;
         needs_files?: boolean | undefined;
         needs_code?: boolean | undefined;
+        needs_attachment_processing?: boolean | undefined;
     }, {
         needs_web?: boolean | undefined;
         needs_files?: boolean | undefined;
         needs_code?: boolean | undefined;
+        needs_attachment_processing?: boolean | undefined;
     }>>;
     /** Pipeline-style intent for routing (chat, rag, tool_agent, etc.) */
     primary_intent: z.ZodOptional<z.ZodEnum<["chat", "coding_agent", "rag", "tool_agent", "multimodal_reasoning"]>>;
@@ -79,6 +93,7 @@ export declare const IntentBundleSchema: z.ZodObject<{
         needs_web?: boolean | undefined;
         needs_files?: boolean | undefined;
         needs_code?: boolean | undefined;
+        needs_attachment_processing?: boolean | undefined;
     } | undefined;
     primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
 }, {
@@ -94,6 +109,7 @@ export declare const IntentBundleSchema: z.ZodObject<{
         needs_web?: boolean | undefined;
         needs_files?: boolean | undefined;
         needs_code?: boolean | undefined;
+        needs_attachment_processing?: boolean | undefined;
     } | undefined;
     primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
     risk_flags?: string[] | undefined;

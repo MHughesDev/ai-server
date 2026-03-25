@@ -6,12 +6,14 @@ import { validateIngress } from "../ingress/validate.js";
 import { getConfig } from "../bootstrap/index.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
 import { readJsonBody, HEADER_REQUEST_ID, HEADER_AUTHORIZATION, BodyTooLargeError, RequestAbortedError, RequestReadTimeoutError, } from "./middleware.js";
-import { handleQuery } from "./query-handler.js";
+import { handleQuery, preflightAsyncQueryGovernance } from "./query-handler.js";
 import { exchangeToken, queryRequiresAiJwt, verifyQueryCallerFromAuthHeader, } from "./auth.js";
 import { checkQueryRateLimitAsync, createRateLimitedRejection, attachRateLimitHeaders, detectAbuse, } from "./rate-limit.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 import { RequestQueue, sendBackpressureResponse, handleCors } from "./transport.js";
-import { getFeatureFlagService } from "../config/feature-flags.js";
+import { IdempotencyKeyConflictError } from "../queue/job-queue.js";
+import { fingerprintAsyncQueryEnvelope, MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH, } from "../queue/async-idempotency.js";
+import { getFeatureFlagService, resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { runProductionPreflight } from "./preflight.js";
 // Global request queue for backpressure (Phase 7.1)
 const requestQueue = new RequestQueue({
@@ -287,10 +289,32 @@ async function processRequest(req, res) {
             if (!rateLimitDecision.allowed) {
                 throw createRateLimitedRejection(rateLimitDecision);
             }
+            const governanceBlocked = await preflightAsyncQueryGovernance(ingressResult);
+            if (governanceBlocked) {
+                sendJson(res, 200, governanceBlocked);
+                return;
+            }
+            let idempotencyKey;
+            const idemHeaderRaw = getHeaderValue(req.headers["idempotency-key"]);
+            if (idemHeaderRaw !== undefined) {
+                const trimmed = idemHeaderRaw.trim();
+                if (trimmed.length > MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH) {
+                    sendJson(res, 400, {
+                        status: "error",
+                        error: {
+                            code: "INVALID_PAYLOAD",
+                            message: `Idempotency-Key exceeds max length (${MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH})`,
+                        },
+                    });
+                    return;
+                }
+                if (trimmed.length > 0) {
+                    idempotencyKey = trimmed;
+                }
+            }
             // Extract webhook URL from headers if provided
             const webhookUrl = req.headers["x-webhook-url"];
-            // Submit async job
-            const job = await jobQueueService.submitJob({
+            const submission = {
                 request: ingressResult,
                 webhook_url: webhookUrl,
                 max_attempts: 3,
@@ -300,7 +324,17 @@ async function processRequest(req, res) {
                     user_id: ingressResult.callerContext.userId,
                     trace_id: requestIdHeader,
                 },
-            });
+                ...(idempotencyKey
+                    ? {
+                        idempotency: {
+                            key: idempotencyKey,
+                            fingerprint: fingerprintAsyncQueryEnvelope(ingressResult.envelope),
+                        },
+                    }
+                    : {}),
+            };
+            // Submit async job
+            const job = await jobQueueService.submitJob(submission);
             sendJson(res, 202, {
                 status: "accepted",
                 job_id: job.id,
@@ -311,6 +345,16 @@ async function processRequest(req, res) {
         catch (err) {
             if (isIngressRejection(err)) {
                 sendErrorRejection(res, err);
+                return;
+            }
+            if (err instanceof IdempotencyKeyConflictError) {
+                sendJson(res, 409, {
+                    status: "error",
+                    error: {
+                        code: "IDEMPOTENCY_KEY_CONFLICT",
+                        message: "Idempotency-Key already used for a different request body",
+                    },
+                });
                 return;
             }
             sendJson(res, 500, {
@@ -612,8 +656,7 @@ function getHeaderValue(value) {
     return Array.isArray(value) ? value[0] : value;
 }
 function isFeatureFlagEnabled(flagName, config, context) {
-    const service = getFeatureFlagService();
-    return service?.evaluateFlag(flagName, context).enabled ?? config.flags[flagName];
+    return resolveFeatureFlagEnabled(flagName, config, context);
 }
 function isOperationalAccessAllowed(expectedToken, authHeader) {
     if (!expectedToken)

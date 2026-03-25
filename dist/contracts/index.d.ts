@@ -119,6 +119,7 @@ export declare function validateIntentBundle(data: unknown): {
         needs_web?: boolean | undefined;
         needs_files?: boolean | undefined;
         needs_code?: boolean | undefined;
+        needs_attachment_processing?: boolean | undefined;
     } | undefined;
     primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
 };
@@ -152,6 +153,7 @@ export declare function validatePipelinePlan(data: unknown): {
         top_k?: number | undefined;
     } | undefined;
     strategy_id?: string | undefined;
+    harness_autonomous_execution?: boolean | undefined;
     budgets?: {
         deadline_ms?: number | undefined;
         token_budget?: number | undefined;

@@ -18,6 +18,8 @@ export const ERROR_CODES = [
     "ATTACHMENT_REJECTED",
     /** L2-07: Request has multimodal content but no capable pipeline allowed */
     "MULTIMODAL_UNSUPPORTED",
+    /** Async POST /v1/query/async: Idempotency-Key reused with a different request body */
+    "IDEMPOTENCY_KEY_CONFLICT",
 ];
 /** Map from error code to HTTP status suggestion and retry guidance */
 export const ERROR_TAXONOMY = {
@@ -48,6 +50,11 @@ export const ERROR_TAXONOMY = {
         httpStatus: 400,
         retryable: false,
         description: "Multimodal request but no capable pipeline allowed",
+    },
+    IDEMPOTENCY_KEY_CONFLICT: {
+        httpStatus: 409,
+        retryable: false,
+        description: "Idempotency-Key already used for a different async query body in this scope",
     },
 };
 export function isErrorCode(code) {

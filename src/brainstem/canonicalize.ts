@@ -5,13 +5,15 @@
 
 import type { RequestEnvelope } from "../contracts/request-envelope.js";
 import type { CanonicalRequest } from "../contracts/canonical-request.js";
+import type { CallerContext } from "../ingress/types.js";
 import { preprocessAttachments } from "./preprocess.js";
 
 /**
  * Build CanonicalRequest from validated RequestEnvelope.
  * Normalizes text (trim, single string), maps attachments to handles with token estimates, sets modalities.
+ * Caller identity fields come from `callerContext` (ingress output): verified JWT claims when present, else envelope-derived (dev/eval).
  */
-export function canonicalize(envelope: RequestEnvelope): CanonicalRequest {
+export function canonicalize(envelope: RequestEnvelope, callerContext: CallerContext): CanonicalRequest {
   const text = normalizeText(envelope.input?.text);
   const modalities = detectModalities(envelope);
   const rawAttachments = envelope.input?.attachments ?? [];
@@ -32,10 +34,10 @@ export function canonicalize(envelope: RequestEnvelope): CanonicalRequest {
     attachments,
     structured: envelope.input?.structured,
     token_estimate,
-    caller_app_id: envelope.caller.app_id,
-    caller_user_id: envelope.caller.user_id,
-    caller_org_id: envelope.caller.org_id,
-    session_id: envelope.caller.session_id,
+    caller_app_id: callerContext.appId,
+    caller_user_id: callerContext.userId,
+    caller_org_id: callerContext.orgId,
+    session_id: callerContext.sessionId,
   };
 }
 

@@ -21,6 +21,9 @@ class InMemoryTenantBudgetBackend {
         this.usage.clear();
         return Promise.resolve();
     }
+    dispose() {
+        return Promise.resolve();
+    }
 }
 class FileTenantBudgetBackend {
     storePath;
@@ -54,6 +57,9 @@ class FileTenantBudgetBackend {
     }
     reset() {
         this.writeAll({});
+        return Promise.resolve();
+    }
+    dispose() {
         return Promise.resolve();
     }
 }
@@ -95,6 +101,86 @@ class UpstashRedisTenantBudgetBackend {
         // Best-effort global reset disabled for shared backends.
         await Promise.resolve();
     }
+    dispose() {
+        return Promise.resolve();
+    }
+}
+/**
+ * Durable tenant usage rows for cross-request cost caps (WANT-017 / Architecture §18.3).
+ * Requires optional dependency `pg` (`npm install pg`). Connection: **`TENANT_BUDGET_POSTGRES_URL`**.
+ */
+class PostgresTenantBudgetBackend {
+    connectionString;
+    pool = null;
+    initPromise;
+    tableName;
+    constructor(connectionString, tableName = "ai_tenant_budget_usage") {
+        this.connectionString = connectionString;
+        this.tableName = tableName.replace(/[^a-zA-Z0-9_]/g, "_") || "ai_tenant_budget_usage";
+        this.initPromise = this.ensureSchema();
+    }
+    async ensureSchema() {
+        const pg = (await import("pg"));
+        this.pool = new pg.Pool({
+            connectionString: this.connectionString,
+            max: 5,
+        });
+        await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${this.tableName} (
+        org_id TEXT PRIMARY KEY,
+        entries JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    }
+    async poolReady() {
+        await this.initPromise;
+        if (!this.pool)
+            throw new Error("PostgreSQL pool not initialized");
+        return this.pool;
+    }
+    async get(orgId) {
+        const pool = await this.poolReady();
+        const { rows } = await pool.query(`SELECT entries FROM ${this.tableName} WHERE org_id = $1`, [
+            orgId,
+        ]);
+        const row = rows[0];
+        if (!row?.entries)
+            return [];
+        const raw = row.entries;
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (!Array.isArray(parsed))
+            return [];
+        return parsed.filter((e) => e != null &&
+            typeof e === "object" &&
+            typeof e.ts === "number" &&
+            typeof e.cost_usd === "number");
+    }
+    async set(orgId, entries) {
+        const pool = await this.poolReady();
+        if (entries.length === 0) {
+            await pool.query(`DELETE FROM ${this.tableName} WHERE org_id = $1`, [orgId]);
+            return;
+        }
+        await pool.query(`INSERT INTO ${this.tableName} (org_id, entries, updated_at)
+       VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (org_id) DO UPDATE SET entries = EXCLUDED.entries, updated_at = NOW()`, [orgId, JSON.stringify(entries)]);
+    }
+    async reset() {
+        try {
+            const pool = await this.poolReady();
+            await pool.query(`DELETE FROM ${this.tableName}`);
+        }
+        catch {
+            /* pool may not exist yet */
+        }
+    }
+    async dispose() {
+        if (this.pool) {
+            await this.pool.end();
+            this.pool = null;
+        }
+    }
 }
 let backend = null;
 function getBackend() {
@@ -103,8 +189,14 @@ function getBackend() {
     const filePath = process.env.TENANT_BUDGET_STORE_PATH?.trim();
     const redisUrl = process.env.TENANT_BUDGET_REDIS_REST_URL?.trim();
     const redisToken = process.env.TENANT_BUDGET_REDIS_REST_TOKEN?.trim();
+    const postgresUrl = process.env.TENANT_BUDGET_POSTGRES_URL?.trim();
     if (redisUrl && redisToken) {
         backend = new UpstashRedisTenantBudgetBackend(redisUrl, redisToken);
+        return backend;
+    }
+    if (postgresUrl) {
+        const customTable = process.env.TENANT_BUDGET_POSTGRES_TABLE?.trim();
+        backend = new PostgresTenantBudgetBackend(postgresUrl, customTable && customTable.length > 0 ? customTable : undefined);
         return backend;
     }
     backend = filePath ? new FileTenantBudgetBackend(filePath) : new InMemoryTenantBudgetBackend();
@@ -163,12 +255,17 @@ export async function checkTenantBudget(orgId) {
     const total = list.reduce((s, e) => s + e.cost_usd, 0);
     return { allowed: total < cap };
 }
-/** Reset tenant usage (for tests). */
-export function resetTenantBudgets() {
+/** Reset tenant usage and release backend resources (for tests). */
+export async function resetTenantBudgets() {
     const current = backend;
     backend = null;
-    if (current) {
-        void current.reset();
+    if (!current)
+        return;
+    try {
+        await current.reset();
+    }
+    finally {
+        await current.dispose();
     }
 }
 //# sourceMappingURL=tenant-budget.js.map

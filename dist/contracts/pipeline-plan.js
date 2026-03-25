@@ -20,6 +20,11 @@ export const PipelinePlanSchema = z.object({
     pipeline_type: z.string(),
     strategy_id: z.string().optional(),
     execution_mode: z.literal("sync_stream").default("sync_stream"),
+    /**
+     * When true, coding_agent may run the autonomous harness loop (tool iterations).
+     * Resolved by the router from policy + feature flags — pipelines must not re-decide independently (WANT-004).
+     */
+    harness_autonomous_execution: z.boolean().optional(),
     budgets: BudgetsSchema.optional(),
     constraints: ConstraintsSchema,
     verification_level: z.enum(["none", "basic", "strict"]).default("basic"),

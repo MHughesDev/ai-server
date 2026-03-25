@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import {
   setObservability,
   createEmitter,
@@ -157,7 +158,7 @@ function main(): void {
       })
     );
   }
-  if (config.flags.observability_required_events_v1) {
+  if (resolveFeatureFlagEnabled("observability_required_events_v1", config)) {
     const emitter = createEmitter({
       redactionLevel: "minimal",
       logToConsole: config.logLevel === "debug",
@@ -251,8 +252,9 @@ function main(): void {
       }
 
       if (httpsServer) {
+        const tlsServer = httpsServer;
         await new Promise<void>((resolve, reject) => {
-          httpsServer!.close((err) => (err ? reject(err) : resolve()));
+          tlsServer.close((err) => (err ? reject(err) : resolve()));
         });
         console.info("[server] HTTPS server closed");
       }

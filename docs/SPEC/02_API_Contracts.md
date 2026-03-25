@@ -21,7 +21,7 @@
 | GET | `/v1/preflight` | Production preflight report. Same operational bearer rule. |
 | POST | `/token/exchange` | Identity trust boundary for AI JWT (payload per deployment). May return 503 when production rollout flag disables platform. |
 | POST | `/v1/query` | Primary synchronous ingress (`RequestEnvelope`). Gated by feature flags (`runtime_mvp_query_chat_enabled`, `platform_production_rollout_enabled` in production). |
-| POST | `/v1/query/async` | Async job submission (same ingress body as sync). Optional `Idempotency-Key` (dedupe per tenant + body fingerprint; see § Execution model). Optional `X-Webhook-Url`. Returns 503 when queue not configured (`ASYNC_NOT_AVAILABLE`) or rollout disabled. |
+| POST | `/v1/query/async` | Async job submission (same ingress body as sync). Runs governance gate before enqueue; **200** + `ResponseEnvelope` when blocked, **202** when accepted. Optional `Idempotency-Key` (dedupe per tenant + body fingerprint; see § Execution model). Optional `X-Webhook-Url`. Returns 503 when queue not configured (`ASYNC_NOT_AVAILABLE`) or rollout disabled. |
 | GET | `/v1/jobs` | List jobs; query params: `status`, `org_id`, `app_id`, `user_id`, `limit`, `offset`. |
 | GET | `/v1/jobs/{job_id}` | Job status (single path segment for `job_id`). |
 | POST | `/v1/jobs/{job_id}/cancel` | Cancel job. |
@@ -40,7 +40,7 @@ This server exposes **two different HTTP patterns**; they must not be conflated:
 | Pattern | HTTP | Response body | `ResponseEnvelope.mode` |
 |--------|------|---------------|---------------------------|
 | **Synchronous query** | `POST /v1/query` | `ResponseEnvelope` on success | Always **`sync`** when the field is present (`src/server/query-handler.ts`). |
-| **Async job** | `POST /v1/query/async` | **202** acceptance JSON: `status`, `job_id`, `status_url`, `created_at` — **not** a `ResponseEnvelope` | N/A (no envelope on this response). |
+| **Async job** | `POST /v1/query/async` | **202** acceptance JSON (`job_id`, …) when the job is enqueued; **200** + `ResponseEnvelope` when policy/budget/route denies **before** enqueue (same gate as sync; `src/server/query-handler.ts` `preflightAsyncQueryGovernance`, `routes.ts`). | N/A on **202**; **`sync`** on blocked/error envelope when HTTP **200**. |
 | **Job lifecycle** | `GET /v1/jobs`, `GET /v1/jobs/{id}`, `POST /v1/jobs/{id}/cancel` | Job records / errors per `routes.ts` | N/A |
 
 **Ingress schema (strict):** The JSON body for both `POST /v1/query` and `POST /v1/query/async` is validated by Zod **`RequestEnvelopeSchema`** in `src/contracts/request-envelope.ts`:
@@ -65,7 +65,8 @@ This server exposes **two different HTTP patterns**; they must not be conflated:
 - Returned on **200** from `POST /v1/query` for handled outcomes; includes `request_id`, `status` (`ok` \| `blocked` \| `error`), optional `output`, `telemetry`, `error`, and optional **`mode`**: literal **`sync`** only.
 
 ## Async job API
-- **Accepted response** for `POST /v1/query/async`: `job_id`, `status_url`, `created_at` (HTTP **202**).
+- **Governance preflight:** After ingress and rate limits, the server runs the same control-plane dispatch gate as sync (`policy → budget → route → plan`). If dispatch is denied, the handler returns HTTP **200** with a `ResponseEnvelope` (`status: "blocked"`, error codes such as `POLICY_BLOCKED` / `BUDGET_EXCEEDED`) and **does not** enqueue a job.
+- **Accepted response** when enqueued: `job_id`, `status_url`, `created_at` (HTTP **202**).
 - **Idempotency:** optional `Idempotency-Key` header; **`409`** + `IDEMPOTENCY_KEY_CONFLICT` when the key was already used with a different body in the same tenant scope.
 - **Job record** and errors use codes such as `ASYNC_NOT_AVAILABLE`, `JOB_NOT_FOUND`, `INVALID_JOB_ID`, `CANNOT_CANCEL` as implemented in `routes.ts`.
 

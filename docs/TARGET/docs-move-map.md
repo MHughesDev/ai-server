@@ -2,9 +2,11 @@
 
 **Executed in repo:** 2026-03-24 — files moved under `docs/` per tables below; links bulk-updated. Use this file as audit trail and for any straggler fixes.
 
+**Directory casing (Git, 2026-03-24):** The repository root folder is **`docs/`** (lowercase). Renamed from `Docs/` via two-step `git mv` so Linux/macOS case-sensitive checkouts match all links.
+
 **Purpose:** Executable manifest for migrating documentation into the AI-agent-optimized structure.
 
-**Canonical rule:** Use **`docs/`** (lowercase) only. Treat `Docs/` as legacy casing and migrate all references.
+**Canonical rule:** Use **`docs/`** (lowercase) only. The move-map tables below still show **`Docs/...`** in the left column as the historical source path before consolidation.
 
 **Scope:** Markdown docs only (`*.md`). `openapi.yaml` remains at repo root.
 

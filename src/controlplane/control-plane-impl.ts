@@ -76,6 +76,7 @@ export function createControlPlane(opts: ControlPlaneImplOptions): IControlPlane
       const routeResult = await router.plan({
         canonical: input.canonical,
         intent: input.intent,
+        caller: input.caller,
         policy: { ...policyDecision, max_budgets: budgetResult.effectiveBudgets ? {
           token_budget: budgetResult.effectiveBudgets.token_budget,
           tool_budget: budgetResult.effectiveBudgets.tool_budget,

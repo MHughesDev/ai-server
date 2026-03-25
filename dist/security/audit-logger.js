@@ -4,15 +4,34 @@
  * L2-04: Backpressure handling and atomic hash-chain for concurrent callers.
  */
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { createInterface } from "node:readline";
+import { finished } from "node:stream/promises";
+import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 /** Optional persistent sink; when set, each entry is written after in-memory append */
 let persistentSink = null;
+/** Registered by `createFileAuditSink` for graceful shutdown (drain queue, then stop accepts). */
+let fileAuditSinkShutdownHook = null;
 let currentAuditSinkStatus = null;
 /** L2-04: Backpressure callback - invoked when queue reaches threshold */
 let backpressureCallback = null;
 export function setAuditSink(sink) {
     persistentSink = sink;
+    if (sink === null) {
+        fileAuditSinkShutdownHook = null;
+    }
+}
+/**
+ * Wait for the file audit sink queue (from `createFileAuditSink`) to drain, then stop accepting new file writes.
+ * Safe to call when no file sink was configured (no-op).
+ */
+export async function shutdownPersistentAuditFileSink() {
+    const hook = fileAuditSinkShutdownHook;
+    if (!hook)
+        return;
+    await hook();
 }
 /** L2-04: Set callback for backpressure events */
 export function setBackpressureCallback(callback) {
@@ -24,10 +43,11 @@ export function createFileAuditSink(filePath, options = {}) {
     const maxFileSizeBytes = options.maxFileSizeBytes ?? 10 * 1024 * 1024;
     const maxRotatedFiles = options.maxRotatedFiles ?? 3;
     const backpressureThreshold = options.backpressureThreshold ?? 0.8;
+    const fsyncAfterEachWrite = options.fsyncAfterEachWrite === true;
     const queue = [];
     let droppedEntries = 0;
     let draining = false;
-    const closed = false;
+    let closed = false;
     let lastError = null;
     let backpressureActive = false;
     currentAuditSinkStatus = {
@@ -71,16 +91,19 @@ export function createFileAuditSink(filePath, options = {}) {
         }
     }
     async function drainQueue() {
-        if (draining || closed)
+        if (draining)
             return;
         draining = true;
         try {
-            while (queue.length > 0 && !closed) {
+            while (queue.length > 0) {
                 const line = queue.shift();
                 if (!line)
                     break;
                 await maybeRotate(Buffer.byteLength(line));
                 await appendFile(filePath, line, "utf8");
+                if (fsyncAfterEachWrite) {
+                    await syncFileToDisk(filePath);
+                }
             }
             lastError = null;
         }
@@ -100,13 +123,31 @@ export function createFileAuditSink(filePath, options = {}) {
                 lastError,
                 backpressureActive,
             };
-            if (queue.length > 0 && !closed) {
+            if (queue.length > 0) {
                 setImmediate(() => {
                     void drainQueue();
                 });
             }
         }
     }
+    fileAuditSinkShutdownHook = async () => {
+        try {
+            const deadline = Date.now() + 30_000;
+            while ((queue.length > 0 || draining) && Date.now() < deadline) {
+                if (queue.length > 0 && !draining) {
+                    void drainQueue();
+                }
+                await new Promise((r) => setTimeout(r, 50));
+            }
+            if (queue.length > 0 || draining) {
+                console.warn("[audit] file sink did not fully drain before shutdown timeout");
+            }
+            closed = true;
+        }
+        finally {
+            fileAuditSinkShutdownHook = null;
+        }
+    };
     return (entry) => {
         if (closed)
             return;
@@ -144,7 +185,17 @@ export function createFileAuditSink(filePath, options = {}) {
 export function getAuditSinkStatus() {
     return currentAuditSinkStatus;
 }
-/** In-memory append-only store; production would use persistent tamper-evident sink */
+/** Default cap on in-memory audit ring (file sink retains full chain on disk). */
+const DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES = 10_000;
+let maxInMemoryAuditEntries = DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES;
+/**
+ * Test/support: shrink in-memory cap to exercise trimming without 10k writes.
+ * @internal
+ */
+export function setAuditMemoryCapForTests(cap) {
+    maxInMemoryAuditEntries = Math.max(1, cap);
+}
+/** In-memory ring for tests and debugging; bounded for long-lived processes. */
 const log = [];
 let sequenceId = 0;
 let lastHash = "genesis";
@@ -170,6 +221,12 @@ function releaseAuditLock() {
     else {
         auditLock = false;
     }
+}
+function appendInMemoryAuditEntry(full) {
+    while (log.length >= maxInMemoryAuditEntries) {
+        log.shift();
+    }
+    log.push(full);
 }
 function hashPayload(entry) {
     const payload = JSON.stringify({
@@ -197,7 +254,7 @@ export async function writeAuditEventAsync(event) {
         };
         const eventHash = hashPayload(entry);
         const full = { ...entry, event_hash: eventHash };
-        log.push(full);
+        appendInMemoryAuditEntry(full);
         if (persistentSink) {
             try {
                 const result = persistentSink(full);
@@ -240,7 +297,7 @@ export function writeAuditEvent(event) {
             };
             const eventHash = hashPayload(entry);
             const full = { ...entry, event_hash: eventHash };
-            log.push(full);
+            appendInMemoryAuditEntry(full);
             if (persistentSink) {
                 try {
                     const result = persistentSink(full);
@@ -262,12 +319,119 @@ export function writeAuditEvent(event) {
     }
 }
 /**
- * Verify integrity of the audit log: chain of previous_event_hash and event_hash.
- * Returns true if all entries are consistent.
+ * Verify tamper-evident hash chain in an on-disk audit file (newline-delimited JSON).
+ * Checks each line’s recomputed `event_hash` and that `previous_event_hash` matches the prior line’s `event_hash`.
+ * Does **not** join rotated segments (`.1`, `.2`, …); verify each file separately or merge for a full history audit.
  */
+export async function verifyAuditLogFileIntegrity(filePath) {
+    try {
+        await access(filePath, constants.R_OK);
+    }
+    catch {
+        return { valid: false, linesRead: 0, error: "file_not_found" };
+    }
+    const stream = createReadStream(filePath, { encoding: "utf8" });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+    let lineNo = 0;
+    let jsonLineIndex = 0;
+    let prevEventHash = null;
+    try {
+        for await (const line of rl) {
+            lineNo++;
+            const trimmed = line.trim();
+            if (trimmed.length === 0)
+                continue;
+            jsonLineIndex++;
+            let entry;
+            try {
+                entry = JSON.parse(trimmed);
+            }
+            catch {
+                return {
+                    valid: false,
+                    linesRead: jsonLineIndex,
+                    firstInvalidLine: lineNo,
+                    error: "invalid_json",
+                };
+            }
+            if (typeof entry.sequence_id !== "number" ||
+                typeof entry.previous_event_hash !== "string" ||
+                typeof entry.event_hash !== "string" ||
+                typeof entry.event_type !== "string" ||
+                typeof entry.request_id !== "string" ||
+                typeof entry.timestamp_iso !== "string" ||
+                entry.payload === undefined ||
+                typeof entry.payload !== "object" ||
+                entry.payload === null ||
+                Array.isArray(entry.payload)) {
+                return {
+                    valid: false,
+                    linesRead: jsonLineIndex,
+                    firstInvalidLine: lineNo,
+                    error: "missing_fields",
+                };
+            }
+            if (jsonLineIndex > 1) {
+                if (entry.previous_event_hash !== prevEventHash) {
+                    return {
+                        valid: false,
+                        linesRead: jsonLineIndex,
+                        firstInvalidLine: lineNo,
+                        error: "chain_break",
+                    };
+                }
+            }
+            const withoutHash = {
+                sequence_id: entry.sequence_id,
+                previous_event_hash: entry.previous_event_hash,
+                event_type: entry.event_type,
+                request_id: entry.request_id,
+                timestamp_iso: entry.timestamp_iso,
+                payload: entry.payload,
+            };
+            if (hashPayload(withoutHash) !== entry.event_hash) {
+                return {
+                    valid: false,
+                    linesRead: jsonLineIndex,
+                    firstInvalidLine: lineNo,
+                    error: "hash_mismatch",
+                };
+            }
+            prevEventHash = entry.event_hash;
+        }
+    }
+    catch (err) {
+        return {
+            valid: false,
+            linesRead: jsonLineIndex,
+            error: "read_error",
+            detail: err instanceof Error ? err.message : String(err),
+        };
+    }
+    finally {
+        rl.close();
+        stream.destroy();
+        await finished(stream).catch(() => undefined);
+    }
+    return { valid: true, linesRead: jsonLineIndex };
+}
 export function verifyAuditIntegrity() {
-    let prevHash = "genesis";
-    for (let i = 0; i < log.length; i++) {
+    if (log.length === 0)
+        return { valid: true };
+    const first = log[0];
+    const firstWithoutHash = {
+        sequence_id: first.sequence_id,
+        previous_event_hash: first.previous_event_hash,
+        event_type: first.event_type,
+        request_id: first.request_id,
+        timestamp_iso: first.timestamp_iso,
+        payload: first.payload,
+    };
+    if (hashPayload(firstWithoutHash) !== first.event_hash) {
+        return { valid: false, firstInvalidIndex: 0 };
+    }
+    let prevHash = first.event_hash;
+    for (let i = 1; i < log.length; i++) {
         const entry = log[i];
         if (entry.previous_event_hash !== prevHash) {
             return { valid: false, firstInvalidIndex: i };
@@ -277,7 +441,6 @@ export function verifyAuditIntegrity() {
             previous_event_hash: entry.previous_event_hash,
             event_type: entry.event_type,
             request_id: entry.request_id,
-            trace_id: entry.trace_id,
             timestamp_iso: entry.timestamp_iso,
             payload: entry.payload,
         };
@@ -307,5 +470,7 @@ export function resetAuditLog() {
     auditLockQueue.length = 0;
     currentAuditSinkStatus = null;
     backpressureCallback = null;
+    maxInMemoryAuditEntries = DEFAULT_MAX_IN_MEMORY_AUDIT_ENTRIES;
+    fileAuditSinkShutdownHook = null;
 }
 //# sourceMappingURL=audit-logger.js.map

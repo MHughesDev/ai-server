@@ -1,6 +1,7 @@
 /**
  * Tool Gateway – deny/stub-only enforcement; allowlist + sandbox (M3).
  * @see docs/SPEC/16_ToolGateway_Spec.md, L2-05 Phase 2, SOW M3 F.3–F.4
+ * WANT-006: Tool execution from governed paths uses `IToolGateway` only (`tool_engine.ts`); allowlist from policy/plan is applied in `query-handler.ts`.
  */
 import type { IToolGateway, ToolInvokeRequest, ToolInvokeResult } from "./types.js";
 type ToolExecutor = (request: ToolInvokeRequest) => Promise<unknown>;

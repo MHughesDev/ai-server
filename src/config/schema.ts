@@ -163,6 +163,7 @@ const AuthConfigSchema = z
     ai_jwt_issuer: z.string().min(1).default("ai-server"),
     ai_jwt_audience: z.string().min(1).default("ai-server-query"),
     ai_jwt_secret: z.string().min(1).default("dev-ai-jwt-secret"),
+    /** Mint TTL; verify path caps exp−iat at same max (`AI_JWT_MAX_ACCEPTED_LIFETIME_SECONDS` in `auth.ts`). */
     ai_jwt_ttl_seconds: z.number().int().min(60).max(3600).default(900),
     query_required_scopes: z.array(z.string().min(1)).min(1).default(["query:invoke"]),
     idp_registry: z.array(AuthIdpRegistryEntrySchema).min(1).default(DEFAULT_AUTH_IDP_REGISTRY),

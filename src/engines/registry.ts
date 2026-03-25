@@ -1,6 +1,7 @@
 /**
  * Engine registry – map engine ref (e.g. "execution", "synthesis") to IEngine.
- * Used by workflow runner for engine_call steps; no engine imports another engine.
+ * Used by workflow runner for engine_call steps. Individual engines use at most one gateway
+ * (or memory store); wiring lives here — see `engine-architecture-invariants.test.ts` (WANT-005).
  * @see SOW M6 Segment K, Architecture §9.5
  */
 

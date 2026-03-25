@@ -3,6 +3,7 @@
  * @see docs/SPEC/07_PolicyEngine_Spec.md, L2-03 GOV-001, GOV-002, L2-06 memory scope
  */
 import { getConfig } from "../bootstrap/index.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { listRegisteredWorkflowIds } from "../workflows/registry.js";
 /** Parse comma-separated env list; empty string or unset => [] */
 function parseDenyList(envValue) {
@@ -51,7 +52,14 @@ export function evaluatePolicy(input) {
     const allowTools = allowedPipelines.includes("coding_agent") ? ["stub_tool"] : [];
     let memoryScope = "none";
     try {
-        memoryScope = getConfig().flags.enable_org_memory ? "org" : "none";
+        const cfg = getConfig();
+        memoryScope = resolveFeatureFlagEnabled("enable_org_memory", cfg, {
+            org_id: caller.orgId,
+            app_id: caller.appId,
+            user_id: caller.userId,
+        })
+            ? "org"
+            : "none";
     }
     catch {
         // Unit tests may not call bootstrap(); keep none

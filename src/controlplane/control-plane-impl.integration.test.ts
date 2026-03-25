@@ -46,11 +46,12 @@ function makeIntent(overrides: Partial<IntentBundle> = {}): IntentBundle {
 }
 
 describe("control plane integration", () => {
-  beforeEach(() => {
-    resetTenantBudgets();
+  beforeEach(async () => {
+    await resetTenantBudgets();
     delete process.env.POLICY_DENY_ORG_IDS;
     delete process.env.POLICY_DENY_APP_IDS;
     delete process.env.TENANT_COST_CAP_USD_PER_HOUR;
+    delete process.env.TENANT_BUDGET_POSTGRES_URL;
   });
 
   it("returns allowed and single PipelinePlan when policy and budget pass", async () => {

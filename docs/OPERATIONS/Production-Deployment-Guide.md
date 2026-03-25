@@ -279,23 +279,31 @@ Rate limiting features:
 
 #### Tenant Budget Backend Selection
 
-Tenant budgets are **fully implemented** with multi-backend support:
+Cross-request hourly cost caps use `src/controlplane/tenant-budget.ts`. Enable with **`TENANT_COST_CAP_USD_PER_HOUR`** (positive number, USD per org per sliding hour). Backend is chosen automatically (first match):
 
 ```bash
-# Backend selection (in-memory, file, or redis)
-TENANT_BUDGET_BACKEND="redis"  # Options: in_memory, file, redis
+# Hourly cost cap (required for enforcement; 0 or unset = disabled)
+TENANT_COST_CAP_USD_PER_HOUR=100
 
-# For file backend (single-instance only)
-TENANT_BUDGET_FILE_PATH="/var/lib/ai-server/budgets.json"
+# Optional: Upstash Redis REST (shared across instances)
+TENANT_BUDGET_REDIS_REST_URL=https://...
+TENANT_BUDGET_REDIS_REST_TOKEN=...
 
-# Hourly cost cap enforcement
-TENANT_BUDGET_HOURLY_CAP_USD=100.0
+# Optional: PostgreSQL (durable non-vector accounting; requires `pg` — see package.json optionalDependencies)
+TENANT_BUDGET_POSTGRES_URL=postgresql://user:pass@host:5432/dbname
+# Optional table name (alphanumeric/underscore only; default ai_tenant_budget_usage)
+# TENANT_BUDGET_POSTGRES_TABLE=ai_tenant_budget_usage
+
+# Optional: JSON file (single-instance persistence)
+TENANT_BUDGET_STORE_PATH=/var/lib/ai-server/tenant-budget.json
 ```
 
-Backend recommendations:
-- **in_memory:** Development/testing only (per-process state)
-- **file:** Single-instance deployments (persistent but not shared)
-- **redis:** Multi-instance production deployments (shared state)
+Backend precedence: **Redis REST** → **PostgreSQL** → **file** → **in-memory** (when no store envs are set).
+
+Recommendations:
+- **in-memory:** Development only (default when no store is configured).
+- **file:** Single-instance persistence.
+- **PostgreSQL** or **Redis:** Shared counters when `TENANT_COST_CAP_USD_PER_HOUR` is set and multiple app instances exist.
 
 ---
 

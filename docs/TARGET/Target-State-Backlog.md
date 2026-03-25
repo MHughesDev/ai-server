@@ -36,6 +36,66 @@
 
 ---
 
+## Narrowed target — product & deployment decisions (owner Q&A)
+
+**Recorded:** 2026-03-24  
+**Purpose:** Constrain backlog interpretation and acceptance tests. These choices **narrow** generic Architecture/SPEC language into **this product’s** target; they do not replace normative SPECs—implement and then align SPECs/OpenAPI where they differ.
+
+### Decisions (by question)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | App instances | **One** instance for now (single deployment unit). |
+| 2 | Cross-instance shared state | **Not required** on day one (no mandate for Redis/global counters across replicas for v1). |
+| 3 | Backing stores | **PostgreSQL** for durable **non–vector** data (non–AI-memory persistence). **Chroma** for **vector** storage, embeddings, and AI-context retrieval. |
+| 4 | Authentication | **All** production requests are **authenticated** (no anonymous client surface for this target). |
+| 5 | Caller identity | **Token claims only** — not body-spoofed `caller` fields as source of truth. |
+| 6 | Extra secret redaction | **No** additional formal classes beyond current policy (no extra PII/prompt redaction mandate captured here). |
+| 7 | Control-plane bypass | **No** routes that skip policy → budget → route → dispatch for governed execution. |
+| 8 | Token / tool budgets | **Hard enforcement** (stop/limit execution per policy, not advisory). |
+| 9 | Tenant cost over budget | **Blocked** (deny request / do not proceed per policy). |
+| 10 | Model providers | **No stubs** in target production posture: **real** model responses via **local** inference or **API** models (e.g. GPT-class, Claude-class). |
+| 11 | Tools | **HTTP-safe only** for now (no arbitrary filesystem/network tool execution in this milestone). |
+| 12 | Autonomous tool use | **In scope** (coding-agent / harness autonomous path is part of the target). |
+| 13 | Memory tiers | **In-memory** for **execution-scoped** state for the lifetime of a request/workflow run. **PostgreSQL** for durable **non–AI-memory** data. **Chroma** for **AI memory**: context, embeddings, retrieval. |
+| 14 | Memory “on” | When memory features are **on**, **vector + embeddings** are **required** (lexical-only is not an acceptable primary path). |
+| 15 | Retention | **Same guarantees** across backends where applicable (TTL / max-chunks parity intent for configured stores). |
+| 16 | Async idempotency | **In-process** deduplication is **sufficient** (no cross-replica idempotency store required for this target). |
+| 17 | Sync `POST /v1/query` idempotency | **None** required. |
+| 18 | Contracts | **Every** error shape and code exposed to clients must appear in **`openapi.yaml`** and **`docs/SPEC/02_API_Contracts.md`** (full external parity). |
+| 19 | Observability events | **Full** coverage vs **`docs/SPEC/18_Observability_Spec.md`** before calling **WANT-037** met. |
+| 20 | Audit | **Single-file JSONL** + integrity verification is **enough** (no multi-segment join / fsync-by-default requirement from this Q&A). |
+| 21 | Trace sampling | **Fixed rate** only for now (no adaptive/head-based requirement). |
+| 22 | Test “done” | **Critical paths** called out in **`docs/OPERATIONS/Production-Readiness-Gaps-Report.md`** must be covered (not a numeric coverage %). |
+| 23 | Architecture proofs (orchestration/engine invariants) | **Written design + spot checks** are acceptable (no mandatory arch linter). |
+| 24 | Release style | **Big bang** (single coordinated release to this target, not phased feature flags per subsystem). |
+| 25 | Explicit out-of-scope (3–6 mo) | **None** declared yet — treat full backlog + SPECs as in motion until reprioritized. |
+
+### Traceability to `WANT-xxx`
+
+| WANT IDs | How the decisions above apply |
+|----------|-------------------------------|
+| **WANT-004 – WANT-007** | Orchestration/modality claims judged against **written design + spot checks** (Q23); **big-bang** delivery (Q24). |
+| **WANT-010, WANT-011** | **All-auth** (Q4), **token-only** identity (Q5). |
+| **WANT-012** | No **extra** redaction policy beyond current code/docs (Q6); still must meet Architecture “no secrets in logs” baseline. |
+| **WANT-013 – WANT-015** | **No bypass** (Q7); **hard** budget enforcement (Q8); deadlines must cover all governed paths as implementation catches up. |
+| **WANT-017** | **Blocked** when over limit (Q9); **one instance** (Q1) and **no cross-replica** requirement (Q2) — **PostgreSQL** (Q3) is the intended durable store for non-vector accounting where persistence is needed. |
+| **WANT-023, WANT-056** | **No production stubs** (Q10); real local or API models. |
+| **WANT-026, WANT-027** | Unchanged technically; retry/timer work still P1 hardening. |
+| **WANT-029, WANT-030** | **HTTP-safe tools only** (Q11); autonomous harness **in scope** (Q12). |
+| **WANT-031 – WANT-036** | **Three-tier memory** (Q13); **vector+embeddings mandatory** when memory on (Q14); **retention parity** across backends (Q15); **Chroma** + **Postgres** as named targets (Q3, Q13). |
+| **WANT-037, WANT-042** | **Full** observability event taxonomy per **`docs/SPEC/18_Observability_Spec.md`** (Q19); **fixed** trace sample rate (Q21). |
+| **WANT-040** | **Single-file JSONL** audit scope accepted (Q20). |
+| **WANT-048** | **Every** client-visible error documented (Q18). |
+| **WANT-049** | **In-process** async idempotency OK (Q16); **no** sync query idempotency (Q17). |
+| **WANT-053** | Autonomous execution / harness aligned with **Q12** and **SPEC 20**. |
+| **WANT-055** | Tests gated on **gaps report** critical paths (Q22). |
+| **WANT-059** | “Every request traceable” interpreted with **full** **`docs/SPEC/18_Observability_Spec.md`** taxonomy (Q19). |
+
+**Implementation note:** Tenant hourly cost accounting can use **Postgres** via **`TENANT_BUDGET_POSTGRES_URL`** (`tenant-budget.ts`). Remaining **Partial** rows may still need **Chroma** (vector) and other adapters **or** updates here if technology choices change.
+
+---
+
 ## Target-state backlog (extracted)
 
 | ID | Capability | Want | Source | Type | Priority | Depends on | Implementation status |
@@ -43,20 +103,20 @@
 | WANT-001 | Architecture | Single primary app entrypoint `POST /v1/query` for governed execution. | Architecture §1, §5; SPEC 00 | Product | P0 | — | **Met** — `src/server/routes.ts` `POST /v1/query`; gated by `runtime_mvp_query_chat_enabled`. |
 | WANT-002 | Architecture | Ingress is deterministic (auth, rate limits, payload limits, request IDs); **no** model reasoning at ingress. | Architecture §2; SPEC 01 | Security | P0 | — | **Met** — `validateIngress` (`src/ingress/validate.ts`); body limits + `readJsonBody`; rate limit on query routes; no LLM in ingress. |
 | WANT-003 | Architecture | Brain Stem is first cognitive step (canonicalize, intent, risk/complexity). | Architecture §2–4; SPEC 01 | Product | P0 | WANT-002 | **Met** — `handleQuery`: `canonicalize` → `extractIntent` → control plane (`src/server/query-handler.ts`, `src/brainstem/*`). |
-| WANT-004 | Architecture | Orchestrator is sole authority for loops, nesting, retries, stop conditions, execution mode, runtime budget changes. | Architecture §3–4, §16; SPEC 01 | Governance | P0 | — | **Partial** — `src/workflows/runner.ts` centralizes workflow loops/stop; chat/other pipelines have local iteration; execution mode split across router/pipelines. |
-| WANT-005 | Architecture | Engines do not orchestrate and do not call other engines; at most one gateway per engine. | Architecture §3; SPEC 01 | Governance | P0 | — | **Partial** — production registry wiring; tests use `createStub*` engines; verify all engine paths match invariant. |
-| WANT-006 | Architecture | Tools and memory only via gateways; policy-gated. | Architecture §3–4; SPEC 00–01 | Security | P0 | — | **Partial** — `tool-gateway`, memory stores/gateway; policy gates tool allowlists; spot-check each pipeline for direct bypass. |
-| WANT-007 | Architecture | Workflows are modality-agnostic graphs; selection by intent/risk/complexity/capability, not input modality names. | Architecture §2–3; SPEC 01 | Product | P1 | — | **Partial** — router uses intent/risk signals; multimodal flags influence pipeline set; full modality-agnostic claim not formally proven. |
+| WANT-004 | Architecture | Orchestrator is sole authority for loops, nesting, retries, stop conditions, execution mode, runtime budget changes. | Architecture §3–4, §16; SPEC 01 | Governance | P0 | — | **Partial** — `src/workflows/runner.ts` centralizes workflow graph execution/stop. **Execution mode (harness):** `default-router.ts` sets `PipelinePlan.harness_autonomous_execution` from `resolveFeatureFlagEnabled` + caller; `coding-agent-pipeline.ts` consumes plan only (no independent flag decision). `RouterInput.caller` wired in `control-plane-impl.ts`. Tests: `default-router.test.ts`. **Remaining:** chat `runWithDeadline` / other pipeline-local iteration; full budget/mode centralization. |
+| WANT-005 | Architecture | Engines do not orchestrate and do not call other engines; at most one gateway per engine. | Architecture §3; SPEC 01 | Governance | P0 | — | **Met** — `src/engines/*_engine.ts` / `tool_engine.ts` import only `./base.js` from `engines/` (no sibling engine imports); **`engine-architecture-invariants.test.ts`**. **`createEngineRegistry`** (`registry.ts`) injects one **`IModelGateway`** into all model engines, optional **`IToolGateway`** / **`IMemoryStore`** for tool/memory engines. Unit tests may use **`createStub*`** factories; production path uses registry from `query-handler.ts`. |
+| WANT-006 | Architecture | Tools and memory only via gateways; policy-gated. | Architecture §3–4; SPEC 00–01 | Security | P0 | — | **Met** — Tools: **`AllowlistToolGateway`** + **`plan.tools_enabled`** (`query-handler.ts`); **`createToolEngine` → `IToolGateway`** only. Memory: **`getDefaultStore`** + **`runRetrieval`** / **`createMemoryEngine`(`IMemoryStore`)**; pipelines import only **`memory-abstraction`** / **`memory/types`** (see **`gateway-access-invariants.test.ts`**). Engines: **`tool_engine`** / **`memory_engine`** separation asserted in same test. |
+| WANT-007 | Architecture | Workflows are modality-agnostic graphs; selection by intent/risk/complexity/capability, not input modality names. | Architecture §2–3; SPEC 01 | Product | P1 | — | **Met** — Brain stem sets `constraints_hints.needs_attachment_processing` from canonical modalities (`extractIntent`); default router gates multimodal capability on that hint only, not raw modality strings (`default-router.ts`). Tests: `intent.test.ts`, `default-router.test.ts`. |
 | WANT-008 | API | Expose identity trust boundary `POST /token/exchange` for production (external IdP JWT → short-lived server AI JWT). | Architecture §5; SPEC 00 | Security | P0 | — | **Met** — `src/server/routes.ts`, `src/server/auth.ts` exchange + mint/verify. |
 | WANT-009 | API | Operational surface: `GET /healthz`, `/readyz`, `/metrics`, `/v1/version` as defined in Architecture/SPEC. | Architecture §5; SPEC 00 | Ops | P0 | — | **Met** — same file; optional bearer when `OPERATIONAL_BEARER_TOKEN` set. Also `GET /v1/preflight`. |
-| WANT-010 | Identity | Production identity context from **verified** token claims, not body-spoofed caller fields. | Architecture §18.1; SPEC 01 “Production Target” | Security | P0 | WANT-008 | **Partial** — `assertCallerStrictMatch` when `verifiedCallerContext` provided (`validate.ts`); strength depends on `requireAuthHeader` / production profile. |
-| WANT-011 | Identity | AI JWTs are short-lived; validation enforces issuer, audience, scope, and claim binding to requests. | Architecture §18.1 | Security | P0 | WANT-008 | **Partial** — `auth.ts` JWT validation + TTL config; keep aligned with SPEC 19 for all edge cases. |
+| WANT-010 | Identity | Production identity context from **verified** token claims, not body-spoofed caller fields. | Architecture §18.1; SPEC 01 “Production Target” | Security | P0 | WANT-008 | **Met** — `verifyQueryCallerFromAuthHeader` + `queryRequiresAiJwt` on `/v1/query` and `/v1/query/async` (`routes.ts`); `assertCallerStrictMatch` + `callerContext` from claims (`validate.ts`); **`canonicalize(envelope, callerContext)`** so `CanonicalRequest` caller fields match ingress trust boundary, not raw envelope (`canonicalize.ts`, `query-handler.ts`). Tests: `validate.test.ts`, `canonicalize.test.ts`. |
+| WANT-011 | Identity | AI JWTs are short-lived; validation enforces issuer, audience, scope, and claim binding to requests. | Architecture §18.1 | Security | P0 | WANT-008 | **Met** — `verifyQueryCallerFromAuthHeader`: HS256 + `assertStandardClaims` (iss/aud/exp/nbf, clock skew); `assertAiJwtQueryShape` requires integer `iat`/`exp`, `iat` not far future, `exp > iat`, **exp−iat ≤ 3600** (matches config schema max), **`sub` === `user_id`**; `query_required_scopes` enforced (`auth.ts`). Integration tests: `auth.integration.test.ts`. |
 | WANT-012 | Security | Secrets never appear in logs/events/audit; redaction policy applied consistently. | Architecture §18.2 | Security | P0 | — | **Partial** — `redaction_level` on events/audit paths (`query-handler.ts`); gaps report still notes sync sink and thoroughness risks. |
-| WANT-013 | Governance | Policy → budget → route → dispatch gate is **non-bypassable** in production. | Architecture §18.3 | Governance | P0 | — | **Partial** — `createControlPlane` → `assertCanDispatch` before pipeline (`query-handler.ts`); prove non-bypass for every production entrypoint. |
+| WANT-013 | Governance | Policy → budget → route → dispatch gate is **non-bypassable** in production. | Architecture §18.3 | Governance | P0 | — | **Partial** — Shared `runQueryGovernanceGate` + `assertCanDispatch` before pipeline (`query-handler.ts`); **`POST /v1/query/async`** runs `preflightAsyncQueryGovernance` before enqueue (`routes.ts`); tests `query-handler.governance.test.ts`. Remaining: document/audit eval-only and other internal callers. |
 | WANT-014 | Governance | Budget fields (`token_budget`, `tool_budget`, `deadline_ms`, `cost_budget_usd`) enforced at runtime, not only computed. | Architecture §18.3 | Governance | P0 | WANT-013 | **Partial** — `deadline_ms` + `cost_budget_usd` enforced on main query pipeline (`query-handler.ts` `withDeadline`, cost checks); `resource-manager.ts` still documents pass-through only; token/tool budgets need cross-path audit. |
 | WANT-015 | Governance | Global per-request deadline bounds total wall-clock execution. | Architecture §18.3 | Performance | P0 | WANT-014 | **Partial** — `withRequestTimeout` on `/v1/query` (`routes.ts`) + pipeline `withDeadline`; not all routes/pipelines audited. |
 | WANT-016 | Governance | Rate limit / quota yields deterministic **429** and explicit error taxonomy. | Architecture §18.3 | Security | P0 | — | **Met** — `checkQueryRateLimitAsync`, `RATE_LIMITED` + 429 (`src/server/rate-limit.ts`, `contracts/errors.ts`); test `auth.integration.test.ts`. |
-| WANT-017 | Governance | Cross-request tenant cost controls use **shared persistent** counters (not process-local only). | Architecture §18.3 | Governance | P0 | — | **Partial** — `tenant-budget.ts` supports file/Redis backends; default in-memory unless configured. |
+| WANT-017 | Governance | Cross-request tenant cost controls use **shared persistent** counters (not process-local only). | Architecture §18.3 | Governance | P0 | — | **Met** — `tenant-budget.ts`: **PostgreSQL** via **`TENANT_BUDGET_POSTGRES_URL`** + optional **`TENANT_BUDGET_POSTGRES_TABLE`** (`PostgresTenantBudgetBackend`, optional **`pg`**); Upstash **Redis** REST; **file** (`TENANT_BUDGET_STORE_PATH`). Selection order: Redis → Postgres → file → in-memory (dev default). **`resetTenantBudgets()`** is async (pool/file teardown). Deploy: `docs/OPERATIONS/Production-Deployment-Guide.md` § Tenant Budget. |
 | WANT-018 | Governance | Tenant usage accounting failures are **fail-soft** for user responses unless policy mandates hard-fail. | Architecture §18.3 | Governance | P0 | WANT-017 | **Met** — `recordTenantUsage` try/catch in `query-handler.ts` (emits event, returns response). |
 | WANT-019 | Workflows | Workflow definitions fail validation on cycles, missing refs, invalid graphs. | Architecture §18.4 | Governance | P0 | — | **Met** — `WorkflowDefinitionSchema` / `workflow-definition.ts` validation. |
 | WANT-020 | Workflows | `stop_conditions` (`max_iterations`, `deadline_ms`) enforced centrally by workflow runtime. | Architecture §18.4 | Governance | P0 | WANT-004 | **Met** — `src/workflows/runner.ts` (also cost stop conditions). |
@@ -123,6 +183,7 @@ Mine these for additional WANT rows in a second pass:
 
 | Date | Change |
 |------|--------|
+| 2026-03-24 | **Narrowed target — product & deployment decisions:** owner Q&A (single instance, Postgres+Chroma, auth/token-only, hard budgets, blocked tenant overage, no stubs, HTTP-safe tools, autonomous tools in scope, memory tiering, vector required when memory on, contract/observability/audit/test acceptance) + **`WANT-xxx` traceability** table. |
 | 2026-03-24 | Initial extraction from Architecture §18 and SPEC 00/01; placeholder status column for reconciliation pass. |
 | 2026-03-24 | **Implementation status** column filled from `src/` evidence pass; README `dist/` policy aligned with `.gitignore`. |
 | 2026-03-24 | **WANT-022** set to **Met** after verifying `policy-evaluator.ts` uses `listRegisteredWorkflowIds()`; gaps §9.9 and SOW `GAP-POLICY-001` updated (prior narrative was stale). |
@@ -135,6 +196,11 @@ Mine these for additional WANT rows in a second pass:
 | 2026-03-24 | **WANT-040 slice:** `verifyAuditLogFileIntegrity` (`audit-logger.ts`) + tests; SPEC 19 + gaps §9.5; L2-99 plan docs corrected (no `governance_harness_*` schema flag). |
 | 2026-03-24 | **WANT-039 + sink durability:** `sink-paths.ts` + bootstrap; **`AUDIT_LOG_FSYNC`** / **`OBSERVABILITY_EVENT_SINK_FSYNC`**; SOW **GAP-OBS-001** / **GAP-SEC-001** / **GAP-MEM-001**; Observability runbook; **WANT-039** → **Met**. |
 | 2026-03-24 | **Shutdown + SOW:** graceful sink flush (`shutdownPersistentAuditFileSink`, event `close()`); SOW **GAP-OPS-002** → **Closed**, **GAP-API-002** → **Partial**; gaps §9.1, SPEC 18, runbook. |
+| 2026-03-24 | **WANT-013 slice:** `runQueryGovernanceGate` / `preflightAsyncQueryGovernance`; async submit governance preflight; OpenAPI + SPEC 02 **200** blocked envelope on `/v1/query/async`. |
+| 2026-03-25 | **WANT-017:** `PostgresTenantBudgetBackend`, env **`TENANT_BUDGET_POSTGRES_URL`** / **`TENANT_BUDGET_POSTGRES_TABLE`**; optional **`pg`** + **`@types/pg`**; async **`resetTenantBudgets`**; deployment guide tenant section aligned. |
+| 2026-03-25 | **WANT-004 slice:** `harness_autonomous_execution` on **`PipelinePlan`**; router resolves flag; coding pipeline obeys plan; **`RouterInput.caller`**. |
+| 2026-03-25 | **WANT-005:** `engine-architecture-invariants.test.ts`; `base.ts` / `registry.ts` doc cross-refs. |
+| 2026-03-25 | **WANT-006:** `governance/gateway-access-invariants.test.ts`; `tool-gateway.ts` / `query-handler` notes. |
 
 ---
 

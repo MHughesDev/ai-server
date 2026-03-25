@@ -18,7 +18,7 @@ import { getDefaultToolGateway, AllowlistToolGateway, ExecutableToolGateway } fr
 import { runWithContextAsync, createContext, getTraceContext, getObservability, } from "../observability/index.js";
 import { incrementCounter, recordHistogram, METRIC_REQUESTS_TOTAL, METRIC_ERRORS_TOTAL, METRIC_REQUEST_LATENCY_MS, METRIC_ROUTE_TOTAL, METRIC_SECURITY_DENY_TOTAL, METRIC_AUDIT_WRITE_LATENCY_MS, METRIC_RETRIEVAL_LATENCY_MS, METRIC_RETRIEVAL_FALLBACK_TOTAL, METRIC_RETRIEVAL_HITS_TOTAL, } from "../observability/metrics.js";
 import { getConfig } from "../bootstrap/index.js";
-import { getFeatureFlagService } from "../config/feature-flags.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { writeAuditEvent } from "../security/audit-logger.js";
 import { redact } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
@@ -55,6 +55,136 @@ function emit(event) {
     const obs = getObservability();
     if (obs)
         obs.events.emit(event);
+}
+function resolveQueryGovernanceGateFlags(ingressResult) {
+    const config = getConfig();
+    const flagContext = {
+        org_id: ingressResult.callerContext.orgId,
+        app_id: ingressResult.callerContext.appId,
+        user_id: ingressResult.callerContext.userId,
+    };
+    const isFlagEnabled = (flagName) => resolveFeatureFlagEnabled(flagName, config, flagContext);
+    return {
+        multimodalInputPathEnabled: isFlagEnabled("multimodal_input_path_enabled") && isFlagEnabled("enable_multimodal_pipeline"),
+        observabilityEnabled: isFlagEnabled("observability_required_events_v1"),
+        securityHardControlsEnabled: isFlagEnabled("security_hard_controls_enabled"),
+    };
+}
+/**
+ * Brain stem + control plane through the dispatch gate (policy → budget → route → plan).
+ * Async submit uses `skipPolicyTelemetryIfDispatchAllowed` so allowed jobs do not duplicate POLICY/BUDGET events before `handleQuery` runs on the worker.
+ */
+export async function runQueryGovernanceGate(ingressResult, start, gateFlags, options) {
+    const { multimodalInputPathEnabled, observabilityEnabled, securityHardControlsEnabled } = gateFlags;
+    const requestId = ingressResult.envelope.request_id;
+    const canonical = canonicalize(ingressResult.envelope, ingressResult.callerContext);
+    const intent = extractIntent(canonical);
+    const controlPlane = createControlPlane({ router: defaultRouter });
+    const multimodalCapablePipelines = multimodalInputPathEnabled ? ["reactive_chat"] : undefined;
+    const result = await controlPlane.decide({
+        canonical,
+        intent,
+        caller: ingressResult.callerContext,
+        multimodalCapablePipelines,
+    });
+    const redactionLevel = (result.policyDecision.redaction_level ?? "minimal");
+    const emitPolicyPhase = !options.skipPolicyTelemetryIfDispatchAllowed || !canDispatch(result);
+    if (emitPolicyPhase && observabilityEnabled) {
+        emit(buildEvent("POLICY_DECISION", {
+            allowed: result.policyDecision.allowed,
+            deny_reason: result.policyDecision.deny_reason,
+            memory_scope: result.policyDecision.memory_scope,
+            allowed_pipelines: result.policyDecision.allowed_pipelines,
+        }, redactionLevel));
+        const budgets = result.policyDecision.max_budgets ?? {};
+        emit(buildEvent("BUDGET_ASSIGN", {
+            token_budget: budgets.token_budget,
+            tool_budget: budgets.tool_budget,
+            deadline_ms: budgets.deadline_ms,
+            cost_budget_usd: budgets.cost_budget_usd,
+        }, redactionLevel));
+    }
+    if (emitPolicyPhase && securityHardControlsEnabled) {
+        writeSecurityAudit("SECURITY_POLICY_DECISION", {
+            allowed: result.policyDecision.allowed,
+            deny_reason: result.policyDecision.deny_reason ?? null,
+            memory_scope: result.policyDecision.memory_scope ?? null,
+        }, redactionLevel);
+    }
+    if (!canDispatch(result)) {
+        const denyReason = result.routeResult.allowed ? "POLICY_BLOCKED" : result.routeResult.denyReason;
+        if (securityHardControlsEnabled) {
+            incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: denyReason });
+            writeSecurityAudit("SECURITY_ROUTE_DENY", {
+                deny_reason: denyReason,
+                stage: "control_plane",
+            }, redactionLevel);
+        }
+        if (observabilityEnabled) {
+            emit(buildEvent("ROUTE_DECISION", {
+                deny: true,
+                deny_reason: denyReason,
+            }, redactionLevel));
+            emit(buildEvent("ERROR", {
+                code: denyReason,
+                message: "Request denied by governance",
+                stage: "control_plane",
+                detail_redacted: {},
+            }, redactionLevel));
+        }
+        incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: "denied", status: "blocked" });
+        recordHistogram(METRIC_REQUEST_LATENCY_MS, Date.now() - start, {
+            route: "denied",
+            status: "blocked",
+        });
+        const blockedMessage = result.policyDecision.deny_reason === "BUDGET_EXCEEDED"
+            ? "Token or cost budget exceeded"
+            : denyReason === "MULTIMODAL_UNSUPPORTED"
+                ? "Multimodal request but no capable pipeline allowed"
+                : "Request blocked by policy";
+        return {
+            status: "blocked",
+            response: {
+                request_id: requestId,
+                status: "blocked",
+                error: {
+                    code: denyReason,
+                    message: blockedMessage,
+                    detail: {},
+                },
+                mode: "sync",
+                telemetry: {
+                    pipeline: "none",
+                    models_used: [],
+                    tool_calls: 0,
+                    tokens_in: 0,
+                    tokens_out: 0,
+                    cost_usd_est: 0,
+                    latency_ms: Date.now() - start,
+                },
+            },
+        };
+    }
+    assertCanDispatch(result);
+    return {
+        status: "ok",
+        data: { canonical, intent, result, redactionLevel },
+    };
+}
+/**
+ * Run the same dispatch gate as `handleQuery` before enqueueing async work. Returns a blocked `ResponseEnvelope` when policy/budget/route would deny; otherwise `null`. Allowed path skips allow-side policy telemetry to avoid duplicate events when the worker runs `handleQuery`.
+ */
+export async function preflightAsyncQueryGovernance(ingressResult) {
+    const requestId = ingressResult.envelope.request_id;
+    const ctx = createContext(requestId);
+    const start = Date.now();
+    const gateFlags = resolveQueryGovernanceGateFlags(ingressResult);
+    return runWithContextAsync(ctx, async () => {
+        const gate = await runQueryGovernanceGate(ingressResult, start, gateFlags, {
+            skipPolicyTelemetryIfDispatchAllowed: true,
+        });
+        return gate.status === "blocked" ? gate.response : null;
+    });
 }
 function buildEvent(event_type, payload, redaction_level = "minimal") {
     const ctx = getTraceContext();
@@ -104,104 +234,21 @@ export async function handleQuery(ingressResult) {
         app_id: ingressResult.callerContext.appId,
         user_id: ingressResult.callerContext.userId,
     };
-    const flagService = getFeatureFlagService();
-    const isFlagEnabled = (flagName) => flagService?.evaluateFlag(flagName, flagContext).enabled ?? config.flags[flagName];
-    const multimodalInputPathEnabled = isFlagEnabled("multimodal_input_path_enabled") && isFlagEnabled("enable_multimodal_pipeline");
-    const observabilityEnabled = isFlagEnabled("observability_required_events_v1");
-    const securityHardControlsEnabled = isFlagEnabled("security_hard_controls_enabled");
+    const isFlagEnabled = (flagName) => resolveFeatureFlagEnabled(flagName, config, flagContext);
+    const gateFlags = resolveQueryGovernanceGateFlags(ingressResult);
     const memoryRetrievalEnabled = isFlagEnabled("memory_retrieval_enabled");
     const costCapsEnabled = isFlagEnabled("enable_cost_caps");
     const toolExecutionEnabled = process.env.TOOL_EXECUTION_ENABLED === "true";
+    const { observabilityEnabled, securityHardControlsEnabled } = gateFlags;
     return runWithContextAsync(ctx, async () => {
         try {
-            const canonical = canonicalize(ingressResult.envelope);
-            const intent = extractIntent(canonical);
-            const controlPlane = createControlPlane({ router: defaultRouter });
-            const multimodalCapablePipelines = multimodalInputPathEnabled
-                ? ["reactive_chat"]
-                : undefined;
-            const result = await controlPlane.decide({
-                canonical,
-                intent,
-                caller: ingressResult.callerContext,
-                multimodalCapablePipelines,
+            const gate = await runQueryGovernanceGate(ingressResult, start, gateFlags, {
+                skipPolicyTelemetryIfDispatchAllowed: false,
             });
-            /** L2-05: Use policy redaction_level for events and audit so no raw secrets in logs. */
-            const redactionLevel = (result.policyDecision.redaction_level ?? "minimal");
-            if (observabilityEnabled) {
-                emit(buildEvent("POLICY_DECISION", {
-                    allowed: result.policyDecision.allowed,
-                    deny_reason: result.policyDecision.deny_reason,
-                    memory_scope: result.policyDecision.memory_scope,
-                    allowed_pipelines: result.policyDecision.allowed_pipelines,
-                }, redactionLevel));
-                const budgets = result.policyDecision.max_budgets ?? {};
-                emit(buildEvent("BUDGET_ASSIGN", {
-                    token_budget: budgets.token_budget,
-                    tool_budget: budgets.tool_budget,
-                    deadline_ms: budgets.deadline_ms,
-                    cost_budget_usd: budgets.cost_budget_usd,
-                }, redactionLevel));
+            if (gate.status === "blocked") {
+                return gate.response;
             }
-            if (securityHardControlsEnabled) {
-                writeSecurityAudit("SECURITY_POLICY_DECISION", {
-                    allowed: result.policyDecision.allowed,
-                    deny_reason: result.policyDecision.deny_reason ?? null,
-                    memory_scope: result.policyDecision.memory_scope ?? null,
-                }, redactionLevel);
-            }
-            if (!canDispatch(result)) {
-                const denyReason = result.routeResult.allowed ? "POLICY_BLOCKED" : result.routeResult.denyReason;
-                if (securityHardControlsEnabled) {
-                    incrementCounter(METRIC_SECURITY_DENY_TOTAL, 1, { reason: denyReason });
-                    writeSecurityAudit("SECURITY_ROUTE_DENY", {
-                        deny_reason: denyReason,
-                        stage: "control_plane",
-                    }, redactionLevel);
-                }
-                if (observabilityEnabled) {
-                    emit(buildEvent("ROUTE_DECISION", {
-                        deny: true,
-                        deny_reason: denyReason,
-                    }, redactionLevel));
-                    emit(buildEvent("ERROR", {
-                        code: denyReason,
-                        message: "Request denied by governance",
-                        stage: "control_plane",
-                        detail_redacted: {},
-                    }, redactionLevel));
-                }
-                incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: "denied", status: "blocked" });
-                recordHistogram(METRIC_REQUEST_LATENCY_MS, Date.now() - start, {
-                    route: "denied",
-                    status: "blocked",
-                });
-                const blockedMessage = result.policyDecision.deny_reason === "BUDGET_EXCEEDED"
-                    ? "Token or cost budget exceeded"
-                    : denyReason === "MULTIMODAL_UNSUPPORTED"
-                        ? "Multimodal request but no capable pipeline allowed"
-                        : "Request blocked by policy";
-                return {
-                    request_id: requestId,
-                    status: "blocked",
-                    error: {
-                        code: denyReason,
-                        message: blockedMessage,
-                        detail: {},
-                    },
-                    mode: "sync",
-                    telemetry: {
-                        pipeline: "none",
-                        models_used: [],
-                        tool_calls: 0,
-                        tokens_in: 0,
-                        tokens_out: 0,
-                        cost_usd_est: 0,
-                        latency_ms: Date.now() - start,
-                    },
-                };
-            }
-            assertCanDispatch(result);
+            const { canonical, intent, result, redactionLevel } = gate.data;
             const plan = result.pipelinePlan;
             if (!costCapsEnabled && plan.budgets?.cost_budget_usd !== undefined) {
                 plan.budgets = { ...plan.budgets, cost_budget_usd: undefined };
@@ -328,6 +375,7 @@ export async function handleQuery(ingressResult) {
             if (hasToolsInPlan && !toolExecutionEnabled) {
                 console.warn("[query] tools requested in plan but TOOL_EXECUTION_ENABLED is false; using deny-only gateway");
             }
+            /** WANT-006: Tools only via gateway; `plan.tools_enabled` is policy/router output. */
             const toolGatewayForPlan = hasToolsInPlan
                 ? toolExecutionEnabled
                     ? new AllowlistToolGateway({

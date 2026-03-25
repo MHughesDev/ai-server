@@ -23,6 +23,11 @@ export declare const PipelinePlanSchema: z.ZodObject<{
     pipeline_type: z.ZodString;
     strategy_id: z.ZodOptional<z.ZodString>;
     execution_mode: z.ZodDefault<z.ZodLiteral<"sync_stream">>;
+    /**
+     * When true, coding_agent may run the autonomous harness loop (tool iterations).
+     * Resolved by the router from policy + feature flags — pipelines must not re-decide independently (WANT-004).
+     */
+    harness_autonomous_execution: z.ZodOptional<z.ZodBoolean>;
     budgets: z.ZodOptional<z.ZodObject<{
         token_budget: z.ZodOptional<z.ZodNumber>;
         tool_budget: z.ZodOptional<z.ZodNumber>;
@@ -104,6 +109,7 @@ export declare const PipelinePlanSchema: z.ZodObject<{
         top_k?: number | undefined;
     } | undefined;
     strategy_id?: string | undefined;
+    harness_autonomous_execution?: boolean | undefined;
     budgets?: {
         deadline_ms?: number | undefined;
         token_budget?: number | undefined;
@@ -134,6 +140,7 @@ export declare const PipelinePlanSchema: z.ZodObject<{
     } | undefined;
     strategy_id?: string | undefined;
     execution_mode?: "sync_stream" | undefined;
+    harness_autonomous_execution?: boolean | undefined;
     budgets?: {
         deadline_ms?: number | undefined;
         token_budget?: number | undefined;

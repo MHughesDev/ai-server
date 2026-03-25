@@ -177,14 +177,17 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             needs_web: z.ZodOptional<z.ZodBoolean>;
             needs_files: z.ZodOptional<z.ZodBoolean>;
             needs_code: z.ZodOptional<z.ZodBoolean>;
+            needs_attachment_processing: z.ZodOptional<z.ZodBoolean>;
         }, "strip", z.ZodTypeAny, {
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         }, {
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         }>>;
         primary_intent: z.ZodOptional<z.ZodEnum<["chat", "coding_agent", "rag", "tool_agent", "multimodal_reasoning"]>>;
         risk_flags: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
@@ -204,6 +207,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         } | undefined;
         primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
     }, {
@@ -219,6 +223,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         } | undefined;
         primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
         risk_flags?: string[] | undefined;
@@ -292,6 +297,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         pipeline_type: z.ZodString;
         strategy_id: z.ZodOptional<z.ZodString>;
         execution_mode: z.ZodDefault<z.ZodLiteral<"sync_stream">>;
+        harness_autonomous_execution: z.ZodOptional<z.ZodBoolean>;
         budgets: z.ZodOptional<z.ZodObject<{
             token_budget: z.ZodOptional<z.ZodNumber>;
             tool_budget: z.ZodOptional<z.ZodNumber>;
@@ -368,6 +374,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             top_k?: number | undefined;
         } | undefined;
         strategy_id?: string | undefined;
+        harness_autonomous_execution?: boolean | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
@@ -398,6 +405,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         } | undefined;
         strategy_id?: string | undefined;
         execution_mode?: "sync_stream" | undefined;
+        harness_autonomous_execution?: boolean | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
@@ -516,6 +524,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         } | undefined;
         primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
     };
@@ -547,6 +556,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             top_k?: number | undefined;
         } | undefined;
         strategy_id?: string | undefined;
+        harness_autonomous_execution?: boolean | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;
@@ -618,6 +628,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
             needs_web?: boolean | undefined;
             needs_files?: boolean | undefined;
             needs_code?: boolean | undefined;
+            needs_attachment_processing?: boolean | undefined;
         } | undefined;
         primary_intent?: "chat" | "coding_agent" | "rag" | "tool_agent" | "multimodal_reasoning" | undefined;
         risk_flags?: string[] | undefined;
@@ -649,6 +660,7 @@ export declare const AgentHarnessInputSchema: z.ZodObject<{
         } | undefined;
         strategy_id?: string | undefined;
         execution_mode?: "sync_stream" | undefined;
+        harness_autonomous_execution?: boolean | undefined;
         budgets?: {
             deadline_ms?: number | undefined;
             token_budget?: number | undefined;

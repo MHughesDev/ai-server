@@ -23,7 +23,7 @@ export const CanonicalRequestSchema = z.object({
     structured: z.record(z.unknown()).optional(),
     /** Estimated input tokens for budgeting */
     token_estimate: z.number().int().min(0).default(0),
-    /** Original caller/context identifiers (pass-through) */
+    /** Caller identity from ingress `CallerContext` (JWT claims when authenticated; never body-only in that path). */
     caller_app_id: z.string().min(1),
     caller_user_id: z.string().min(1),
     caller_org_id: z.string().min(1),

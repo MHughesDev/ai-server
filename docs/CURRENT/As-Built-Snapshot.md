@@ -7,6 +7,7 @@
 
 ## Target backlog alignment (WANT-xxx)
 
+- **2026-03-24:** **Product decisions** that narrow acceptance criteria (instances, Postgres/Chroma, auth, budgets, tools, memory tiers, contracts, tests): see **§ Narrowed target — product & deployment decisions** in [`docs/TARGET/Target-State-Backlog.md`](../TARGET/Target-State-Backlog.md).
 - **2026-03-24:** [`docs/TARGET/Target-State-Backlog.md`](../TARGET/Target-State-Backlog.md) **Implementation status** column populated from static code review (`src/`). Use it to pick work; refresh statuses when behavior changes.
 - **High-impact “Partial” / open clusters:** **WANT-040** (on-disk verify + optional **`AUDIT_LOG_FSYNC`**; multi-replica / crash-edge cases still ops-owned), **WANT-049** (async **`Idempotency-Key`** in-process; no sync idempotency / cross-replica store), **WANT-053** (rollout vs process L2-99). **WANT-022** / **WANT-039** / **WANT-050** / **WANT-052** met; **WANT-038/041** met for in-process bounds (see § Summary observability bounds).
 - **Artifact policy:** `dist/` is gitignored; build required — see root `README.md` § Build Artifacts (**WANT-058**).

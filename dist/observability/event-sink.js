@@ -6,6 +6,7 @@
  */
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 /** L2-04: Global backpressure state */
 let backpressureActive = false;
 let backpressureCallback = null;
@@ -33,6 +34,7 @@ export function createFileEventSink(filePath, options = {}) {
     const maxFileSizeBytes = options.maxFileSizeBytes ?? 10 * 1024 * 1024;
     const maxRotatedFiles = options.maxRotatedFiles ?? 3;
     const backpressureThreshold = options.backpressureThreshold ?? 0.8;
+    const fsyncAfterEachWrite = options.fsyncAfterEachWrite === true;
     const queue = [];
     let droppedEvents = 0;
     let draining = false;
@@ -82,6 +84,9 @@ export function createFileEventSink(filePath, options = {}) {
                     break;
                 await maybeRotate(Buffer.byteLength(line));
                 await appendFile(filePath, line, "utf8");
+                if (fsyncAfterEachWrite) {
+                    await syncFileToDisk(filePath);
+                }
             }
             lastError = null;
         }
@@ -149,6 +154,9 @@ export function createFileEventSink(filePath, options = {}) {
             if (queue.length === 0)
                 return;
             await appendFile(filePath, queue.join(""), "utf8");
+            if (fsyncAfterEachWrite) {
+                await syncFileToDisk(filePath);
+            }
             queue.length = 0;
         },
     };

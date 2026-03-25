@@ -162,21 +162,9 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       const budgets = { token_budget: maxTokens };
       const metadata = { trace_id: traceId, contract_version: "v1" };
 
-      let autonomousMode = false;
-      try {
-        autonomousMode =
-          resolveFeatureFlagEnabled(
-            "harness_autonomous_execution_enabled",
-            getConfig(),
-            {
-              org_id: input.caller.org_id,
-              app_id: input.caller.app_id,
-              user_id: input.caller.user_id,
-            }
-          ) && allowlist.length > 0;
-      } catch {
-        /* bootstrap not called in tests */
-      }
+      /** Autonomous harness: orchestration decided in router → `PipelinePlan.harness_autonomous_execution` (WANT-004). */
+      const autonomousMode =
+        plan.harness_autonomous_execution === true && allowlist.length > 0;
 
       const toolBudget = plan.budgets?.tool_budget ?? DEFAULT_MAX_HARNESS_ITERATIONS;
       const deadlineMs = plan.budgets?.deadline_ms;

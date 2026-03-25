@@ -63,8 +63,10 @@ export class RedisVectorBackend implements VectorBackend {
 
     // Dynamic import to handle optional dependency
     try {
-      const { Redis } = await import("ioredis");
-      this.client = new Redis(this.options.url, {
+      const { Redis } = (await import("ioredis")) as unknown as {
+        Redis: new (url: string, options?: Record<string, unknown>) => unknown;
+      };
+      const raw = new Redis(this.options.url, {
         maxRetriesPerRequest: this.options.retryAttempts,
         retryStrategy: (times: number) => {
           const delay = Math.min(
@@ -77,7 +79,8 @@ export class RedisVectorBackend implements VectorBackend {
         keepAlive: 30000,
         connectTimeout: 10000,
         commandTimeout: this.options.commandTimeoutMs,
-      }) as unknown as RedisClient;
+      });
+      this.client = raw as RedisClient;
 
       await this.client.connect();
       return this.client;

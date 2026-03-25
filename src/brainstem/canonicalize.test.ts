@@ -5,6 +5,17 @@
 
 import { canonicalize } from "./canonicalize.js";
 import type { RequestEnvelope } from "../contracts/request-envelope.js";
+import type { CallerContext } from "../ingress/types.js";
+
+function ctxFromEnvelope(envelope: RequestEnvelope): CallerContext {
+  return {
+    appId: envelope.caller.app_id,
+    userId: envelope.caller.user_id,
+    orgId: envelope.caller.org_id,
+    sessionId: envelope.caller.session_id,
+    scopes: envelope.caller.scopes ?? [],
+  };
+}
 
 describe("canonicalize", () => {
   it("produces CanonicalRequest from valid envelope", () => {
@@ -15,7 +26,7 @@ describe("canonicalize", () => {
       preferences: { response_format: "text", verbosity: "medium", stream: false },
       contract_version: "v1",
     };
-    const canonical = canonicalize(envelope);
+    const canonical = canonicalize(envelope, ctxFromEnvelope(envelope));
     expect(canonical.request_id).toBe(envelope.request_id);
     expect(canonical.text).toBe("hello world");
     expect(canonical.modalities).toContain("text");
@@ -31,7 +42,7 @@ describe("canonicalize", () => {
       preferences: { response_format: "text", verbosity: "medium", stream: false },
       contract_version: "v1",
     };
-    const canonical = canonicalize(envelope);
+    const canonical = canonicalize(envelope, ctxFromEnvelope(envelope));
     expect(canonical.text).toBe("");
     expect(canonical.modalities).toEqual(["text"]);
   });
@@ -49,7 +60,7 @@ describe("canonicalize", () => {
       preferences: { response_format: "text", verbosity: "medium", stream: false },
       contract_version: "v1",
     };
-    const canonical = canonicalize(envelope);
+    const canonical = canonicalize(envelope, ctxFromEnvelope(envelope));
     expect(canonical.attachments).toHaveLength(1);
     expect(canonical.attachments[0].id).toBe("att1");
     expect(canonical.attachments[0].type).toBe("image");
@@ -73,9 +84,31 @@ describe("canonicalize", () => {
       preferences: { response_format: "text", verbosity: "medium", stream: false },
       contract_version: "v1",
     };
-    const canonical = canonicalize(envelope);
+    const canonical = canonicalize(envelope, ctxFromEnvelope(envelope));
     expect(canonical.attachments[0].token_estimate).toBe(256);
     expect(canonical.attachments[1].token_estimate).toBe(512);
     expect(canonical.token_estimate).toBeGreaterThanOrEqual(256 + 512);
+  });
+
+  it("uses CallerContext for identity fields (verified token wins over body envelope)", () => {
+    const envelope: RequestEnvelope = {
+      request_id: "550e8400-e29b-41d4-a716-446655440010",
+      caller: { app_id: "body-app", user_id: "body-user", org_id: "body-org", scopes: [] },
+      input: { text: "x", attachments: [] },
+      preferences: { response_format: "text", verbosity: "medium", stream: false },
+      contract_version: "v1",
+    };
+    const verified: CallerContext = {
+      appId: "token-app",
+      userId: "token-user",
+      orgId: "token-org",
+      sessionId: "sess-1",
+      scopes: ["query:invoke"],
+    };
+    const canonical = canonicalize(envelope, verified);
+    expect(canonical.caller_app_id).toBe("token-app");
+    expect(canonical.caller_user_id).toBe("token-user");
+    expect(canonical.caller_org_id).toBe("token-org");
+    expect(canonical.session_id).toBe("sess-1");
   });
 });

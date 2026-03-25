@@ -16,7 +16,7 @@ import {
   RequestAbortedError,
   RequestReadTimeoutError,
 } from "./middleware.js";
-import { handleQuery } from "./query-handler.js";
+import { handleQuery, preflightAsyncQueryGovernance } from "./query-handler.js";
 import {
   exchangeToken,
   queryRequiresAiJwt,
@@ -332,6 +332,12 @@ async function processRequest(
       attachRateLimitHeaders(res, rateLimitDecision);
       if (!rateLimitDecision.allowed) {
         throw createRateLimitedRejection(rateLimitDecision);
+      }
+
+      const governanceBlocked = await preflightAsyncQueryGovernance(ingressResult);
+      if (governanceBlocked) {
+        sendJson(res, 200, governanceBlocked);
+        return;
       }
 
       let idempotencyKey: string | undefined;

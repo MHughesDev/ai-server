@@ -18,6 +18,6 @@ export declare function recordTenantUsage(orgId: string, usage: {
 export declare function checkTenantBudget(orgId: string): Promise<{
     allowed: boolean;
 }>;
-/** Reset tenant usage (for tests). */
-export declare function resetTenantBudgets(): void;
+/** Reset tenant usage and release backend resources (for tests). */
+export declare function resetTenantBudgets(): Promise<void>;
 //# sourceMappingURL=tenant-budget.d.ts.map

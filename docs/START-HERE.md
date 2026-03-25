@@ -6,7 +6,7 @@
 
 1. [`AGENTS.md`](../AGENTS.md) — hard constraints and verification gate (`npm run verify:sow`).
 2. [`docs/CURRENT/As-Built-Snapshot.md`](./CURRENT/As-Built-Snapshot.md) — **current** runtime truth (fill during doc finalization).
-3. [`docs/TARGET/Target-State-Backlog.md`](./TARGET/Target-State-Backlog.md) — **target** requirements (`WANT-xxx`); use for gaps, not as proof of behavior.
+3. [`docs/TARGET/Target-State-Backlog.md`](./TARGET/Target-State-Backlog.md) — **target** requirements (`WANT-xxx`); includes **Narrowed target — product & deployment decisions** (owner Q&A + `WANT` traceability). Use for gaps, not as proof of behavior.
 
 ## Then branch by task
 

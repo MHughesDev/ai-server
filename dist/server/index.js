@@ -6,8 +6,9 @@ import { readFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
-import { setObservability, createEmitter, getTraceContext, setEventSink, createFileEventSink } from "../observability/index.js";
-import { setAuditSink, createFileAuditSink } from "../security/audit-logger.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import { setObservability, createEmitter, getTraceContext, setEventSink, getEventSink, createFileEventSink, } from "../observability/index.js";
+import { setAuditSink, createFileAuditSink, shutdownPersistentAuditFileSink, } from "../security/audit-logger.js";
 import { handleRequest } from "./routes.js";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 /** Connection limits configuration (L2-05 Phase 1: Core Infrastructure Fixes) */
@@ -101,13 +102,17 @@ function main() {
     }
     const auditLogPath = config.auditLogPath;
     if (auditLogPath) {
-        setAuditSink(createFileAuditSink(auditLogPath));
+        setAuditSink(createFileAuditSink(auditLogPath, {
+            fsyncAfterEachWrite: process.env.AUDIT_LOG_FSYNC === "true",
+        }));
     }
     const eventSinkPath = config.observabilityEventSinkPath;
     if (eventSinkPath) {
-        setEventSink(createFileEventSink(eventSinkPath));
+        setEventSink(createFileEventSink(eventSinkPath, {
+            fsyncAfterEachWrite: process.env.OBSERVABILITY_EVENT_SINK_FSYNC === "true",
+        }));
     }
-    if (config.flags.observability_required_events_v1) {
+    if (resolveFeatureFlagEnabled("observability_required_events_v1", config)) {
         const emitter = createEmitter({
             redactionLevel: "minimal",
             logToConsole: config.logLevel === "debug",
@@ -120,41 +125,22 @@ function main() {
         setObservability(obs);
     }
     const httpServer = createAppServer();
-    const closers = [
-        () => new Promise((resolve, reject) => {
-            httpServer.close((err) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                resolve();
-            });
-        }),
-    ];
     httpServer.listen(PORT, () => {
         console.info(`Server listening on port ${PORT} (HTTP)`);
     });
     const keyPath = config.tlsKeyPath;
     const certPath = config.tlsCertPath;
+    let httpsServer = null;
     if (keyPath && certPath) {
         try {
             // PRODUCTION: Consider async load or validate paths exist first; readFileSync blocks event loop.
             const key = readFileSync(keyPath);
             const cert = readFileSync(certPath);
-            const httpsServer = createHttpsAppServer({ key, cert });
+            httpsServer = createHttpsAppServer({ key, cert });
             const httpsPort = config.httpsPort;
             httpsServer.listen(httpsPort, () => {
                 console.info(`HTTPS server listening on port ${httpsPort}`);
             });
-            closers.push(() => new Promise((resolve, reject) => {
-                httpsServer.close((err) => {
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
-                    resolve();
-                });
-            }));
         }
         catch (err) {
             throw new Error(`TLS is configured but key/cert could not be loaded: ${String(err)}`);
@@ -168,23 +154,17 @@ function main() {
             return;
         shuttingDown = true;
         console.info(`[server] received ${signal}, starting graceful shutdown...`);
-        // Mark as draining to reject new requests
         connectionState.draining = true;
-        // Stop accepting new connections
-        httpServer.close(() => {
-            console.info("[server] HTTP server closed, no longer accepting connections");
+        const httpClosePromise = new Promise((resolve, reject) => {
+            httpServer.close((err) => {
+                if (err)
+                    reject(err);
+                else {
+                    console.info("[server] HTTP server closed, no longer accepting connections");
+                    resolve();
+                }
+            });
         });
-        // Close HTTPS server if running
-        if (keyPath && certPath && closers.length > 1) {
-            try {
-                await closers[1]();
-                console.info("[server] HTTPS server closed");
-            }
-            catch (err) {
-                console.error("[server] HTTPS close error", err);
-            }
-        }
-        // Wait for in-flight requests to complete or timeout
         const drainStart = Date.now();
         const checkConnections = () => {
             return new Promise((resolve) => {
@@ -209,6 +189,26 @@ function main() {
         };
         try {
             await checkConnections();
+            try {
+                await shutdownPersistentAuditFileSink();
+            }
+            catch (err) {
+                console.error("[server] audit file sink shutdown error", err);
+            }
+            try {
+                await getEventSink()?.close?.();
+            }
+            catch (err) {
+                console.error("[server] event sink shutdown error", err);
+            }
+            if (httpsServer) {
+                const tlsServer = httpsServer;
+                await new Promise((resolve, reject) => {
+                    tlsServer.close((err) => (err ? reject(err) : resolve()));
+                });
+                console.info("[server] HTTPS server closed");
+            }
+            await httpClosePromise;
             console.info("[server] graceful shutdown complete");
             process.exit(0);
         }
