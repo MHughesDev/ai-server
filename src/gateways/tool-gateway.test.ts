@@ -10,7 +10,18 @@ import {
   ExecutableToolGateway,
   getDefaultToolGateway,
   setDefaultToolGateway,
+  toolIdRequiresFilesystemAccess,
+  toolIdRequiresNetworkAccess,
 } from "./tool-gateway.js";
+
+describe("toolIdRequiresNetworkAccess / toolIdRequiresFilesystemAccess", () => {
+  it("reflects builtin executable tool metadata", () => {
+    expect(toolIdRequiresNetworkAccess("web_search")).toBe(true);
+    expect(toolIdRequiresNetworkAccess("stub_tool")).toBe(false);
+    expect(toolIdRequiresFilesystemAccess("file_write_preview")).toBe(true);
+    expect(toolIdRequiresFilesystemAccess("stub_tool")).toBe(false);
+  });
+});
 
 describe("DenyOnlyToolGateway", () => {
   const gateway = new DenyOnlyToolGateway();

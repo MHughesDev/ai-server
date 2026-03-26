@@ -61,6 +61,8 @@ Use this section as the production go/no-go gate:
 
 The model gateway is **fully implemented** with circuit breakers, health checks, capability taxonomy, and scope/tenancy routing.
 
+When **`NODE_ENV=production`**, **`bootstrap()`** fails unless **`MODEL_GATEWAY_PROVIDERS_JSON`** lists at least one provider with **`"kind": "openai_compatible"`** (WANT-023). Dev-only defaults such as **`framed_echo`** alone are not accepted in production.
+
 #### Environment Variables
 
 ```bash

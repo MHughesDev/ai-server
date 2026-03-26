@@ -16,6 +16,7 @@ import type {
   RetrievalScope,
 } from "./types.js";
 import { chunkText } from "./chunker.js";
+import { emitMemoryWriteEvent } from "../observability/taxonomy-events.js";
 import { randomUUID } from "node:crypto";
 
 interface StoredChunk {
@@ -126,22 +127,39 @@ export class InMemoryStore implements IMemoryStore {
   async ingest(input: IngestionInput): Promise<IngestionResult> {
     await Promise.resolve();
     if (!this.available) {
-      return {
+      const unavailable: IngestionResult = {
         document_id: input.document_id,
         chunks_written: 0,
         error: "store_unavailable",
       };
+      emitMemoryWriteEvent({
+        document_id: unavailable.document_id,
+        scope: input.scope,
+        chunks_written: 0,
+        error: unavailable.error,
+        store: "in_memory",
+      });
+      return unavailable;
     }
     const chunkStrings = chunkText(input.text, { chunk_size: 512, overlap: 64 });
     const maxChunksPerIngest = this.retention?.max_chunks_per_ingest ?? defaultMaxChunksPerIngest;
     const capPolicy = this.retention?.ingest_chunk_cap_policy ?? "trim";
     if (chunkStrings.length > maxChunksPerIngest && capPolicy === "reject") {
-      return {
+      const rejected: IngestionResult = {
         document_id: input.document_id,
         chunks_written: 0,
         chunks_dropped: chunkStrings.length,
         error: "ingest_chunk_cap_exceeded",
       };
+      emitMemoryWriteEvent({
+        document_id: rejected.document_id,
+        scope: input.scope,
+        chunks_written: 0,
+        chunks_dropped: rejected.chunks_dropped,
+        error: rejected.error,
+        store: "in_memory",
+      });
+      return rejected;
     }
     const boundedChunks =
       chunkStrings.length > maxChunksPerIngest
@@ -169,12 +187,21 @@ export class InMemoryStore implements IMemoryStore {
       written++;
     }
     this.evictByRetention();
-    return {
+    const done: IngestionResult = {
       document_id: input.document_id,
       chunks_written: written,
       chunks_dropped: dropped,
       error: dropped > 0 ? "ingest_chunks_trimmed" : undefined,
     };
+    emitMemoryWriteEvent({
+      document_id: done.document_id,
+      scope: input.scope,
+      chunks_written: done.chunks_written,
+      chunks_dropped: done.chunks_dropped,
+      ...(done.error ? { error: done.error } : {}),
+      store: "in_memory",
+    });
+    return done;
   }
 
   async isAvailable(): Promise<boolean> {

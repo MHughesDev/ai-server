@@ -20,3 +20,6 @@ export * from "./dns-cache.js";
 
 // Network utilities
 export * from "./network.js";
+
+// Async deadline (plan budgets)
+export * from "./async-deadline.js";

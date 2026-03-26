@@ -191,7 +191,12 @@ function buildEngineInvocation(
       roles: input.caller.scopes ?? [],
     },
     budgets: { token_budget: maxTokens },
-    metadata: { trace_id: traceId, contract_version: "v1" },
+    metadata: {
+      trace_id: traceId,
+      contract_version: "v1",
+      audit_level: input.policy.audit_level,
+      redaction_level: input.policy.redaction_level,
+    },
   };
 }
 
@@ -199,7 +204,10 @@ function buildEngineInvocation(
 function synthesisResultToEnvelope(
   result: EngineResult,
   requestId: string,
-  plan: PipelinePlan
+  plan: PipelinePlan,
+  accumulatedToolCalls = 0,
+  /** When set (workflow runner), total tokens across steps including this result's metrics.tokens_used when already summed by caller — caller passes running total after last add. */
+  accumulatedTokensTotal?: number
 ): ResponseEnvelope {
   const text =
     result.result_artifacts[0] != null
@@ -208,6 +216,10 @@ function synthesisResultToEnvelope(
         )
       : "";
   const metrics = result.metrics ?? {};
+  const tokensIn =
+    accumulatedTokensTotal != null
+      ? accumulatedTokensTotal
+      : (metrics.tokens_used ?? 0);
   return {
     request_id: requestId,
     status: result.status === "success" ? "ok" : "error",
@@ -219,8 +231,8 @@ function synthesisResultToEnvelope(
     telemetry: {
       pipeline: plan.pipeline_type,
       models_used: [],
-      tool_calls: 0,
-      tokens_in: metrics.tokens_used ?? 0,
+      tool_calls: accumulatedToolCalls,
+      tokens_in: tokensIn,
       tokens_out: 0,
       cost_usd_est: metrics.cost_estimate_usd ?? 0,
       latency_ms: metrics.duration_ms ?? 0,
@@ -276,32 +288,12 @@ function minPositive(...values: Array<number | undefined>): number | undefined {
   return Math.min(...defined);
 }
 
-function budgetExceededEnvelope(
-  requestId: string,
-  workflowId: string,
-  workflowStart: number,
-  detail: Record<string, unknown>
-): ResponseEnvelope {
-  return {
-    request_id: requestId,
-    status: "blocked",
-    mode: "sync",
-    error: {
-      code: "BUDGET_EXCEEDED",
-      message: "Workflow budget exceeded",
-      detail,
-    },
-    telemetry: {
-      pipeline: workflowId,
-      models_used: [],
-      tool_calls: 0,
-      tokens_in: 0,
-      tokens_out: 0,
-      cost_usd_est: 0,
-      latency_ms: Date.now() - workflowStart,
-    },
-  };
-}
+import {
+  buildBudgetExceededEnvelope,
+  isFiniteToolBudget,
+} from "../governance/budget-exceeded.js";
+
+const budgetExceededEnvelope = buildBudgetExceededEnvelope;
 
 /**
  * Run a workflow by definition: resolve steps in order, execute engine_call or workflow_call,
@@ -330,12 +322,36 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
   const maxIterations = def.stop_conditions?.max_iterations ?? 1;
   const maxStepExecutions = Math.max(1, maxIterations * Math.max(def.steps.length, 1));
   const costBudgetUsd = input.plan.budgets?.cost_budget_usd;
+  const toolBudget = input.plan.budgets?.tool_budget;
+  const tokenBudget = input.plan.budgets?.token_budget;
+  let accumulatedToolCalls = 0;
+  let accumulatedTokens = 0;
 
   const sortedSteps = sortSteps(def.steps);
   const stepOutputs = new Map<string, StepOutput>();
   let runIterations = 0;
   let executedSteps = 0;
   let accumulatedCostUsd = 0;
+
+  /** WANT-014: same hard-stop semantics as `query-handler` post-pipeline check (`tokens_in + tokens_out > token_budget`). */
+  const tokenBudgetExceeded = (): ResponseEnvelope => {
+    emitWorkflowEvent("WORKFLOW_END", {
+      workflow_id: workflowId,
+      duration_ms: Date.now() - workflowStart,
+      status: "blocked",
+    });
+    return budgetExceededEnvelope(
+      requestId,
+      workflowId,
+      workflowStart,
+      {
+        dimension: "token_budget",
+        token_budget: tokenBudget,
+        tokens_used: accumulatedTokens,
+      },
+      accumulatedToolCalls
+    );
+  };
 
   try {
     runIterations += 1;
@@ -381,6 +397,28 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
       }
 
       if (step.kind === "engine_call") {
+        if (
+          step.ref === "tool" &&
+          isFiniteToolBudget(toolBudget) &&
+          accumulatedToolCalls >= toolBudget
+        ) {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "blocked",
+          });
+          return budgetExceededEnvelope(
+            requestId,
+            workflowId,
+            workflowStart,
+            {
+              dimension: "tool_budget",
+              tool_budget: toolBudget,
+              tool_calls: accumulatedToolCalls,
+            },
+            accumulatedToolCalls
+          );
+        }
         const engine = deps.getEngine(step.ref);
         if (!engine) {
           emitWorkflowEvent("WORKFLOW_END", {
@@ -397,7 +435,15 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
               message: `Engine ${step.ref} not found for step ${step.step_id}`,
               detail: {},
             },
-            telemetry: { pipeline: workflowId, models_used: [], tool_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd_est: 0, latency_ms: Date.now() - workflowStart },
+            telemetry: {
+              pipeline: workflowId,
+              models_used: [],
+              tool_calls: accumulatedToolCalls,
+              tokens_in: accumulatedTokens,
+              tokens_out: 0,
+              cost_usd_est: 0,
+              latency_ms: Date.now() - workflowStart,
+            },
           };
         }
         const inv = buildEngineInvocation(step, depArtifacts, input, traceId);
@@ -412,6 +458,25 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
           cost_estimate_usd: result.metrics?.cost_estimate_usd,
           tokens_used: result.metrics?.tokens_used,
         });
+        if (result.status !== "success") {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "error",
+          });
+          return synthesisResultToEnvelope(result, requestId, input.plan, accumulatedToolCalls, accumulatedTokens);
+        }
+        accumulatedTokens += result.metrics?.tokens_used ?? 0;
+        if (
+          tokenBudget != null &&
+          Number.isFinite(tokenBudget) &&
+          accumulatedTokens > tokenBudget
+        ) {
+          return tokenBudgetExceeded();
+        }
+        if (step.ref === "tool") {
+          accumulatedToolCalls += 1;
+        }
         accumulatedCostUsd += result.metrics?.cost_estimate_usd ?? 0;
         if (costBudgetUsd != null && accumulatedCostUsd > costBudgetUsd) {
           emitWorkflowEvent("WORKFLOW_END", {
@@ -419,19 +484,17 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
             duration_ms: Date.now() - workflowStart,
             status: "blocked",
           });
-          return budgetExceededEnvelope(requestId, workflowId, workflowStart, {
-            dimension: "cost_budget_usd",
-            cost_budget_usd: costBudgetUsd,
-            cost_used_usd: accumulatedCostUsd,
-          });
-        }
-        if (result.status !== "success") {
-          emitWorkflowEvent("WORKFLOW_END", {
-            workflow_id: workflowId,
-            duration_ms: Date.now() - workflowStart,
-            status: "error",
-          });
-          return synthesisResultToEnvelope(result, requestId, input.plan);
+          return budgetExceededEnvelope(
+            requestId,
+            workflowId,
+            workflowStart,
+            {
+              dimension: "cost_budget_usd",
+              cost_budget_usd: costBudgetUsd,
+              cost_used_usd: accumulatedCostUsd,
+            },
+            accumulatedToolCalls
+          );
         }
         executedSteps += 1;
         stepOutputs.set(step.step_id, { kind: "artifacts", artifacts: result.result_artifacts });
@@ -455,7 +518,15 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
               message: `Sub-workflow ${step.ref} not found`,
               detail: {},
             },
-            telemetry: { pipeline: workflowId, models_used: [], tool_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd_est: 0, latency_ms: Date.now() - workflowStart },
+            telemetry: {
+              pipeline: workflowId,
+              models_used: [],
+              tool_calls: accumulatedToolCalls,
+              tokens_in: accumulatedTokens,
+              tokens_out: 0,
+              cost_usd_est: 0,
+              latency_ms: Date.now() - workflowStart,
+            },
           };
         }
         const childPlan = inheritBudgets(input.plan, subDef);
@@ -476,10 +547,46 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
               message: `Pipeline for sub-workflow ${step.ref} not found`,
               detail: {},
             },
-            telemetry: { pipeline: workflowId, models_used: [], tool_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd_est: 0, latency_ms: Date.now() - workflowStart },
+            telemetry: {
+              pipeline: workflowId,
+              models_used: [],
+              tool_calls: accumulatedToolCalls,
+              tokens_in: accumulatedTokens,
+              tokens_out: 0,
+              cost_usd_est: 0,
+              latency_ms: Date.now() - workflowStart,
+            },
           };
         }
         const childEnvelope = await pipeline.run(childInput);
+        accumulatedTokens +=
+          (childEnvelope.telemetry?.tokens_in ?? 0) + (childEnvelope.telemetry?.tokens_out ?? 0);
+        if (
+          tokenBudget != null &&
+          Number.isFinite(tokenBudget) &&
+          accumulatedTokens > tokenBudget
+        ) {
+          return tokenBudgetExceeded();
+        }
+        accumulatedToolCalls += childEnvelope.telemetry?.tool_calls ?? 0;
+        if (isFiniteToolBudget(toolBudget) && accumulatedToolCalls > toolBudget) {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "blocked",
+          });
+          return budgetExceededEnvelope(
+            requestId,
+            workflowId,
+            workflowStart,
+            {
+              dimension: "tool_budget",
+              tool_budget: toolBudget,
+              tool_calls: accumulatedToolCalls,
+            },
+            accumulatedToolCalls
+          );
+        }
         accumulatedCostUsd += childEnvelope.telemetry?.cost_usd_est ?? 0;
         if (costBudgetUsd != null && accumulatedCostUsd > costBudgetUsd) {
           emitWorkflowEvent("WORKFLOW_END", {
@@ -487,11 +594,17 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
             duration_ms: Date.now() - workflowStart,
             status: "blocked",
           });
-          return budgetExceededEnvelope(requestId, workflowId, workflowStart, {
-            dimension: "cost_budget_usd",
-            cost_budget_usd: costBudgetUsd,
-            cost_used_usd: accumulatedCostUsd,
-          });
+          return budgetExceededEnvelope(
+            requestId,
+            workflowId,
+            workflowStart,
+            {
+              dimension: "cost_budget_usd",
+              cost_budget_usd: costBudgetUsd,
+              cost_used_usd: accumulatedCostUsd,
+            },
+            accumulatedToolCalls
+          );
         }
         executedSteps += 1;
         stepOutputs.set(step.step_id, { kind: "envelope", envelope: childEnvelope });
@@ -551,8 +664,8 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
         telemetry: {
           pipeline: workflowId,
           models_used: [],
-          tool_calls: 0,
-          tokens_in: 0,
+          tool_calls: accumulatedToolCalls,
+          tokens_in: accumulatedTokens,
           tokens_out: 0,
           cost_usd_est: 0,
           latency_ms: Date.now() - workflowStart,
@@ -572,9 +685,9 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
         telemetry: {
           pipeline: workflowId,
           models_used: Array.isArray(t?.models_used) ? t.models_used : [],
-          tool_calls: typeof t?.tool_calls === "number" ? t.tool_calls : 0,
-          tokens_in: typeof t?.tokens_in === "number" ? t.tokens_in : 0,
-          tokens_out: typeof t?.tokens_out === "number" ? t.tokens_out : 0,
+          tool_calls: accumulatedToolCalls,
+          tokens_in: accumulatedTokens,
+          tokens_out: 0,
           cost_usd_est: accumulatedCostUsd || (typeof t?.cost_usd_est === "number" ? t.cost_usd_est : 0),
           latency_ms: typeof t?.latency_ms === "number" ? t.latency_ms : 0,
         },
@@ -594,7 +707,7 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
         duration_ms: Date.now() - workflowStart,
         status: "ok",
       });
-      return synthesisResultToEnvelope(result, requestId, input.plan);
+      return synthesisResultToEnvelope(result, requestId, input.plan, accumulatedToolCalls, accumulatedTokens);
     }
 
     // Generic engine_call last step: wrap artifacts in envelope
@@ -615,8 +728,8 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
       telemetry: {
         pipeline: workflowId,
         models_used: [],
-        tool_calls: 0,
-        tokens_in: 0,
+        tool_calls: accumulatedToolCalls,
+        tokens_in: accumulatedTokens,
         tokens_out: 0,
         cost_usd_est: 0,
         latency_ms: Date.now() - workflowStart,

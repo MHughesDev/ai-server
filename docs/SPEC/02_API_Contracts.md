@@ -14,22 +14,22 @@
 
 | Method | Path | Notes |
 |--------|------|--------|
-| GET | `/healthz` | Liveness + dependency summary. If `OPERATIONAL_BEARER_TOKEN` is set, requires `Authorization: Bearer <token>`. |
-| GET | `/readyz` | Readiness + dependencies; same operational bearer rule. |
-| GET | `/metrics` | JSON counters/histograms, or Prometheus text via `?format=prometheus` or `Accept: text/plain`. Same operational bearer rule. |
-| GET | `/v1/version` | Contract version, app version, optional `release_id` / `build_id`. Same operational bearer rule. |
-| GET | `/v1/preflight` | Production preflight report. Same operational bearer rule. |
-| POST | `/token/exchange` | Identity trust boundary for AI JWT (payload per deployment). May return 503 when production rollout flag disables platform. |
+| GET | `/healthz` | Liveness + dependency summary. If `OPERATIONAL_BEARER_TOKEN` is set, requires `Authorization: Bearer <token>`. Processing bounded by **`REQUEST_PROCESSING_TIMEOUT_MS`** (504 **`TIMEOUT`** if dependency checks stall). |
+| GET | `/readyz` | Readiness + dependencies; same operational bearer rule and **`REQUEST_PROCESSING_TIMEOUT_MS`** / **504 `TIMEOUT`**. |
+| GET | `/metrics` | JSON counters/histograms, or Prometheus text via `?format=prometheus` or `Accept: text/plain`. Same operational bearer rule and processing timeout. |
+| GET | `/v1/version` | Contract version, app version, optional `release_id` / `build_id`. Same operational bearer rule. Uses `REQUEST_PROCESSING_TIMEOUT_MS` like other operational GETs; may return **504** `TIMEOUT` (same error body shape as `/healthz`). |
+| GET | `/v1/preflight` | Production preflight report. Same operational bearer rule; **`REQUEST_PROCESSING_TIMEOUT_MS`** / **504 `TIMEOUT`** on slow checks. |
+| POST | `/token/exchange` | Identity trust boundary for AI JWT (payload per deployment). May return 503 when production rollout flag disables platform. After body read, bounded by **`REQUEST_PROCESSING_TIMEOUT_MS`** (504 **`TIMEOUT`**). |
 | POST | `/v1/query` | Primary synchronous ingress (`RequestEnvelope`). Gated by feature flags (`runtime_mvp_query_chat_enabled`, `platform_production_rollout_enabled` in production). |
 | POST | `/v1/query/async` | Async job submission (same ingress body as sync). Runs governance gate before enqueue; **200** + `ResponseEnvelope` when blocked, **202** when accepted. Optional `Idempotency-Key` (dedupe per tenant + body fingerprint; see § Execution model). Optional `X-Webhook-Url`. Returns 503 when queue not configured (`ASYNC_NOT_AVAILABLE`) or rollout disabled. |
-| GET | `/v1/jobs` | List jobs; query params: `status`, `org_id`, `app_id`, `user_id`, `limit`, `offset`. |
-| GET | `/v1/jobs/{job_id}` | Job status (single path segment for `job_id`). |
-| POST | `/v1/jobs/{job_id}/cancel` | Cancel job. |
-| GET | `/admin/flags` | List flags (operational bearer when token configured). |
-| POST | `/admin/flags/evaluate` | Evaluate flag. |
-| POST | `/admin/flags/overrides` | Create override. |
-| DELETE | `/admin/flags/overrides/{flag_name}/{scope}/{scope_id}` | Remove override. |
-| GET | `/admin/flags/overrides/{scope}/{scope_id}` | List overrides for scope. |
+| GET | `/v1/jobs` | List jobs; query params: `status`, `org_id`, `app_id`, `user_id`, `limit`, `offset`. Same **`REQUEST_PROCESSING_TIMEOUT_MS`** wall-clock bound as sync query (504 **`TIMEOUT`** if the queue backend stalls). |
+| GET | `/v1/jobs/{job_id}` | Job status (single path segment for `job_id`). Same processing timeout / **504 `TIMEOUT`** as above. |
+| POST | `/v1/jobs/{job_id}/cancel` | Cancel job. Same processing timeout / **504 `TIMEOUT`** as above. |
+| GET | `/admin/flags` | List flags (operational bearer when token configured). Processing bounded by **`REQUEST_PROCESSING_TIMEOUT_MS`**. |
+| POST | `/admin/flags/evaluate` | Evaluate flag. Same processing timeout after body read. |
+| POST | `/admin/flags/overrides` | Create override. Same processing timeout after body read. |
+| DELETE | `/admin/flags/overrides/{flag_name}/{scope}/{scope_id}` | Remove override. Same processing timeout. |
+| GET | `/admin/flags/overrides/{scope}/{scope_id}` | List overrides for scope. Same processing timeout. |
 
 There is **no** separate HTTP route in this server for `/v1/intent`, `/v1/retrieve`, or `/v1/ingest`; those concerns are handled inside the query pipeline and internal contracts where enabled.
 
@@ -51,7 +51,9 @@ This server exposes **two different HTTP patterns**; they must not be conflated:
 
 **Idempotency:** **`POST /v1/query`** remains **without** idempotency; unknown body keys such as `idempotency_key` are still rejected (strict schema). **`POST /v1/query/async`** supports optional HTTP header **`Idempotency-Key`** (trimmed, max **256** characters). The server scopes keys by caller **org_id / app_id / user_id** and fingerprints the logical body (**caller + input + preferences + `mode` + `deadline_ms` + `contract_version`**, **not** `request_id`). Matching key + fingerprint replays the **same** `job_id` (`202`); the same key with a different fingerprint returns **`409`** with **`IDEMPOTENCY_KEY_CONFLICT`**. In-process replay slots expire after **24 hours** (see `JobQueueService` in `src/queue/job-queue.ts`).
 
-**MVP flag:** When `runtime_mvp_query_chat_enabled` is false, `POST /v1/query` returns **404** with `{ "error": "MVP query endpoint not enabled" }` — a **plain object**, not a `ResponseEnvelope`.
+**MVP flag:** When `runtime_mvp_query_chat_enabled` is false, `POST /v1/query` returns **404** with **`ApiPlainError`**: `status: "error"`, `error.code` **`MVP_QUERY_DISABLED`**, `error.message` describing the gate — not a `ResponseEnvelope`.
+
+**Unknown route:** Unmatched methods/paths fall through to **404** **`NOT_FOUND`** (`ApiPlainError`), same shape as other plain JSON errors from `routes.ts`.
 
 **OpenAPI:** `openapi.yaml` `RequestEnvelope` / `ResponseEnvelope` components match the Zod shapes above (aligned 2026-03-24). Internal types (`IntentBundle`, `CanonicalRequest`, …) are not the HTTP ingress body.
 
@@ -77,6 +79,7 @@ Primary code set is defined in `src/contracts/errors.ts` and `src/contracts/ERRO
 - Runtime: `MODEL_FAILURE`, `TOOL_TIMEOUT`, `RETRIEVAL_UNAVAILABLE`, `INTERNAL_ERROR`.
 - Multimodal: `ATTACHMENT_REJECTED`, `MULTIMODAL_UNSUPPORTED`.
 - Async jobs: `IDEMPOTENCY_KEY_CONFLICT` (**409** on `POST /v1/query/async` when `Idempotency-Key` was already used with a different body in the same tenant scope).
+- **HTTP surface (jobs / rollout / admin / ingress):** `ASYNC_NOT_AVAILABLE` (**503** when the job queue is not configured), `INVALID_JOB_ID`, `JOB_NOT_FOUND`, `CANNOT_CANCEL`, `FLAGS_NOT_AVAILABLE`, **`NOT_FOUND`** / **`MVP_QUERY_DISABLED`** (**404**), and **`TIMEOUT`** (**504** for `REQUEST_PROCESSING_TIMEOUT_MS` on query/job routes, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**, **`GET /v1/preflight`**, **`POST /token/exchange`** (after body read), **`/admin/flags*`** — distinct from **`TOOL_TIMEOUT`**). Production rollout disabled responses reuse **`POLICY_BLOCKED`** on **503** per `routes.ts`. **`openapi.yaml`** `ErrorCode` enum documents plain JSON routes; **`ResponseEnvelope.error.code`** remains **`string`** in Zod / **`ResponseErrorNested`** so engine and pipeline codes (e.g. **`DEADLINE_EXCEEDED`**, **`RETRIEVAL_FAILED`**) stay valid (**2026-03-25**).
 
 ## Internal contracts
 Contracts are versioned and validated in `src/contracts/`:

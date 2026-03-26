@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeLogError } from "../observability/redact.js";
 import { runEvalHarness } from "./runner.js";
 import type { EvalCase } from "./types.js";
 
@@ -37,6 +38,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("Eval harness failed:", err);
+  console.error("Eval harness failed:", safeLogError(err));
   process.exit(1);
 });

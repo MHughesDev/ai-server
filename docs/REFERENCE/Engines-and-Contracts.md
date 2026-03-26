@@ -212,7 +212,7 @@ For the **decision** pipeline (`src/pipelines/decision-pipeline.ts`):
 - At workflow run boundaries, the pipeline emits **WORKFLOW_START** (payload: workflow_id) and **WORKFLOW_END** (payload: workflow_id, duration_ms, status).
 - For each **tool** call, the coding-agent pipeline emits **TOOL_START** and **TOOL_END** (payload: tool_id, invocation_id, duration_ms). In autonomous mode it also emits **HARNESS_ITERATION** per tool round (payload: workflow_id, iteration, tool_calls_so_far, proposed_next_action).
 - **PIPELINE_START** and **PIPELINE_END** are emitted by the query handler; **trace_id** and **request_id** are carried in context and in engine invocation metadata.
-- For each **memory** (retrieval) call, the Memory Engine emits **ENGINE_START** / **ENGINE_END** and **MEMORY_QUERY** (payload: hit_count, latency_ms, scope, degraded).
+- For each **memory** (retrieval) call, the Memory Engine emits **ENGINE_START** / **ENGINE_END**; **MEMORY_QUERY** is emitted inside **`runRetrieval`** (payload: hit_count, latency_ms, scope, degraded; optional error on engine-level failure before/without a normal retrieval result).
 - Event taxonomy: `src/observability/events.ts` (`REQUIRED_EVENT_TYPES` includes ENGINE_START, ENGINE_END, WORKFLOW_START, WORKFLOW_END, and all §13 types).
 - **GET /metrics:** Default response is JSON (counters, histograms). Prometheus exposition text is returned when `Accept: text/plain` or `?format=prometheus` (see SPEC 18 and `src/observability/metrics.ts` — `getPrometheusText()`).
 

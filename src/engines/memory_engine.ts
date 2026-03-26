@@ -15,6 +15,7 @@ import type { RetrievalScope } from "../memory/types.js";
 import { runRetrieval } from "../memory/retrieval-service.js";
 import { getObservability } from "../observability/index.js";
 import { getTraceContext } from "../observability/context.js";
+import { emitMemoryQueryEvent } from "../observability/taxonomy-events.js";
 import { randomUUID } from "node:crypto";
 
 const SCHEMA_REF_MEMORY_RESPONSE = "schema://memory_response@v1";
@@ -96,6 +97,15 @@ export function createMemoryEngine(store: IMemoryStore): IEngine {
       }
 
       const caller = toCallerContext(inv);
+      const retrievalTimeoutMs =
+        typeof formalSpec?.retrieval_timeout_ms === "number" && formalSpec.retrieval_timeout_ms > 0
+          ? formalSpec.retrieval_timeout_ms
+          : undefined;
+      const maxContextTokens =
+        typeof formalSpec?.max_context_tokens === "number" && formalSpec.max_context_tokens > 0
+          ? formalSpec.max_context_tokens
+          : undefined;
+
       let retrievalResult: Awaited<ReturnType<typeof runRetrieval>>;
       try {
         retrievalResult = await runRetrieval(store, {
@@ -103,6 +113,8 @@ export function createMemoryEngine(store: IMemoryStore): IEngine {
           scope,
           caller,
           top_k: topK,
+          ...(retrievalTimeoutMs !== undefined && { retrieval_timeout_ms: retrievalTimeoutMs }),
+          ...(maxContextTokens !== undefined && { max_context_tokens: maxContextTokens }),
         });
       } catch (err) {
         const durationMs = Date.now() - start;
@@ -119,15 +131,12 @@ export function createMemoryEngine(store: IMemoryStore): IEngine {
               duration_ms: durationMs,
             },
           });
-          obs.events.emit({
-            event_type: "MEMORY_QUERY",
-            request_id: ctx?.request_id ?? "unknown",
-            trace_id: ctx?.trace_id,
-            timestamp_iso: new Date().toISOString(),
-            redaction_level: "minimal",
-            payload: { hit_count: 0, scope, error: err instanceof Error ? err.message : String(err) },
-          });
         }
+        emitMemoryQueryEvent({
+          hit_count: 0,
+          scope,
+          error: err instanceof Error ? err.message : String(err),
+        });
         return {
           invocation_id: inv.invocation_id,
           status: "fail",
@@ -156,19 +165,6 @@ export function createMemoryEngine(store: IMemoryStore): IEngine {
             engine_type: "memory",
             invocation_id: inv.invocation_id,
             duration_ms: durationMs,
-          },
-        });
-        obs.events.emit({
-          event_type: "MEMORY_QUERY",
-          request_id: ctx?.request_id ?? "unknown",
-          trace_id: ctx?.trace_id,
-          timestamp_iso: new Date().toISOString(),
-          redaction_level: "minimal",
-          payload: {
-            hit_count: retrievalResult.result.hits.length,
-            latency_ms: latencyMs,
-            scope,
-            degraded: retrievalResult.result.degraded,
           },
         });
       }

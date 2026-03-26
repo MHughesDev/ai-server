@@ -3,7 +3,7 @@
  * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
  */
 
-/** Keys that must never appear in telemetry (secrets, PII) */
+/** Keys that must never appear in telemetry (secrets, PII); match on normalized key only */
 const SENSITIVE_KEYS = new Set([
   "password",
   "secret",
@@ -12,6 +12,7 @@ const SENSITIVE_KEYS = new Set([
   "auth",
   "api_key",
   "apikey",
+  "api_secret",
   "cookie",
   "session_id",
   "user_id",
@@ -20,6 +21,16 @@ const SENSITIVE_KEYS = new Set([
   "credit_card",
   "content_b64",
   "bearer",
+  "client_secret",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "private_key",
+  "passwd",
+  "credentials",
+  "credential",
+  "signing_key",
+  "webhook_secret",
 ]);
 
 /** Keys allowed in telemetry at "minimal" redaction (ids only, no content) */
@@ -56,15 +67,32 @@ const ALLOWLIST_MINIMAL = new Set([
   "workflow_id",
   "engine_type",
   "invocation_id",
+  "tool_id",
+  "roles",
   "hit_count",
   "latency_ms",
   "scope",
+  "degraded",
+  "error",
   "caller_org",
   "caller_app",
   "caller_user",
 ]);
 
 export type RedactionLevel = "none" | "minimal" | "full";
+
+function redactArrayElement(value: unknown, level: RedactionLevel): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value !== "object") {
+    if (level === "full" && typeof value === "string" && value.length > 0) {
+      return "[REDACTED]";
+    }
+    return value;
+  }
+  return redact(value, level);
+}
 
 /**
  * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.
@@ -86,7 +114,12 @@ export function redact(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
     const keyLower = key.toLowerCase().replace(/[-_]/g, "_");
-    if (SENSITIVE_KEYS.has(key) || keyLower.includes("password") || keyLower.includes("secret")) {
+    if (
+      SENSITIVE_KEYS.has(keyLower) ||
+      keyLower.includes("password") ||
+      keyLower.includes("secret") ||
+      keyLower.includes("credential")
+    ) {
       continue;
     }
     if (level === "minimal" || level === "full") {
@@ -100,7 +133,7 @@ export function redact(
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       out[key] = redact(value, level);
     } else if (Array.isArray(value)) {
-      out[key] = value.map((v) => redact(v, level));
+      out[key] = value.map((v) => redactArrayElement(v, level));
     } else if (level === "full" && typeof value === "string" && value.length > 0) {
       out[key] = "[REDACTED]";
     } else {
@@ -108,6 +141,14 @@ export function redact(
     }
   }
   return out;
+}
+
+/**
+ * One-line error text for console logs — message only, no stack (WANT-012).
+ */
+export function safeLogError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 /**

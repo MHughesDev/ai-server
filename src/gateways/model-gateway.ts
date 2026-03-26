@@ -324,7 +324,7 @@ class OpenAiCompatibleModelGateway implements IModelGateway {
       throw new ModelGatewayError(
         `Model provider '${this.providerId}' HTTP ${status}: ${bodyText.slice(0, 400)}`,
         "MODEL_FAILURE",
-        status === 408 || status === 409 || status === 429 || status >= 500
+        isRetryableModelProviderHttpStatus(status)
       );
     }
     const body = (await resp.json()) as {
@@ -519,6 +519,31 @@ export async function runProviderHealthChecks(
   return results;
 }
 
+const GATEWAY_TIMEOUT_MESSAGE = "Model gateway timeout";
+
+/**
+ * HTTP statuses from an OpenAI-compatible provider where a retry may succeed.
+ * 4xx client mistakes (except 408/429) and 409 conflicts are not retried.
+ */
+export function isRetryableModelProviderHttpStatus(status: number): boolean {
+  if (status === 408 || status === 429) return true;
+  if (status >= 500 && status < 600) return true;
+  return false;
+}
+
+function transientNodeCauseCode(code: string | undefined): boolean {
+  if (!code) return false;
+  return (
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT" ||
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "EAI_AGAIN" ||
+    code === "UND_ERR_CONNECT_TIMEOUT" ||
+    code === "UND_ERR_SOCKET"
+  );
+}
+
 function classifyRetryability(error: unknown): {
   code: ErrorCode;
   retryable: boolean;
@@ -526,6 +551,24 @@ function classifyRetryability(error: unknown): {
 } {
   if (error instanceof ModelGatewayError) {
     return { code: error.code, retryable: error.retryable, message: error.message };
+  }
+  if (error instanceof Error) {
+    if (error.message === GATEWAY_TIMEOUT_MESSAGE) {
+      return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+    }
+    if (error.name === "TypeError" && /\bfetch\b/i.test(error.message)) {
+      return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+    }
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause instanceof Error && transientNodeCauseCode((cause as NodeJS.ErrnoException).code)) {
+      return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+    }
+    if (cause && typeof cause === "object" && cause !== null && "code" in cause) {
+      const c = (cause as { code?: string }).code;
+      if (transientNodeCauseCode(c)) {
+        return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+      }
+    }
   }
   if (typeof error === "object" && error !== null) {
     const errObj = error as { code?: string; retryable?: boolean; message?: string };
@@ -568,7 +611,7 @@ export function withTimeoutAndRetry(
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           const timeoutPromise = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error("Model gateway timeout")), timeoutMs);
+            timer = setTimeout(() => reject(new Error(GATEWAY_TIMEOUT_MESSAGE)), timeoutMs);
           });
           const result = await Promise.race([gateway.complete(req), timeoutPromise]);
           return result;

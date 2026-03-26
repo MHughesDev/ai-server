@@ -37,6 +37,13 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow("OPERATIONAL_BEARER_TOKEN is required in production");
   });
 
+  it("fails in production when model providers are only stub/framed_echo (WANT-023)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    delete process.env.MODEL_GATEWAY_PROVIDERS_JSON;
+    expect(() => bootstrap()).toThrow("openai_compatible");
+  });
+
   it("fails production rollout when AUTH_AI_JWT_SECRET is weak", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
@@ -187,6 +194,17 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
+    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: "openai1",
+        kind: "openai_compatible",
+        default_model: "gpt-4o-mini",
+        api_key_env: "OPENAI_API_KEY",
+      },
+    ]);
+    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
+      chat: { default: { provider: "openai1", model: "gpt-4o-mini" } },
+    });
     expect(() => bootstrap()).toThrow("Production sink parent directory must exist");
   });
 });

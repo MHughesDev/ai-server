@@ -8,7 +8,9 @@ import type {
   VectorBackend,
   VectorRecord,
   VectorQueryResult,
+  VectorRetentionPolicy,
 } from "./vector-retrieval-adapter.js";
+import { evictVectorRecords } from "./vector-retrieval-adapter.js";
 import type { RetrievalScope } from "./types.js";
 
 export interface RedisVectorBackendOptions {
@@ -26,9 +28,13 @@ export interface RedisVectorBackendOptions {
   retryDelayMs?: number;
   /** Max retry delay in ms */
   maxRetryDelayMs?: number;
+  /**
+   * Test-only: pre-connected client mock (skips ioredis). Not used in production wiring.
+   */
+  testClient?: RedisClient;
 }
 
-interface RedisClient {
+export interface RedisClient {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   ping(): Promise<string>;
@@ -36,29 +42,34 @@ interface RedisClient {
   hgetall(key: string): Promise<Record<string, string>>;
   hdel(key: string, ...fields: string[]): Promise<number>;
   keys(pattern: string): Promise<string[]>;
+  del(key: string, ...keys: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   quit(): Promise<void>;
 }
 
 export class RedisVectorBackend implements VectorBackend {
   private client: RedisClient | null = null;
-  private readonly options: Required<RedisVectorBackendOptions>;
+  private readonly options: Required<Omit<RedisVectorBackendOptions, "testClient">>;
   private readonly keyPrefix: string;
+  private readonly injectedTestClient: RedisClient | undefined;
 
   constructor(options: RedisVectorBackendOptions) {
+    const { testClient, ...rest } = options;
+    this.injectedTestClient = testClient;
     this.options = {
-      poolSize: options.poolSize ?? 10,
-      keyPrefix: options.keyPrefix ?? "ai:vec:",
-      commandTimeoutMs: options.commandTimeoutMs ?? 5000,
-      retryAttempts: options.retryAttempts ?? 3,
-      retryDelayMs: options.retryDelayMs ?? 100,
-      maxRetryDelayMs: options.maxRetryDelayMs ?? 5000,
-      ...options,
+      poolSize: rest.poolSize ?? 10,
+      keyPrefix: rest.keyPrefix ?? "ai:vec:",
+      commandTimeoutMs: rest.commandTimeoutMs ?? 5000,
+      retryAttempts: rest.retryAttempts ?? 3,
+      retryDelayMs: rest.retryDelayMs ?? 100,
+      maxRetryDelayMs: rest.maxRetryDelayMs ?? 5000,
+      url: rest.url,
     };
     this.keyPrefix = this.options.keyPrefix;
   }
 
   private async getClient(): Promise<RedisClient> {
+    if (this.injectedTestClient) return this.injectedTestClient;
     if (this.client) return this.client;
 
     // Dynamic import to handle optional dependency
@@ -133,6 +144,42 @@ export class RedisVectorBackend implements VectorBackend {
     });
   }
 
+  private parseRedisHash(key: string, data: Record<string, string>): VectorRecord | null {
+    if (!data || Object.keys(data).length === 0) return null;
+    return {
+      id: key.replace(this.keyPrefix, ""),
+      text: data["text"] ?? "",
+      embedding: JSON.parse(data["embedding"] ?? "[]") as number[],
+      scope: data["scope"] as RetrievalScope,
+      scope_keys: JSON.parse(data["scope_keys"] ?? "{}") as Record<string, string>,
+      document_id: data["document_id"] ?? "",
+      position: parseInt(data["position"] ?? "0", 10),
+      source_label: data["source_label"],
+      created_at: data["created_at"] ?? new Date().toISOString(),
+    };
+  }
+
+  async pruneRetention(policy: VectorRetentionPolicy): Promise<void> {
+    const client = await this.getClient();
+    await this.withRetry(async () => {
+      const keys = await client.keys(`${this.keyPrefix}*`);
+      const records: VectorRecord[] = [];
+      for (const key of keys) {
+        const data = await client.hgetall(key);
+        const rec = this.parseRedisHash(key, data);
+        if (rec) records.push(rec);
+      }
+      const kept = evictVectorRecords(records, policy);
+      const keptIds = new Set(kept.map((r) => r.id));
+      for (const key of keys) {
+        const id = key.replace(this.keyPrefix, "");
+        if (!keptIds.has(id)) {
+          await client.del(key);
+        }
+      }
+    });
+  }
+
   async query(input: {
     query_embedding: number[];
     scope: RetrievalScope;
@@ -148,19 +195,8 @@ export class RedisVectorBackend implements VectorBackend {
 
       for (const key of keys) {
         const data = await client.hgetall(key);
-        if (!data || Object.keys(data).length === 0) continue;
-
-        const record: VectorRecord = {
-          id: key.replace(this.keyPrefix, ""),
-          text: data["text"] ?? "",
-          embedding: JSON.parse(data["embedding"] ?? "[]") as number[],
-          scope: data["scope"] as RetrievalScope,
-          scope_keys: JSON.parse(data["scope_keys"] ?? "{}") as Record<string, string>,
-          document_id: data["document_id"] ?? "",
-          position: parseInt(data["position"] ?? "0", 10),
-          source_label: data["source_label"],
-          created_at: data["created_at"] ?? new Date().toISOString(),
-        };
+        const record = this.parseRedisHash(key, data);
+        if (!record) continue;
 
         // Check scope access
         if (!this.scopeAllowsAccess(input.scope, input.scope_keys, record.scope, record.scope_keys)) {

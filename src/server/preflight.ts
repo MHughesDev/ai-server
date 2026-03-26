@@ -1,4 +1,5 @@
 import type { Config } from "../config/schema.js";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 
 export type PreflightStatus = "pass" | "fail" | "warn";
@@ -116,17 +117,17 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
   });
   add({
     id: "flags.production_rollout",
-    status: config.flags.platform_production_rollout_enabled ? "pass" : "fail",
+    status: resolveFeatureFlagEnabled("platform_production_rollout_enabled", config) ? "pass" : "fail",
     message: "PLATFORM_PRODUCTION_ROLLOUT_ENABLED is enabled",
   });
   add({
     id: "flags.security_controls",
-    status: config.flags.security_hard_controls_enabled ? "pass" : "fail",
+    status: resolveFeatureFlagEnabled("security_hard_controls_enabled", config) ? "pass" : "fail",
     message: "SECURITY_HARD_CONTROLS_ENABLED is enabled",
   });
   add({
     id: "flags.cost_caps",
-    status: config.flags.enable_cost_caps ? "pass" : "warn",
+    status: resolveFeatureFlagEnabled("enable_cost_caps", config) ? "pass" : "warn",
     message: "ENABLE_COST_CAPS is enabled",
   });
   add({

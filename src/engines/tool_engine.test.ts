@@ -7,6 +7,9 @@ import { createToolEngine } from "./tool_engine.js";
 import type { EngineInvocation } from "../contracts/index.js";
 import { validateEngineResult } from "../contracts/index.js";
 import type { IToolGateway, ToolInvokeRequest, ToolInvokeResult } from "../gateways/types.js";
+import { bootstrap, resetConfigForTest } from "../bootstrap/index.js";
+import { runWithContextAsync } from "../observability/context.js";
+import { getAuditLogSnapshot, resetAuditLog } from "../security/audit-logger.js";
 
 function minimalInvocation(overrides: Partial<EngineInvocation> = {}): EngineInvocation {
   return {
@@ -164,5 +167,77 @@ describe("Tool Engine", () => {
       trace_id: "trace-1",
       invocation_id: "inv-tool-1",
     });
+  });
+});
+
+describe("Tool engine TOOL_ACCESS audit", () => {
+  beforeEach(() => {
+    resetAuditLog();
+    resetConfigForTest();
+    bootstrap();
+  });
+
+  afterEach(() => {
+    resetAuditLog();
+    resetConfigForTest();
+    bootstrap();
+  });
+
+  it("writes TOOL_ACCESS with caller identity when audit_level is summary", async () => {
+    const mockGateway: IToolGateway = {
+      async invoke(req: ToolInvokeRequest): Promise<ToolInvokeResult> {
+        await Promise.resolve();
+        return { allowed: true, tool_id: req.tool_id, result: { ok: true } };
+      },
+    };
+    const engine = createToolEngine(mockGateway);
+    const inv = minimalInvocation({
+      metadata: {
+        contract_version: "v1",
+        audit_level: "summary",
+        redaction_level: "minimal",
+      },
+      actor_context: {
+        org_id: "o-audit",
+        app_id: "a-audit",
+        user_id: "u-audit",
+        roles: ["r1"],
+      },
+    });
+    await runWithContextAsync({ request_id: "req-audit", trace_id: "tr-audit" }, () =>
+      engine.invoke(inv)
+    );
+    const toolAccess = getAuditLogSnapshot().filter((e) => e.event_type === "TOOL_ACCESS");
+    expect(toolAccess.length).toBe(1);
+    expect(toolAccess[0].payload.tool_id).toBe("allowed_tool");
+    expect(toolAccess[0].payload.caller_org).toBe("o-audit");
+    expect(toolAccess[0].payload.allowed).toBe(true);
+  });
+
+  it("skips TOOL_ACCESS when metadata audit_level is none", async () => {
+    const mockGateway: IToolGateway = {
+      async invoke(req: ToolInvokeRequest): Promise<ToolInvokeResult> {
+        await Promise.resolve();
+        return { allowed: true, tool_id: req.tool_id, result: {} };
+      },
+    };
+    const engine = createToolEngine(mockGateway);
+    const inv = minimalInvocation({
+      metadata: {
+        contract_version: "v1",
+        audit_level: "none",
+        redaction_level: "minimal",
+      },
+      actor_context: {
+        org_id: "o2",
+        app_id: "a2",
+        user_id: "u2",
+        roles: [],
+      },
+    });
+    await runWithContextAsync({ request_id: "req-audit-2", trace_id: "tr-audit-2" }, () =>
+      engine.invoke(inv)
+    );
+    expect(getAuditLogSnapshot().filter((e) => e.event_type === "TOOL_ACCESS")).toHaveLength(0);
   });
 });

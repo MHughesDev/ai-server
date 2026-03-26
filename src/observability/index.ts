@@ -10,3 +10,4 @@ export * from "./event-sink.js";
 export * from "./emitter.js";
 export * from "./context.js";
 export * from "./metrics.js";
+export * from "./taxonomy-events.js";

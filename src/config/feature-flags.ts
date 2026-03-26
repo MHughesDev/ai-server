@@ -5,6 +5,7 @@
  */
 
 import type { Config, FeatureFlags } from "./schema.js";
+import { safeLogError } from "../observability/redact.js";
 
 export type FlagScope = "global" | "org" | "app" | "user";
 
@@ -220,7 +221,7 @@ export class FeatureFlagService {
       try {
         subscriber(flags);
       } catch (err) {
-        console.error("[feature-flags] Subscriber error:", err);
+        console.error("[feature-flags] Subscriber error:", safeLogError(err));
       }
     }
   }

@@ -127,6 +127,44 @@ describe("Memory Engine", () => {
     validateEngineResult(result);
   });
 
+  it("honors max_context_tokens in formal_spec (bounded context via runRetrieval)", async () => {
+    const store = new InMemoryStore();
+    const longText = "word ".repeat(2000);
+    await store.ingest({
+      document_id: "long-doc",
+      text: longText,
+      scope: "user",
+      scope_keys: { user_id: "user1", org_id: "org1" },
+      source_label: "long.txt",
+    });
+
+    const engine = createMemoryEngine(store);
+    const inv = minimalInvocation({
+      task: {
+        task_id: "t1",
+        task_type: "retrieve",
+        category: "retrieval",
+        objective: {
+          formal_spec: {
+            operation: "retrieve",
+            query_text: "word",
+            scope: "user",
+            top_k: 5,
+            max_context_tokens: 12,
+          },
+        },
+      },
+    });
+
+    const result = await engine.invoke(inv);
+    expect(result.status).toBe("success");
+    const inline = result.result_artifacts[0].content as { inline?: { contextText?: string } };
+    const text = inline?.inline?.contextText ?? "";
+    expect(text.length).toBeLessThan(longText.length);
+    expect(text.length).toBeGreaterThan(0);
+    validateEngineResult(result);
+  });
+
   it("maps actor_context to caller for scoped retrieval", async () => {
     const store = new InMemoryStore();
     await store.ingest({

@@ -2,6 +2,7 @@ import type { IModelGateway } from "./types.js";
 import { jest } from "@jest/globals";
 import {
   createProviderBackedModelGateway,
+  isRetryableModelProviderHttpStatus,
   ModelGatewayError,
   resolveModelRoute,
   withTimeoutAndRetry,
@@ -49,6 +50,24 @@ describe("Model gateway routing", () => {
   });
 });
 
+describe("isRetryableModelProviderHttpStatus", () => {
+  it("treats rate limits, request timeout, and 5xx as retryable", () => {
+    expect(isRetryableModelProviderHttpStatus(408)).toBe(true);
+    expect(isRetryableModelProviderHttpStatus(429)).toBe(true);
+    expect(isRetryableModelProviderHttpStatus(500)).toBe(true);
+    expect(isRetryableModelProviderHttpStatus(503)).toBe(true);
+  });
+
+  it("does not retry typical client errors including 409 conflict", () => {
+    expect(isRetryableModelProviderHttpStatus(400)).toBe(false);
+    expect(isRetryableModelProviderHttpStatus(401)).toBe(false);
+    expect(isRetryableModelProviderHttpStatus(403)).toBe(false);
+    expect(isRetryableModelProviderHttpStatus(404)).toBe(false);
+    expect(isRetryableModelProviderHttpStatus(409)).toBe(false);
+    expect(isRetryableModelProviderHttpStatus(422)).toBe(false);
+  });
+});
+
 describe("withTimeoutAndRetry", () => {
   it("retries retryable failures", async () => {
     const completeMock = jest
@@ -84,6 +103,46 @@ describe("withTimeoutAndRetry", () => {
       retryable: false,
     });
     expect(completeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries when the race hits the gateway timeout then delegate succeeds", async () => {
+    const completeMock = jest
+      .fn<Promise<unknown>, [unknown]>()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(resolve, 50, { text: "late", tokens_in: 1, tokens_out: 1, model: "m" }))
+      )
+      .mockResolvedValue({
+        text: "ok",
+        tokens_in: 1,
+        tokens_out: 1,
+        model: "m1",
+      });
+    const delegate: IModelGateway = {
+      complete: completeMock as unknown as IModelGateway["complete"],
+    };
+    const gateway = withTimeoutAndRetry(delegate, { maxRetries: 2, timeoutMs: 10 });
+    const result = await gateway.complete({ prompt: "x" });
+    expect(result.text).toBe("ok");
+    expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries TypeError fetch failures when classified transient", async () => {
+    const completeMock = jest
+      .fn<Promise<unknown>, [unknown]>()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValue({
+        text: "ok",
+        tokens_in: 1,
+        tokens_out: 1,
+        model: "m1",
+      });
+    const delegate: IModelGateway = {
+      complete: completeMock as unknown as IModelGateway["complete"],
+    };
+    const gateway = withTimeoutAndRetry(delegate, { maxRetries: 2, timeoutMs: 1_000 });
+    const result = await gateway.complete({ prompt: "x" });
+    expect(result.text).toBe("ok");
+    expect(completeMock).toHaveBeenCalledTimes(2);
   });
 
   it("clears timeout timer on success and failure", async () => {

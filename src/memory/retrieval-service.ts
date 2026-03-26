@@ -17,6 +17,7 @@ import {
   DEFAULT_MAX_CONTEXT_TOKENS,
   AVG_CHARS_PER_TOKEN,
 } from "../utils/tokens.js";
+import { emitMemoryQueryEvent } from "../observability/taxonomy-events.js";
 
 export interface RetrievalServiceInput {
   query_text: string;
@@ -88,6 +89,13 @@ export async function runRetrieval(
 
   const start = Date.now();
   const result = await withTimeoutOrDegraded(store.retrieve(request), timeoutMs, start);
+
+  emitMemoryQueryEvent({
+    hit_count: result.hits.length,
+    latency_ms: result.latency_ms ?? Date.now() - start,
+    scope: input.scope,
+    degraded: result.degraded === true,
+  });
 
   // Use token-bounded context building for accurate LLM budgeting
   const bounded = buildTokenBoundedContext(

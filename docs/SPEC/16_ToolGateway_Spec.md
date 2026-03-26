@@ -28,9 +28,8 @@ Secure, policy-gated, sandboxed tool execution boundary used only by Tool Engine
 - Bind invocation identity to audit payloads for attributable actions.
 
 ## Observability and Audit
-- Emit `TOOL_START` and `TOOL_END` with duration/status.
-- Emit `TOOL_ACCESS` security audit when audit level requires it.
-- Apply redaction policy before sink write.
+- `TOOL_START` / `TOOL_END` / `TOOL_ACCESS` are emitted from **`tool_engine`** (central path for registry, workflows, and harnesses): payloads include `tool_id`, `invocation_id`, and **caller_org / caller_app / caller_user** (telemetry allowlist). Gateway **`invoke`** still receives full **`caller_identity`**.
+- **`EngineInvocation.metadata.audit_level`** / **`redaction_level`** (from policy when set by **`workflows/runner`** or **`coding-agent-pipeline`**) gate **`TOOL_ACCESS`** and redaction; default **`summary`** / **`minimal`** when omitted.
 
 ## Production Implementation Details (Agent 3, 2026-03-06)
 

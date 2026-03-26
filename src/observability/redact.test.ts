@@ -2,7 +2,7 @@
  * Redaction utility tests – L2-04 Phase 0
  */
 
-import { redact, redactString } from "./redact.js";
+import { redact, redactString, safeLogError } from "./redact.js";
 
 describe("redact", () => {
   it("strips sensitive keys at minimal level", () => {
@@ -55,6 +55,47 @@ describe("redact", () => {
   it("returns empty object for null/undefined", () => {
     expect(redact(null)).toEqual({});
     expect(redact(undefined)).toEqual({});
+  });
+
+  it("strips OAuth-style keys at none level", () => {
+    const obj = {
+      request_id: "r",
+      client_secret: "cs",
+      access_token: "at",
+      refresh_token: "rt",
+    };
+    const out = redact(obj, "none");
+    expect(out.request_id).toBe("r");
+    expect(out).not.toHaveProperty("client_secret");
+    expect(out).not.toHaveProperty("access_token");
+    expect(out).not.toHaveProperty("refresh_token");
+  });
+
+  it("keeps primitive array elements (no spurious { value } wrappers)", () => {
+    const obj = { org_id: "o1", patterns: ["p1", "p2"] };
+    expect(redact(obj, "none")).toEqual({ org_id: "o1", patterns: ["p1", "p2"] });
+    const nested = { payload: { tags: ["a", "b"], password: "x" } };
+    const outMin = redact(nested, "minimal") as { payload: Record<string, unknown> };
+    expect(outMin.payload.tags).toEqual(["a", "b"]);
+    expect(outMin.payload).not.toHaveProperty("password");
+  });
+
+  it("redacts non-empty strings inside arrays at full level inside payload", () => {
+    const obj = { payload: { tags: ["hello", "world"] } };
+    const out = redact(obj, "full") as { payload: { tags: unknown[] } };
+    expect(out.payload.tags).toEqual(["[REDACTED]", "[REDACTED]"]);
+  });
+});
+
+describe("safeLogError", () => {
+  it("returns Error.message only (no stack)", () => {
+    const e = new Error("nope");
+    e.stack = "should not appear";
+    expect(safeLogError(e)).toBe("nope");
+  });
+
+  it("stringifies non-Error values", () => {
+    expect(safeLogError("plain")).toBe("plain");
   });
 });
 

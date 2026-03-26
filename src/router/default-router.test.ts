@@ -214,4 +214,75 @@ describe("defaultRouter", () => {
       cost_budget_usd: 0.25,
     });
   });
+
+  it("sets sandbox timeout only when enabled tools need no network or filesystem", async () => {
+    const input = minimalInput({
+      intent: {
+        ...minimalInput().intent,
+        primary_intent: "coding_agent",
+        complexity: { tool_likelihood: 0.8 },
+      },
+      policy: {
+        ...minimalInput().policy,
+        allowed_pipelines: ["reactive_chat", "coding_agent"],
+        allow_tools: ["stub_tool"],
+        max_budgets: {
+          token_budget: 4096,
+          tool_budget: 5,
+          deadline_ms: 12_000,
+          cost_budget_usd: 0.5,
+        },
+      },
+    });
+    const result = await defaultRouter.plan(input);
+    expect(result.pipelinePlan?.sandbox).toEqual({ timeout_ms: 12_000 });
+  });
+
+  it("sets sandbox network_access when policy enables a network tool (coding_agent)", async () => {
+    const input = minimalInput({
+      intent: {
+        ...minimalInput().intent,
+        primary_intent: "coding_agent",
+        complexity: { tool_likelihood: 0.8 },
+      },
+      policy: {
+        ...minimalInput().policy,
+        allowed_pipelines: ["reactive_chat", "coding_agent"],
+        allow_tools: ["web_search"],
+        max_budgets: {
+          token_budget: 4096,
+          tool_budget: 5,
+          deadline_ms: 15_000,
+          cost_budget_usd: 0.5,
+        },
+      },
+    });
+    const result = await defaultRouter.plan(input);
+    expect(result.pipelinePlan?.sandbox?.network_access).toBe(true);
+    expect(result.pipelinePlan?.sandbox?.timeout_ms).toBe(15_000);
+  });
+
+  it("sets sandbox filesystem_access when policy enables file_write_preview", async () => {
+    const input = minimalInput({
+      intent: {
+        ...minimalInput().intent,
+        primary_intent: "coding_agent",
+        complexity: { tool_likelihood: 0.8 },
+      },
+      policy: {
+        ...minimalInput().policy,
+        allowed_pipelines: ["reactive_chat", "coding_agent"],
+        allow_tools: ["file_write_preview"],
+        max_budgets: {
+          token_budget: 4096,
+          tool_budget: 5,
+          deadline_ms: 20_000,
+          cost_budget_usd: 0.5,
+        },
+      },
+    });
+    const result = await defaultRouter.plan(input);
+    expect(result.pipelinePlan?.sandbox?.filesystem_access).toBe(true);
+    expect(result.pipelinePlan?.sandbox?.timeout_ms).toBe(20_000);
+  });
 });

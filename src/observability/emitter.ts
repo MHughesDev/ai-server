@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import type { TelemetryEvent } from "./events.js";
 import { getEventSink } from "./event-sink.js";
-import { redact, type RedactionLevel } from "./redact.js";
+import { redact, safeLogError, type RedactionLevel } from "./redact.js";
 
 export interface EventEmitter {
   emit(event: TelemetryEvent): void;
@@ -64,7 +64,7 @@ export function createEmitter(options?: {
         try {
           sink.write(out);
         } catch (err) {
-          console.error("[observability] event sink write failed", err);
+          console.error("[observability] event sink write failed", safeLogError(err));
         }
       }
     },

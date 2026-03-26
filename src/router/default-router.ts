@@ -11,6 +11,10 @@ import type { PipelinePlan } from "../contracts/pipeline-plan.js";
 import { policyDenyReasonToErrorCode, type PolicyDenyReason } from "../contracts/policy-decision.js";
 import { getConfig } from "../bootstrap/index.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import {
+  toolIdRequiresFilesystemAccess,
+  toolIdRequiresNetworkAccess,
+} from "../gateways/tool-gateway.js";
 
 /** Router: deny when policy denied; else allow with reactive_chat or coding_agent plan. */
 export const defaultRouter: IRouter = {
@@ -136,10 +140,23 @@ export const defaultRouter: IRouter = {
         : { token_budget: 4096, tool_budget: 10, deadline_ms: 30_000, cost_budget_usd: 0.5 },
       verification_level: "basic",
       tools_enabled: toolsEnabled,
-      /** L2-05: sandbox from budget deadline for tool timeout. */
+      /**
+       * L2-05: tool timeout from budget; network/filesystem flags match built-in tool requirements
+       * so AllowlistToolGateway does not deny web_search / file_write_preview when policy allows them (§9.12).
+       */
       sandbox:
-        toolsEnabled.length > 0 && input.policy.max_budgets?.deadline_ms != null
-          ? { timeout_ms: Math.min(input.policy.max_budgets.deadline_ms, 30_000) }
+        toolsEnabled.length > 0
+          ? {
+              ...(input.policy.max_budgets?.deadline_ms != null
+                ? { timeout_ms: Math.min(input.policy.max_budgets.deadline_ms, 30_000) }
+                : {}),
+              ...(toolsEnabled.some((id) => toolIdRequiresNetworkAccess(id))
+                ? { network_access: true as const }
+                : {}),
+              ...(toolsEnabled.some((id) => toolIdRequiresFilesystemAccess(id))
+                ? { filesystem_access: true as const }
+                : {}),
+            }
           : undefined,
     };
     return Promise.resolve({ allowed: true, pipelinePlan: plan });

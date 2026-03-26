@@ -15,6 +15,7 @@ import {
   setEventSink,
   getEventSink,
   createFileEventSink,
+  safeLogError,
 } from "../observability/index.js";
 import type { IObservability } from "../observability/types.js";
 import {
@@ -96,7 +97,7 @@ function requestListener(req: IncomingMessage, res: ServerResponse): void {
   }
 
   handleRequest(req, res).catch((err) => {
-    console.error("[server] unhandled", err);
+    console.error("[server] unhandled", safeLogError(err));
     if (!res.headersSent) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Internal server error" }));
@@ -190,7 +191,7 @@ function main(): void {
         console.info(`HTTPS server listening on port ${httpsPort}`);
       });
     } catch (err) {
-      throw new Error(`TLS is configured but key/cert could not be loaded: ${String(err)}`);
+      throw new Error(`TLS is configured but key/cert could not be loaded: ${safeLogError(err)}`);
     }
   }
 
@@ -243,12 +244,12 @@ function main(): void {
       try {
         await shutdownPersistentAuditFileSink();
       } catch (err) {
-        console.error("[server] audit file sink shutdown error", err);
+        console.error("[server] audit file sink shutdown error", safeLogError(err));
       }
       try {
         await getEventSink()?.close?.();
       } catch (err) {
-        console.error("[server] event sink shutdown error", err);
+        console.error("[server] event sink shutdown error", safeLogError(err));
       }
 
       if (httpsServer) {
@@ -264,7 +265,7 @@ function main(): void {
       console.info("[server] graceful shutdown complete");
       process.exit(0);
     } catch (err) {
-      console.error("[server] graceful shutdown failed", err);
+      console.error("[server] graceful shutdown failed", safeLogError(err));
       process.exit(1);
     }
   };

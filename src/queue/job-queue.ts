@@ -18,6 +18,7 @@ import type {
 } from "./types.js";
 import { MemoryQueueBackend } from "./memory-backend.js";
 import { idempotencyCompositeKey } from "./async-idempotency.js";
+import { safeLogError } from "../observability/redact.js";
 
 /** Same key + tenant scope but different request fingerprint (async path only). */
 export class IdempotencyKeyConflictError extends Error {
@@ -105,11 +106,11 @@ export class JobQueueService {
           console.log(`[job-queue] Worker ${workerId} processing job ${job.id}`);
 
           try {
-            // Process the job with timeout
-            const result = await Promise.race([
+            // Process the job with timeout (clear timer on success to avoid churn)
+            const result = await raceWithTimeout(
               this.queryHandler(job.request),
-              createTimeout(this.config.job_timeout_ms),
-            ]);
+              this.config.job_timeout_ms
+            );
 
             await this.backend.complete(job.id, result);
             console.log(`[job-queue] Job ${job.id} completed`);
@@ -134,7 +135,7 @@ export class JobQueueService {
             }
           }
         } catch (err) {
-          console.error(`[job-queue] Worker ${workerId} error:`, err);
+          console.error(`[job-queue] Worker ${workerId} error:`, safeLogError(err));
           await sleep(5000); // Wait longer on error
         }
       }
@@ -164,26 +165,27 @@ export class JobQueueService {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), this.config.webhook_timeout_ms);
+        try {
+          const response = await fetch(job.webhook_url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Job-ID": job.id,
+              "X-Webhook-Attempt": String(attempt + 1),
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
 
-        const response = await fetch(job.webhook_url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Job-ID": job.id,
-            "X-Webhook-Attempt": String(attempt + 1),
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
+          if (response.ok) {
+            console.log(`[job-queue] Webhook sent for job ${job.id}`);
+            return;
+          }
 
-        clearTimeout(timeout);
-
-        if (response.ok) {
-          console.log(`[job-queue] Webhook sent for job ${job.id}`);
-          return;
+          throw new Error(`HTTP ${response.status}`);
+        } finally {
+          clearTimeout(timeout);
         }
-
-        throw new Error(`HTTP ${response.status}`);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.warn(`[job-queue] Webhook attempt ${attempt + 1} failed:`, errorMessage);
@@ -312,10 +314,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function createTimeout(ms: number): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("Job timeout")), ms);
-  });
+async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Job timeout")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // Factory function

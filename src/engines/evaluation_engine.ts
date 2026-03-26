@@ -7,6 +7,7 @@
 import type { IEngine } from "./base.js";
 import type { EngineInvocation, EngineResult, TypedArtifact } from "../contracts/index.js";
 import type { IModelGateway } from "../gateways/types.js";
+import { emitVerifyResultEvent } from "../observability/taxonomy-events.js";
 import { randomUUID } from "node:crypto";
 
 export interface EvaluationEngineOptions {
@@ -173,6 +174,15 @@ export function createEvaluationEngine(options: EvaluationEngineOptions = {}): I
       evaluation.passed = evaluation.score >= passThreshold;
 
       const durationMs = Date.now() - start;
+      emitVerifyResultEvent({
+        invocation_id: inv.invocation_id,
+        passed: evaluation.passed,
+        score: evaluation.score,
+        engine_status: evaluation.passed ? "success" : "fail",
+        duration_ms: durationMs,
+        artifact_count: artifacts.length,
+      });
+
       return {
         invocation_id: inv.invocation_id,
         status: evaluation.passed ? "success" : "fail",

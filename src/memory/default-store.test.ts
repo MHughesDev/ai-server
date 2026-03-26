@@ -70,4 +70,34 @@ describe("default store wiring", () => {
     });
     expect(out.hits.length).toBeGreaterThan(0);
   });
+
+  it("applies memoryRetention max_chunks_per_scope on vector in-memory backend", async () => {
+    process.env.MEMORY_BACKEND = "vector";
+    process.env.MEMORY_RETENTION_MAX_CHUNKS_PER_SCOPE = "1";
+    bootstrap();
+    const store = getDefaultStore();
+    expect(store).toBeInstanceOf(VectorRetrievalAdapter);
+    await store.ingest!({
+      document_id: "d1",
+      text: "hello one from first doc",
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+    });
+    await store.ingest!({
+      document_id: "d2",
+      text: "hello two from second doc",
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+    });
+    const out = await store.retrieve!({
+      query_text: "hello",
+      scope: "org",
+      scope_keys: { org_id: "o1" },
+      top_k: 10,
+    });
+    expect(out.hits.length).toBeLessThanOrEqual(1);
+    if (out.hits.length === 1) {
+      expect(out.hits[0].chunk.metadata.document_id).toBe("d2");
+    }
+  });
 });

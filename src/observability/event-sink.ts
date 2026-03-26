@@ -9,6 +9,7 @@ import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 import type { TelemetryEvent } from "./events.js";
+import { safeLogError } from "./redact.js";
 
 /** Sink for telemetry events; e.g. file append or OTEL exporter. */
 export interface IEventSink {
@@ -129,7 +130,7 @@ export function createFileEventSink(
       lastError = null;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      console.error("[observability] event sink async write failed", err);
+      console.error("[observability] event sink async write failed", safeLogError(err));
     } finally {
       draining = false;
       // L2-04: Update backpressure status after draining
@@ -164,7 +165,7 @@ export function createFileEventSink(
         try {
           backpressureCallback();
         } catch (err) {
-          console.error("[observability] backpressure callback failed", err);
+          console.error("[observability] backpressure callback failed", safeLogError(err));
         }
       }
 

@@ -9,6 +9,7 @@ import { dirname } from "node:path";
 import type { IMemoryStore } from "./memory-abstraction.js";
 import { scopeAllowsAccess } from "./memory-abstraction.js";
 import { chunkText } from "./chunker.js";
+import { emitMemoryWriteEvent } from "../observability/taxonomy-events.js";
 import type {
   IngestionInput,
   IngestionResult,
@@ -39,6 +40,12 @@ export interface VectorQueryResult {
   score: number;
 }
 
+/** Same shape as config `memoryRetention` — applied to vector records’ `created_at` and scope grouping. */
+export interface VectorRetentionPolicy {
+  ttl_seconds?: number;
+  max_chunks_per_scope?: number;
+}
+
 export interface VectorBackend {
   upsert(records: VectorRecord[]): Promise<void>;
   query(input: {
@@ -48,6 +55,50 @@ export interface VectorBackend {
     top_k: number;
   }): Promise<VectorQueryResult[]>;
   isAvailable?(): Promise<boolean>;
+  /**
+   * Optional: evict by TTL / max chunks per scope (parity with `InMemoryStore` retention).
+   * Implemented by `InMemoryVectorBackend`, `FileVectorBackend`, and `RedisVectorBackend` (WANT-035).
+   */
+  pruneRetention?(policy: VectorRetentionPolicy): Promise<void>;
+}
+
+export function vectorScopeKey(scope: RetrievalScope, scope_keys: Record<string, string>): string {
+  const parts = [
+    scope,
+    ...Object.entries(scope_keys)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, v]) => v),
+  ];
+  return parts.join(":");
+}
+
+/** Evict by TTL first, then cap chunks per scope (keep newest by `created_at`). Exported for tests. */
+export function evictVectorRecords(
+  records: VectorRecord[],
+  policy: VectorRetentionPolicy
+): VectorRecord[] {
+  let out = records;
+  if (policy.ttl_seconds != null && policy.ttl_seconds > 0) {
+    const cutoff = new Date(Date.now() - policy.ttl_seconds * 1000).toISOString();
+    out = out.filter((r) => r.created_at > cutoff);
+  }
+  const maxChunks = policy.max_chunks_per_scope;
+  if (maxChunks == null || maxChunks <= 0) {
+    return out;
+  }
+  const byScope = new Map<string, VectorRecord[]>();
+  for (const r of out) {
+    const sk = vectorScopeKey(r.scope, r.scope_keys);
+    const list = byScope.get(sk) ?? [];
+    list.push(r);
+    byScope.set(sk, list);
+  }
+  const next: VectorRecord[] = [];
+  for (const list of byScope.values()) {
+    list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    next.push(...list.slice(-maxChunks));
+  }
+  return next;
 }
 
 export interface VectorRetrievalAdapterOptions {
@@ -55,11 +106,21 @@ export interface VectorRetrievalAdapterOptions {
   overlap?: number;
   max_chunks_per_ingest?: number;
   ingest_chunk_cap_policy?: "trim" | "reject";
+  /** In-memory / file vector backends only; see `VectorBackend.pruneRetention`. */
+  retention?: VectorRetentionPolicy;
 }
 
 const DEFAULT_CHUNK_SIZE = 512;
 const DEFAULT_CHUNK_OVERLAP = 64;
 const DEFAULT_MAX_CHUNKS_PER_INGEST = 128;
+
+function normalizeVectorRetention(r?: VectorRetentionPolicy): VectorRetentionPolicy | undefined {
+  if (!r) return undefined;
+  const hasTtl = r.ttl_seconds != null && r.ttl_seconds > 0;
+  const hasCap = r.max_chunks_per_scope != null && r.max_chunks_per_scope > 0;
+  if (!hasTtl && !hasCap) return undefined;
+  return { ttl_seconds: r.ttl_seconds, max_chunks_per_scope: r.max_chunks_per_scope };
+}
 
 /**
  * Deterministic local embedding provider for tests/dev.
@@ -165,6 +226,11 @@ export class InMemoryVectorBackend implements VectorBackend {
   clear(): void {
     this.records = [];
   }
+
+  async pruneRetention(policy: VectorRetentionPolicy): Promise<void> {
+    await Promise.resolve();
+    this.records = evictVectorRecords(this.records, policy);
+  }
 }
 
 export class FileVectorBackend implements VectorBackend {
@@ -194,6 +260,12 @@ export class FileVectorBackend implements VectorBackend {
     const existing = await this.load();
     existing.push(...records);
     this.records = existing;
+    await this.persist();
+  }
+
+  async pruneRetention(policy: VectorRetentionPolicy): Promise<void> {
+    const existing = await this.load();
+    this.records = evictVectorRecords(existing, policy);
     await this.persist();
   }
 
@@ -227,8 +299,16 @@ export class FileVectorBackend implements VectorBackend {
   }
 }
 
+type NormalizedVectorAdapterOpts = Required<
+  Pick<
+    VectorRetrievalAdapterOptions,
+    "chunk_size" | "overlap" | "max_chunks_per_ingest" | "ingest_chunk_cap_policy"
+  >
+>;
+
 export class VectorRetrievalAdapter implements IMemoryStore {
-  private readonly options: Required<VectorRetrievalAdapterOptions>;
+  private readonly options: NormalizedVectorAdapterOpts;
+  private readonly retentionPolicy: VectorRetentionPolicy | undefined;
 
   constructor(
     private readonly embeddingProvider: EmbeddingProvider,
@@ -241,9 +321,16 @@ export class VectorRetrievalAdapter implements IMemoryStore {
       max_chunks_per_ingest: options?.max_chunks_per_ingest ?? DEFAULT_MAX_CHUNKS_PER_INGEST,
       ingest_chunk_cap_policy: options?.ingest_chunk_cap_policy ?? "trim",
     };
+    this.retentionPolicy = normalizeVectorRetention(options?.retention);
+  }
+
+  private async applyVectorRetention(): Promise<void> {
+    if (!this.retentionPolicy || !this.backend.pruneRetention) return;
+    await this.backend.pruneRetention(this.retentionPolicy);
   }
 
   async retrieve(request: RetrievalRequest): Promise<RetrievalResult> {
+    await this.applyVectorRetention();
     const start = Date.now();
     const vectors = await this.embeddingProvider.embed([request.query_text]);
     const queryVector = vectors[0] ?? [];
@@ -280,12 +367,21 @@ export class VectorRetrievalAdapter implements IMemoryStore {
 
     if (rawChunks.length > this.options.max_chunks_per_ingest) {
       if (this.options.ingest_chunk_cap_policy === "reject") {
-        return {
+        const rejected: IngestionResult = {
           document_id: input.document_id,
           chunks_written: 0,
           chunks_dropped: rawChunks.length,
           error: "ingest_chunk_cap_exceeded",
         };
+        emitMemoryWriteEvent({
+          document_id: rejected.document_id,
+          scope: input.scope,
+          chunks_written: 0,
+          chunks_dropped: rejected.chunks_dropped,
+          error: rejected.error,
+          backend: "vector",
+        });
+        return rejected;
       }
     }
 
@@ -309,12 +405,22 @@ export class VectorRetrievalAdapter implements IMemoryStore {
       created_at: now,
     }));
     await this.backend.upsert(records);
-    return {
+    await this.applyVectorRetention();
+    const done: IngestionResult = {
       document_id: input.document_id,
       chunks_written: records.length,
       chunks_dropped: dropped,
       error: dropped > 0 ? "ingest_chunks_trimmed" : undefined,
     };
+    emitMemoryWriteEvent({
+      document_id: done.document_id,
+      scope: input.scope,
+      chunks_written: done.chunks_written,
+      chunks_dropped: done.chunks_dropped,
+      ...(done.error ? { error: done.error } : {}),
+      backend: "vector",
+    });
+    return done;
   }
 
   async isAvailable(): Promise<boolean> {

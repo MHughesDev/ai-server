@@ -40,6 +40,8 @@ Provide end-to-end traceability for governance decisions, workflow execution, co
 - Sink settings are config-validated before serving production traffic.
 - Metrics/cardinality and in-memory capture buffers are bounded for long-running services.
 
+**As-built (2026-03-25):** **`VERIFY_RESULT`** is emitted from **`src/engines/evaluation_engine.ts`** on each evaluation invoke (pass/fail, score, duration). **`MEMORY_WRITE`** is emitted from **`src/memory/in-memory-store.ts`** and **`src/memory/vector-retrieval-adapter.ts`** on ingest outcomes (counts, scope, errors; no document body). **`MEMORY_QUERY`** is emitted from **`src/memory/retrieval-service.ts`** via **`emitMemoryQueryEvent`** on every completed **`runRetrieval`** (payload: `hit_count`, `latency_ms`, `scope`, `degraded`; includes degraded empty-hit paths). When **`runRetrieval`** throws (e.g. memory engine path), **`emitMemoryQueryEvent`** may include **`error`** (message only). Helpers: **`src/observability/taxonomy-events.ts`**.
+
 **As-built (2026-03-24):**
 - **Metrics:** `src/observability/metrics.ts` caps counter series (`MAX_COUNTER_SERIES`), histogram series, and per-series samples; exposes drop counts as `ai_server_metrics_dropped_total{dimension=…}` in Prometheus text; optional `exportAndResetCounters()` for counter scrape+reset.
 - **Emitter capture:** `createEmitter` uses `maxCaptureSize` (default 1000) with FIFO eviction (`emitter.ts`).

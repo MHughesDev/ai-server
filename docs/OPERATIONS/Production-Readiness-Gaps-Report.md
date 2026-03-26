@@ -70,7 +70,7 @@
 | `src/ingress/validate.ts` | 56+ | Historical note: `requireAuthHeader` option; **caller strict-match** when `verifiedCallerContext` is supplied (see `assertCallerStrictMatch`) |
 | `src/brainstem/types.ts` | 14 | "Stub: RequestEnvelope → (CanonicalRequest, IntentBundle)" |
 | `src/gateways/model-gateway.ts` | 19, 35–38 | `defaultModel: "stub"` for dev; `OpenAiCompatibleModelGateway` IS implemented for production |
-| `src/gateways/types.ts` | 28, 53, 58 | Tool "L2-05+ deny/stub only"; IMemoryAbstraction "Stub (L2-06+)" with `// TBD` |
+| `src/gateways/types.ts` | 28, 53, 58 | Tool "L2-05+ deny/stub only"; **`IMemoryAbstraction`** is a type alias of **`IMemoryStore`** (no TBD stub) |
 | `src/gateways/tool-gateway.ts` | 2, 8–9, 85–87 | Deny/stub-only mode; `StubAllowedToolGateway` for tests/stub runs |
 | `src/security/secret-scope.ts` | 45 | "Stub implementation: returns redacted placeholder when allowed; throws on violation" |
 | `src/pipelines/types.ts` | 22 | "Stub: execute pipeline and return ResponseEnvelope" |
@@ -130,7 +130,7 @@
 
 ### 4.3 IMemoryAbstraction (gateways/types.ts)
 
-- **Issue:** Interface is a stub with `// TBD` – not fully defined for L2-06+.
+- **Status:** ✅ **`IMemoryAbstraction`** is documented as a **type alias** of **`IMemoryStore`** (`memory-abstraction.ts`) — same retrieval/ingest contract as SPEC 17.
 
 ### 4.4 Retrieval timeout/fallback behavior not production-hardened
 
@@ -230,10 +230,10 @@ From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
   **Issue:** HTTP-level processing timeout exists for the query route; deep pipeline hangs may still need stronger alignment with `plan.budgets.deadline_ms` and cost budget enforcement (see resource manager).  
   **Action:** Continue tightening deadline propagation from plan into execution paths where not already wired.
 
-- **Budget fields computed but not enforced**  
-  **Location:** `src/controlplane/resource-manager.ts`  
-  **Issue:** `deadline_ms` and `cost_budget_usd` are assigned but not enforced at runtime.  
-  **Action:** Enforce both deadline and cost budgets in runtime/pipelines.
+- **Budget fields (where enforced)**  
+  **Locations:** `src/controlplane/resource-manager.ts`, `src/server/query-handler.ts`, `src/workflows/runner.ts`, pipelines  
+  **Status:** **`assignBudgets` / `checkBudget`** distribute caps from policy; **ingress token** pre-check uses **`token_budget`** vs **`token_estimate`**. **`query-handler`** wraps the query pipeline with **`withDeadline`**, post-run **token** / **cost** checks (when cost caps enabled), and **`runner`** enforces **deadline**, **cost_budget_usd**, and **`tool_budget`** on workflow steps (including aggregated child **`telemetry.tool_calls`**).  
+  **Remaining:** Audit any non-query entrypoints and long-lived subprocess paths for the same caps.
 
 ### 9.2 Health/readiness probes (IMPLEMENTED with dependency checks)
 
@@ -286,10 +286,9 @@ From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
   **Issue:** Large documents can create many chunks and cause memory pressure.  
   **Action:** Cap chunks per ingest or enforce max input size.
 
-- **Retrieval context size unbounded**  
-  **Locations:** `src/memory/retrieval-service.ts`, `src/pipelines/chat-pipeline.ts`  
-  **Issue:** `contextText` can grow without limit; may exceed token budget or blow memory.  
-  **Action:** Cap/truncate context by token estimate or total characters.
+- **Retrieval context sizing**  
+  **Locations:** `src/memory/retrieval-service.ts` (**`runRetrieval`**), `src/engines/memory_engine.ts` (passes optional **`max_context_tokens`** / **`retrieval_timeout_ms`** from formal_spec), `src/pipelines/chat-pipeline.ts` + `src/server/query-handler.ts` (reactive_chat: same config + **`token_budget`** clamp as pre-pipeline retrieval).  
+  **Remaining:** Audit any **`store.retrieve`** call sites that bypass **`runRetrieval`**.
 
 ### 9.5 Observability and audit robustness
 
@@ -363,19 +362,17 @@ From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
   **Remaining:** Policy/coding-agent/query/routes use **`resolveFeatureFlagEnabled`** where documented in **`docs/SPEC/20_Config_and_FeatureFlags.md`**; bootstrap/preflight and `server/index.ts` emitter paths may still read flags statically as noted in the matrix. Legacy `governance_harness_*` is **not** a schema flag today. **Release/build ids:** fail-fast when **production + `platform_production_rollout_enabled`** and both `RELEASE_ID`/`BUILD_ID` unset; otherwise production still **warns** only (`validateReleaseConfig`).  
   **Action:** Complete a per-flag enforcement matrix; tighten release metadata checks where policy requires hard failure.
 
-### 9.11 Model/tool timeout wrapper robustness
+### 9.11 Model/tool/async timeout wrapper robustness
 
-- **Timeout promises are not cleared on success paths**  
-  **Locations:** `src/gateways/model-gateway.ts`, `src/gateways/tool-gateway.ts`  
-  **Issue:** Timeout wrappers use `Promise.race` with timers that are not cleared after successful delegate completion, causing avoidable timer churn under load; model retries also treat all failures as retryable.  
-  **Action:** Use cancelable timeout handling (`clearTimeout`) and classify retryable vs non-retryable provider/tool errors.
+- **Cancelable timeouts (current)**  
+  **Locations:** `src/gateways/model-gateway.ts` (`withTimeoutAndRetry` — `try`/`finally` + **`clearTimeout`**), `src/gateways/tool-gateway.ts` (`AllowlistToolGateway` — same), `src/queue/job-queue.ts` (**2026-03-25:** `raceWithTimeout` for job processing; webhook **`fetch`** abort timer cleared in **`finally`** on all paths).  
+  **Remaining:** Optional: map provider **JSON** error bodies (e.g. OpenAI `type`/`code`) to non-retryable invalid-key vs retryable overload; tool gateway errors are separate.
 
 ### 9.12 Tool sandbox controls are only partially enforced
 
-- **Sandbox policy does not enforce full isolation controls**  
-  **Locations:** `src/gateways/tool-gateway.ts`, `src/gateways/types.ts`  
-  **Issue:** `ToolSandboxOptions` defines `network_access` and `filesystem_access`, but current gateway enforcement is timeout-only; `ToolInvokeRequest` also lacks explicit caller identity context for strongly auditable execution.  
-  **Action:** Enforce network/filesystem controls at runtime sandbox boundary and extend tool invocation contracts with identity context required for policy/audit.
+- **Sandbox dimensions (network / filesystem / timeout)**  
+  **Locations:** `src/gateways/tool-gateway.ts` (`AllowlistToolGateway` + builtin **`requires_network` / `requires_filesystem`** metadata), `src/router/default-router.ts` (**2026-03-25:** sets **`sandbox.network_access` / `sandbox.filesystem_access`** from enabled tool ids via **`toolIdRequiresNetworkAccess`** / **`toolIdRequiresFilesystemAccess`** so HTTP/fs tools are not denied when policy allows them).  
+  **Remaining:** Custom executable registries beyond builtins need matching policy→sandbox wiring if introduced. **`TOOL_ACCESS`** + **`TOOL_START`/`TOOL_END`** with caller hints are centralized in **`tool_engine`** (2026-03-25); identity still flows via **`ToolInvokeRequest.caller_identity`**.
 
 ---
 

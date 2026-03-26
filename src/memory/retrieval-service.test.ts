@@ -2,9 +2,14 @@
  * Retrieval service tests – L2-06 (runRetrieval, scope keys, context + citations)
  */
 
+import { afterEach, describe, expect, it } from "@jest/globals";
 import { runRetrieval, scopeKeysFromCaller } from "./retrieval-service.js";
 import { InMemoryStore } from "./in-memory-store.js";
 import type { IMemoryStore } from "./memory-abstraction.js";
+import { createContext, getTraceContext, runWithContextAsync } from "../observability/context.js";
+import { createEmitter } from "../observability/emitter.js";
+import type { TelemetryEvent } from "../observability/events.js";
+import { setObservability } from "../observability/types.js";
 
 describe("scopeKeysFromCaller", () => {
   it("maps caller to scope_keys", () => {
@@ -20,6 +25,10 @@ describe("scopeKeysFromCaller", () => {
 });
 
 describe("runRetrieval", () => {
+  afterEach(() => {
+    setObservability(null);
+  });
+
   it("returns contextText and citations from store hits", async () => {
     const store = new InMemoryStore();
     await store.ingest({
@@ -53,6 +62,29 @@ describe("runRetrieval", () => {
     expect(out.result.degraded).toBe(true);
     expect(out.contextText).toBe("");
     expect(out.citations).toEqual([]);
+  });
+
+  it("emits MEMORY_QUERY with degraded=true when store is unavailable", async () => {
+    const captured: TelemetryEvent[] = [];
+    setObservability({
+      events: createEmitter({ capture: captured }),
+      getContext: () => getTraceContext(),
+    });
+    const store = new InMemoryStore();
+    store.setAvailable(false);
+    await runWithContextAsync(createContext("req-mq", "tr-mq"), async () => {
+      await runRetrieval(store, {
+        query_text: "anything",
+        scope: "org",
+        caller: { org_id: "o1" },
+      });
+    });
+    const mq = captured.filter((e) => e.event_type === "MEMORY_QUERY");
+    expect(mq).toHaveLength(1);
+    const p = mq[0]?.payload as { degraded?: boolean; hit_count?: number; scope?: string };
+    expect(p.degraded).toBe(true);
+    expect(p.hit_count).toBe(0);
+    expect(p.scope).toBe("org");
   });
 
   it("times out retrieval and returns deterministic degraded fallback", async () => {

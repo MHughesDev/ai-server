@@ -43,6 +43,9 @@ export type InvocationSafety = z.infer<typeof InvocationSafetySchema>;
 export const InvocationMetadataSchema = z.object({
   trace_id: z.string().optional(),
   contract_version: z.string().optional(),
+  /** Copied from policy for tool_engine audit gating / redaction (optional on non-tool steps). */
+  audit_level: z.enum(["none", "summary", "full"]).optional(),
+  redaction_level: z.enum(["none", "minimal", "full"]).optional(),
 });
 export type InvocationMetadata = z.infer<typeof InvocationMetadataSchema>;
 

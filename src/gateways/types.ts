@@ -3,6 +3,8 @@
  * @see docs/SPEC/15_ModelGateway_Spec, 16_ToolGateway_Spec, 17_MemoryAbstraction
  */
 
+import type { IMemoryStore } from "../memory/memory-abstraction.js";
+
 /** Completion request for model gateway */
 export interface ModelCompletionRequest {
   prompt: string;
@@ -66,7 +68,8 @@ export interface IToolGateway {
   invoke(request: ToolInvokeRequest): Promise<ToolInvokeResult>;
 }
 
-/** Stub: memory abstraction interface (L2-06+) */
-export interface IMemoryAbstraction {
-  // TBD
-}
+/**
+ * Memory surface aligned with SPEC 17 — same contract as {@link IMemoryStore}.
+ * Use this name in gateway-oriented imports alongside {@link IModelGateway} / {@link IToolGateway}.
+ */
+export type IMemoryAbstraction = IMemoryStore;

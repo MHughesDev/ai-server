@@ -16,13 +16,16 @@ import { createSynthesisEngine } from "../engines/synthesis_engine.js";
 import { getDefaultToolGateway } from "../gateways/tool-gateway.js";
 import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
-import { redact, type RedactionLevel } from "../observability/redact.js";
-import { writeAuditEvent } from "../security/audit-logger.js";
-import { getConfig } from "../bootstrap/index.js";
-import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { randomUUID } from "node:crypto";
+import {
+  buildBudgetExceededEnvelope,
+  HARNESS_TOOL_ITERATION_ABSOLUTE_CAP,
+  isFiniteToolBudget,
+} from "../governance/budget-exceeded.js";
 
+/** Default max tool rounds when plan omits `tool_budget` (matches prior router defaults). */
 const DEFAULT_MAX_HARNESS_ITERATIONS = 10;
+
 function hasToolBudgetRemaining(toolCallsCount: number, toolBudget: number): boolean {
   return toolBudget > 0 && toolCallsCount < toolBudget;
 }
@@ -36,24 +39,6 @@ function emitEngineEvent(
     cost_estimate_usd?: number;
     tokens_used?: number;
   }
-): void {
-  const obs = getObservability();
-  const ctx = getTraceContext();
-  if (obs?.events) {
-    obs.events.emit({
-      event_type: eventType,
-      request_id: ctx?.request_id ?? "unknown",
-      trace_id: ctx?.trace_id,
-      timestamp_iso: new Date().toISOString(),
-      redaction_level: "minimal",
-      payload,
-    });
-  }
-}
-
-function emitToolEvent(
-  eventType: "TOOL_START" | "TOOL_END",
-  payload: { tool_id: string; invocation_id: string; duration_ms?: number }
 ): void {
   const obs = getObservability();
   const ctx = getTraceContext();
@@ -159,8 +144,6 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         user_id: input.caller.user_id,
         roles: input.caller.scopes ?? [],
       };
-      const budgets = { token_budget: maxTokens };
-      const metadata = { trace_id: traceId, contract_version: "v1" };
 
       /** Autonomous harness: orchestration decided in router → `PipelinePlan.harness_autonomous_execution` (WANT-004). */
       const autonomousMode =
@@ -168,6 +151,14 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
 
       const toolBudget = plan.budgets?.tool_budget ?? DEFAULT_MAX_HARNESS_ITERATIONS;
       const deadlineMs = plan.budgets?.deadline_ms;
+
+      const budgets = { token_budget: maxTokens, tool_budget: toolBudget };
+      const metadata = {
+        trace_id: traceId,
+        contract_version: "v1",
+        audit_level: input.policy.audit_level,
+        redaction_level: input.policy.redaction_level,
+      };
       let executionOutput: TypedArtifact;
       let toolOutput: TypedArtifact;
       let toolCallsCount = 0;
@@ -217,56 +208,15 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         return result;
       };
 
-      const writeToolAudit = (
-        toolId: string,
-        toolInvId: string,
-        toolResult: Awaited<ReturnType<typeof toolEngine.invoke>>,
-        toolDuration: number
-      ) => {
-        const auditLevel = input.policy?.audit_level ?? "summary";
-        let securityAuditEnabled = false;
-        try {
-          securityAuditEnabled = resolveFeatureFlagEnabled(
-            "security_hard_controls_enabled",
-            getConfig(),
-            {
-              org_id: input.caller.org_id,
-              app_id: input.caller.app_id,
-              user_id: input.caller.user_id,
-            }
-          );
-        } catch {
-          /* bootstrap not called in tests */
-        }
-        if (auditLevel !== "none" && securityAuditEnabled) {
-          const ctx = getTraceContext();
-          const redactionLevel = (input.policy?.redaction_level ?? "minimal") as RedactionLevel;
-          writeAuditEvent({
-            event_type: "TOOL_ACCESS",
-            request_id: ctx?.request_id ?? "unknown",
-            trace_id: ctx?.trace_id,
-            timestamp_iso: new Date().toISOString(),
-            payload: redact(
-              {
-                tool_id: toolId,
-                invocation_id: toolInvId,
-                allowed: toolResult.status === "success",
-                status: toolResult.status,
-                duration_ms: toolDuration,
-                caller_org: input.caller.org_id,
-                caller_app: input.caller.app_id,
-                caller_user: input.caller.user_id,
-              },
-              redactionLevel
-            ),
-          });
-        }
-      };
-
       if (autonomousMode) {
         // L2-99: Autonomous harness loop — (execution ↔ tool)* until budget/deadline/no proposal.
         let context: TypedArtifact[] = [...inputArtifacts];
-        const maxIterations = Math.min(toolBudget, DEFAULT_MAX_HARNESS_ITERATIONS);
+        // One extra execution round may be needed after the last allowed tool so we can block with
+        // BUDGET_EXCEEDED when the model still proposes a tool (parity with `workflows/runner.ts`).
+        const maxIterations = Math.min(
+          Math.max(toolBudget + 1, 1),
+          HARNESS_TOOL_ITERATION_ABSOLUTE_CAP
+        );
         let iter = 0;
         let lastOutput: TypedArtifact = textToArtifact(prompt, randomUUID());
 
@@ -312,11 +262,31 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
           }
 
           const proposed = execResult.proposed_next_action;
-          const shouldCallTool =
+          const wantsTool =
             proposed?.type === "call_tool" &&
             typeof proposed.ref === "string" &&
-            allowlist.includes(proposed.ref) &&
-            hasToolBudgetRemaining(toolCallsCount, toolBudget);
+            allowlist.includes(proposed.ref);
+
+          if (wantsTool && isFiniteToolBudget(toolBudget) && !hasToolBudgetRemaining(toolCallsCount, toolBudget)) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "blocked",
+            });
+            return buildBudgetExceededEnvelope(
+              requestId,
+              workflowId,
+              workflowStart,
+              {
+                dimension: "tool_budget",
+                tool_budget: toolBudget,
+                tool_calls: toolCallsCount,
+              },
+              toolCallsCount
+            );
+          }
+
+          const shouldCallTool = wantsTool && hasToolBudgetRemaining(toolCallsCount, toolBudget);
 
           if (shouldCallTool && proposed.ref) {
             const toolId = proposed.ref;
@@ -341,7 +311,6 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
               budgets,
               metadata,
             };
-            emitToolEvent("TOOL_START", { tool_id: toolId, invocation_id: toolInvId });
             emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
             const toolStart = Date.now();
             const toolResult = await toolEngine.invoke(toolInv);
@@ -351,12 +320,6 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
               invocation_id: toolInvId,
               duration_ms: toolDuration,
             });
-            emitToolEvent("TOOL_END", {
-              tool_id: toolId,
-              invocation_id: toolInvId,
-              duration_ms: toolDuration,
-            });
-            writeToolAudit(toolId, toolInvId, toolResult, toolDuration);
             toolCallsCount++;
             if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
               const toolArtifact = toolResult.result_artifacts[0];
@@ -432,7 +395,6 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
             budgets,
             metadata,
           };
-          emitToolEvent("TOOL_START", { tool_id: firstToolId, invocation_id: toolInvId });
           emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
           const toolStart = Date.now();
           const toolResult = await toolEngine.invoke(toolInv);
@@ -442,12 +404,6 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
             invocation_id: toolInvId,
             duration_ms: toolDuration,
           });
-          emitToolEvent("TOOL_END", {
-            tool_id: firstToolId,
-            invocation_id: toolInvId,
-            duration_ms: toolDuration,
-          });
-          writeToolAudit(firstToolId, toolInvId, toolResult, toolDuration);
           toolCallsCount += 1;
           if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
             toolOutput = toolResult.result_artifacts[0];

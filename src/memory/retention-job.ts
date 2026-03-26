@@ -8,6 +8,7 @@
 
 import type { IMemoryStore } from "./memory-abstraction.js";
 import type { MemoryRetentionConfig } from "../config/schema.js";
+import { safeLogError } from "../observability/redact.js";
 
 export interface RetentionJobOptions {
   /** Interval between retention runs in milliseconds */
@@ -41,7 +42,7 @@ export class RetentionJob {
     this.options = {
       intervalMs: options.intervalMs,
       onLog: options.onLog ?? ((msg) => console.log(`[retention] ${msg}`)),
-      onError: options.onError ?? ((err) => console.error(`[retention] error:`, err)),
+      onError: options.onError ?? ((err) => console.error(`[retention] error:`, safeLogError(err))),
     };
   }
 

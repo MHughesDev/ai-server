@@ -11,6 +11,7 @@ import { constants } from "node:fs";
 import { createInterface } from "node:readline";
 import { finished } from "node:stream/promises";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
+import { safeLogError } from "../observability/redact.js";
 import type { AuditEvent } from "./types.js";
 
 export interface AuditLogEntry extends AuditEvent {
@@ -77,17 +78,26 @@ export function setBackpressureCallback(callback: (() => void) | null): void {
   backpressureCallback = callback;
 }
 
-/** Create a non-blocking file sink with bounded queue and rotation for audit entries. */
+interface QueuedAuditLine {
+  readonly line: string;
+  readonly settle: { resolve: () => void; reject: (err: unknown) => void };
+}
+
+/**
+ * Create a non-blocking file sink with bounded queue and rotation for audit entries.
+ * Returns a sink that resolves its **per-entry** `Promise` after that line is appended (and optionally fsynced),
+ * so `writeAuditEventAsync` can advance the hash chain only after durable ordering for that entry (WANT-040).
+ */
 export function createFileAuditSink(
   filePath: string,
   options: FileAuditSinkOptions = {}
-): (entry: AuditLogEntry) => void {
+): (entry: AuditLogEntry) => Promise<void> {
   const maxQueueSize = options.maxQueueSize ?? 1_000;
   const maxFileSizeBytes = options.maxFileSizeBytes ?? 10 * 1024 * 1024;
   const maxRotatedFiles = options.maxRotatedFiles ?? 3;
   const backpressureThreshold = options.backpressureThreshold ?? 0.8;
   const fsyncAfterEachWrite = options.fsyncAfterEachWrite === true;
-  const queue: string[] = [];
+  const queue: QueuedAuditLine[] = [];
   let droppedEntries = 0;
   let draining = false;
   let closed = false;
@@ -138,18 +148,22 @@ export function createFileAuditSink(
     draining = true;
     try {
       while (queue.length > 0) {
-        const line = queue.shift();
-        if (!line) break;
-        await maybeRotate(Buffer.byteLength(line));
-        await appendFile(filePath, line, "utf8");
-        if (fsyncAfterEachWrite) {
-          await syncFileToDisk(filePath);
+        const item = queue.shift();
+        if (!item) break;
+        try {
+          await maybeRotate(Buffer.byteLength(item.line));
+          await appendFile(filePath, item.line, "utf8");
+          if (fsyncAfterEachWrite) {
+            await syncFileToDisk(filePath);
+          }
+          item.settle.resolve();
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err);
+          console.error("[audit] persistent sink write failed", safeLogError(err));
+          item.settle.reject(err);
         }
       }
       lastError = null;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-      console.error("[audit] persistent sink write failed", err);
     } finally {
       draining = false;
       // L2-04: Update backpressure status after draining
@@ -188,41 +202,47 @@ export function createFileAuditSink(
     }
   };
 
-  return (entry: AuditLogEntry) => {
-    if (closed) return;
+  return (entry: AuditLogEntry): Promise<void> => {
+    if (closed) return Promise.resolve();
     const line = `${JSON.stringify(entry)}\n`;
 
-    if (queue.length >= maxQueueSize) {
-      droppedEntries += 1;
-      queue.shift();
-    }
-    queue.push(line);
-
-    // L2-04: Backpressure check after adding to queue
-    const currentFillRatio = queue.length / maxQueueSize;
-    backpressureActive = currentFillRatio >= backpressureThreshold;
-
-    // L2-04: Trigger backpressure callback if threshold crossed
-    if (backpressureActive && backpressureCallback) {
-      try {
-        backpressureCallback();
-      } catch (err) {
-        console.error("[audit] backpressure callback failed", err);
+    return new Promise<void>((resolve, reject) => {
+      if (queue.length >= maxQueueSize) {
+        droppedEntries += 1;
+        const dropped = queue.shift();
+        dropped?.settle.reject(new Error("audit_file_sink_queue_overflow"));
       }
-    }
+      queue.push({
+        line,
+        settle: { resolve, reject },
+      });
 
-    currentAuditSinkStatus = {
-      queueDepth: queue.length,
-      maxQueueSize,
-      droppedEntries,
-      isDraining: draining,
-      lastError,
-      backpressureActive,
-    };
+      // L2-04: Backpressure check after adding to queue
+      const currentFillRatio = queue.length / maxQueueSize;
+      backpressureActive = currentFillRatio >= backpressureThreshold;
 
-    if (!draining) {
-      void drainQueue();
-    }
+      // L2-04: Trigger backpressure callback if threshold crossed
+      if (backpressureActive && backpressureCallback) {
+        try {
+          backpressureCallback();
+        } catch (err) {
+          console.error("[audit] backpressure callback failed", safeLogError(err));
+        }
+      }
+
+      currentAuditSinkStatus = {
+        queueDepth: queue.length,
+        maxQueueSize,
+        droppedEntries,
+        isDraining: draining,
+        lastError,
+        backpressureActive,
+      };
+
+      if (!draining) {
+        void drainQueue();
+      }
+    });
   };
 }
 
@@ -313,11 +333,11 @@ export async function writeAuditEventAsync(event: AuditEvent): Promise<AuditLogE
         const result = persistentSink(full);
         if (result instanceof Promise) {
           await result.catch((err) => {
-            console.error("[audit] persistent sink write failed", err);
+            console.error("[audit] persistent sink write failed", safeLogError(err));
           });
         }
       } catch (err) {
-        console.error("[audit] persistent sink write failed", err);
+        console.error("[audit] persistent sink write failed", safeLogError(err));
       }
     }
 
@@ -354,11 +374,11 @@ export function writeAuditEvent(event: AuditEvent): void {
           const result = persistentSink(full);
           if (result instanceof Promise) {
             void result.catch((err) => {
-              console.error("[audit] persistent sink write failed", err);
+              console.error("[audit] persistent sink write failed", safeLogError(err));
             });
           }
         } catch (err) {
-          console.error("[audit] persistent sink write failed", err);
+          console.error("[audit] persistent sink write failed", safeLogError(err));
         }
       }
       lastHash = eventHash;

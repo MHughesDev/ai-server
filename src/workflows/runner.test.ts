@@ -105,4 +105,110 @@ describe("workflow runner budget enforcement", () => {
     expect(response.error?.code).toBe("BUDGET_EXCEEDED");
     expect(response.error?.detail).toMatchObject({ dimension: "cost_budget_usd" });
   });
+
+  it("enforces plan tool_budget across tool engine_call steps", async () => {
+    const workflowId = "runner_tool_budget_test";
+    registerWorkflowDefinition({
+      workflow_id: workflowId,
+      version: "v1",
+      steps: [
+        { step_id: "t1", kind: "engine_call", ref: "tool", depends_on: [] },
+        { step_id: "t2", kind: "engine_call", ref: "tool", depends_on: ["t1"] },
+      ],
+      stop_conditions: { max_iterations: 1, deadline_ms: 10_000 },
+    });
+    const toolEngine: IEngine = {
+      async invoke() {
+        await Promise.resolve();
+        return {
+          invocation_id: "inv-tool",
+          status: "success",
+          result_artifacts: [
+            {
+              artifact_id: "a1",
+              artifact_kind: "report",
+              encoding: "text",
+              content: { inline: "ok" },
+            },
+          ],
+          metrics: { duration_ms: 1 },
+        };
+      },
+    };
+    const response = await runWorkflow({
+      workflowId,
+      input: makeInput(workflowId, { tool_budget: 1, deadline_ms: 10_000 }),
+      deps: { getEngine: (ref) => (ref === "tool" ? toolEngine : undefined), getPipelineForWorkflow: () => undefined },
+    });
+    expect(response.status).toBe("blocked");
+    expect(response.error?.code).toBe("BUDGET_EXCEEDED");
+    expect(response.error?.detail).toMatchObject({
+      dimension: "tool_budget",
+      tool_budget: 1,
+      tool_calls: 1,
+    });
+    expect(response.telemetry?.tool_calls).toBe(1);
+  });
+
+  it("enforces token_budget cumulatively across engine_call steps (WANT-014)", async () => {
+    const workflowId = "runner_token_budget_cumulative";
+    registerWorkflowDefinition(makeWorkflow(workflowId, { max_iterations: 1, deadline_ms: 10_000 }));
+    let invocations = 0;
+    const tokenEngine: IEngine = {
+      async invoke() {
+        invocations += 1;
+        await Promise.resolve();
+        return {
+          invocation_id: `inv-${invocations}`,
+          status: "success",
+          result_artifacts: [
+            { artifact_id: "a1", artifact_kind: "report", encoding: "text", content: { inline: "ok" } },
+          ],
+          metrics: { tokens_used: 100, duration_ms: 1 },
+        };
+      },
+    };
+    const response = await runWorkflow({
+      workflowId,
+      input: makeInput(workflowId, { token_budget: 150, deadline_ms: 10_000 }),
+      deps: { getEngine: () => tokenEngine, getPipelineForWorkflow: () => undefined },
+    });
+    expect(response.status).toBe("blocked");
+    expect(response.error?.code).toBe("BUDGET_EXCEEDED");
+    expect(response.error?.detail).toMatchObject({
+      dimension: "token_budget",
+      token_budget: 150,
+      tokens_used: 200,
+    });
+    expect(invocations).toBe(2);
+  });
+
+  it("blocks tool steps when tool_budget is zero", async () => {
+    const workflowId = "runner_tool_budget_zero";
+    registerWorkflowDefinition({
+      workflow_id: workflowId,
+      version: "v1",
+      steps: [{ step_id: "t1", kind: "engine_call", ref: "tool", depends_on: [] }],
+      stop_conditions: { max_iterations: 1, deadline_ms: 10_000 },
+    });
+    const response = await runWorkflow({
+      workflowId,
+      input: makeInput(workflowId, { tool_budget: 0, deadline_ms: 10_000 }),
+      deps: {
+        getEngine: () => ({
+          async invoke() {
+            return {
+              invocation_id: "x",
+              status: "success",
+              result_artifacts: [],
+              metrics: {},
+            };
+          },
+        }),
+        getPipelineForWorkflow: () => undefined,
+      },
+    });
+    expect(response.status).toBe("blocked");
+    expect(response.error?.detail).toMatchObject({ dimension: "tool_budget", tool_budget: 0 });
+  });
 });

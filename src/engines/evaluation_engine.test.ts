@@ -3,10 +3,14 @@
  * Tests artifact verification and evaluation report generation.
  */
 
-import { jest } from "@jest/globals";
+import { jest, afterEach } from "@jest/globals";
 import { createEvaluationEngine } from "./evaluation_engine.js";
 import type { TypedArtifact } from "../contracts/index.js";
 import type { IModelGateway } from "../gateways/types.js";
+import { createEmitter } from "../observability/emitter.js";
+import { setObservability } from "../observability/types.js";
+import type { TelemetryEvent } from "../observability/events.js";
+import { createContext, getTraceContext, runWithContextAsync } from "../observability/context.js";
 
 // Mock model gateway for testing model-based evaluation
 function createMockModelGateway(responseText: string): jest.Mocked<IModelGateway> {
@@ -21,6 +25,30 @@ function createMockModelGateway(responseText: string): jest.Mocked<IModelGateway
 }
 
 describe("createEvaluationEngine", () => {
+  afterEach(() => setObservability(null));
+
+  describe("SPEC 18 VERIFY_RESULT", () => {
+    it("emits VERIFY_RESULT when observability is active", async () => {
+      const captured: TelemetryEvent[] = [];
+      setObservability({
+        events: createEmitter({ capture: captured }),
+        getContext: () => getTraceContext(),
+      });
+      const engine = createEvaluationEngine();
+      await runWithContextAsync(createContext("req-eval", "tr-eval"), async () => {
+        await engine.invoke({
+          invocation_id: "eval-inv-1",
+          task: { objective: { description: "x" } },
+          context_artifacts: [],
+        });
+      });
+      const verify = captured.filter((e) => e.event_type === "VERIFY_RESULT");
+      expect(verify.length).toBe(1);
+      expect((verify[0]?.payload as { invocation_id?: string })?.invocation_id).toBe("eval-inv-1");
+      expect((verify[0]?.payload as { engine_status?: string })?.engine_status).toBe("fail");
+    });
+  });
+
   describe("basic engine creation", () => {
     it("creates engine with invoke function", () => {
       const engine = createEvaluationEngine();

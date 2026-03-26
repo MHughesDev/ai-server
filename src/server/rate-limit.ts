@@ -8,6 +8,7 @@ import type { IngressRateLimitConfig } from "../config/schema.js";
 import { getErrorMeta } from "../contracts/errors.js";
 import type { IngressRejection } from "../ingress/errors.js";
 import type { CallerContext } from "../ingress/types.js";
+import { safeLogError } from "../observability/redact.js";
 
 interface BucketState {
   windowStartMs: number;
@@ -145,7 +146,7 @@ class RedisFixedWindowRateLimiter implements RateLimitBackend {
       };
     } catch (err) {
       // Fail open: if Redis fails, allow the request
-      console.error("[rate-limit] Redis error, failing open:", err);
+      console.error("[rate-limit] Redis error, failing open:", safeLogError(err));
       return {
         allowed: true,
         limit: this.maxRequests,

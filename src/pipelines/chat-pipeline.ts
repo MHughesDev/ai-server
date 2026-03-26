@@ -16,6 +16,11 @@ import type { IMemoryStore } from "../memory/memory-abstraction.js";
 import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
+import { DEFAULT_MAX_CONTEXT_TOKENS } from "../utils/tokens.js";
+import {
+  RequestDeadlineExceededError,
+  withDeadline as raceWithDeadline,
+} from "../utils/async-deadline.js";
 
 function emitEngineEvent(
   eventType: "ENGINE_START" | "ENGINE_END",
@@ -68,31 +73,14 @@ function textToArtifact(text: string, artifactId: string): TypedArtifact {
   };
 }
 
-/** Deadline exceeded error for pipeline timeouts */
-class DeadlineExceededError extends Error {
-  constructor(public readonly deadlineMs: number) {
-    super(`Pipeline deadline exceeded after ${deadlineMs}ms`);
-    this.name = "DeadlineExceededError";
-  }
-}
-
-async function runWithDeadline<T>(promise: Promise<T>, deadlineMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new DeadlineExceededError(deadlineMs)), deadlineMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 export function createChatPipeline(
   gateway: IModelGateway,
-  options?: { memoryStore?: IMemoryStore }
+  options?: {
+    memoryStore?: IMemoryStore;
+    /** Config cap; combined with plan.token_budget like `query-handler` pre-pipeline retrieval. */
+    memoryMaxContextTokens?: number;
+    memoryRetrievalTimeoutMs?: number;
+  }
 ): IPipeline {
   const executionEngine = createExecutionEngine(gateway);
   const synthesisEngine = createSynthesisEngine(gateway);
@@ -122,6 +110,11 @@ export function createChatPipeline(
         memoryScopeFromPolicy &&
         memoryScopeFromPolicy !== "none"
       ) {
+        const cfgCap = options?.memoryMaxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
+        const retrievalMaxContextTokens =
+          plan.budgets?.token_budget != null
+            ? Math.max(64, Math.min(cfgCap, Math.floor(plan.budgets.token_budget * 0.5)))
+            : cfgCap;
         const memoryEngine = createMemoryEngine(memoryStore);
         const memoryInv: EngineInvocation = {
           invocation_id: randomUUID(),
@@ -137,6 +130,10 @@ export function createChatPipeline(
                 query_text: canonical.text ?? "",
                 scope: memoryScopeFromPolicy,
                 top_k: plan.memory.top_k ?? 5,
+                max_context_tokens: retrievalMaxContextTokens,
+                ...(options?.memoryRetrievalTimeoutMs != null && options.memoryRetrievalTimeoutMs > 0
+                  ? { retrieval_timeout_ms: options.memoryRetrievalTimeoutMs }
+                  : {}),
               },
             },
           },
@@ -164,7 +161,6 @@ export function createChatPipeline(
 
       const maxTokens = plan.budgets?.token_budget ?? 1024;
       const basePrompt = canonical.text || "(no input)";
-      // PRODUCTION: retrievalContext.contextText is unbounded; cap or truncate by token estimate so context + question doesn't exceed token_budget and doesn't blow memory.
       const prompt =
         retrievalContext?.contextText && retrievalContext.contextText.length > 0
           ? `Context:\n${retrievalContext.contextText}\n\nQuestion: ${basePrompt}`
@@ -210,9 +206,9 @@ export function createChatPipeline(
         if (deadlineMs) {
           const remainingMs = deadlineMs - (executionStart - pipelineStart);
           if (remainingMs <= 0) {
-            throw new DeadlineExceededError(deadlineMs);
+            throw new RequestDeadlineExceededError(deadlineMs);
           }
-          executionResult = await runWithDeadline(
+          executionResult = await raceWithDeadline(
             executionEngine.invoke(executionInv),
             remainingMs
           );
@@ -220,7 +216,7 @@ export function createChatPipeline(
           executionResult = await executionEngine.invoke(executionInv);
         }
       } catch (err) {
-        if (err instanceof DeadlineExceededError) {
+        if (err instanceof RequestDeadlineExceededError) {
           emitWorkflowEvent("WORKFLOW_END", {
             workflow_id: workflowId,
             duration_ms: Date.now() - workflowStart,
@@ -321,9 +317,9 @@ export function createChatPipeline(
         if (deadlineMs) {
           const remainingMs = deadlineMs - (synthesisStart - pipelineStart);
           if (remainingMs <= 0) {
-            throw new DeadlineExceededError(deadlineMs);
+            throw new RequestDeadlineExceededError(deadlineMs);
           }
-          synthesisResult = await runWithDeadline(
+          synthesisResult = await raceWithDeadline(
             synthesisEngine.invoke(synthesisInv),
             remainingMs
           );
@@ -331,7 +327,7 @@ export function createChatPipeline(
           synthesisResult = await synthesisEngine.invoke(synthesisInv);
         }
       } catch (err) {
-        if (err instanceof DeadlineExceededError) {
+        if (err instanceof RequestDeadlineExceededError) {
           emitWorkflowEvent("WORKFLOW_END", {
             workflow_id: workflowId,
             duration_ms: Date.now() - workflowStart,

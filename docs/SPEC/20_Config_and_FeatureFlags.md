@@ -43,17 +43,17 @@ Only the following keys exist on `config.flags` (Zod `FeatureFlagsSchema`). Name
 
 **Resolution models**
 - **Dynamic:** `resolveFeatureFlagEnabled(name, config, context?)` in `feature-flags.ts` — used by `isFeatureFlagEnabled` in `routes.ts`, `isFlagEnabled` in `query-handler.ts`, policy `memory_scope` (`enable_org_memory`), and coding-agent harness flags — uses `FeatureFlagService.evaluateFlag` when the service is initialized (admin overrides + org/app/user context), else `config.flags[name]`.
-- **Static:** direct read of `config.flags` / `getConfig().flags` — **does not** apply admin overrides from `/admin/flags`.
+- **Static:** direct read of `config.flags` / `getConfig().flags` — **does not** apply admin overrides from `/admin/flags`. **Bootstrap debug dump** (`logLevel === "debug"`) still logs `config.flags` as the env/schema snapshot; use `/admin/flags` or runtime probes for override state.
 
 | Flag | Enforced (behavior) | Resolution | Code references (indicative) |
 |------|----------------------|------------|------------------------------|
-| `platform_production_rollout_enabled` | **503** on `POST /token/exchange`, `POST /v1/query`, `POST /v1/query/async` in **production** when false; preflight check; bootstrap production gates (JWT, auth header, IdP/app defaults, CORS, TLS, synthetic model providers) when true + production | Dynamic on routes; static in bootstrap/preflight | `routes.ts`, `bootstrap/index.ts`, `preflight.ts` |
-| `runtime_mvp_query_chat_enabled` | **404** MVP-disabled body when false on `POST /v1/query` | Dynamic | `routes.ts` |
+| `platform_production_rollout_enabled` | **503** on `POST /token/exchange`, `POST /v1/query`, `POST /v1/query/async` in **production** when false; preflight check; bootstrap production gates (JWT, auth header, IdP/app defaults, CORS, TLS, synthetic model providers) when true + production | **Dynamic** (`resolveFeatureFlagEnabled`) on routes, **`bootstrap/index.ts`**, **`preflight.ts`** (service unset → config fallback, same as env) | `routes.ts`, `bootstrap/index.ts`, `preflight.ts` |
+| `runtime_mvp_query_chat_enabled` | **404** `MVP_QUERY_DISABLED` (`ApiPlainError`) when false on `POST /v1/query` | Dynamic | `routes.ts` |
 | `multimodal_input_path_enabled` | Attachment validation path + ingress options for query/async when combined with `enable_multimodal_pipeline` | Dynamic | `routes.ts`, `query-handler.ts` |
 | `enable_multimodal_pipeline` | Must be **true** with `multimodal_input_path_enabled` for multimodal pipeline set in control plane | Dynamic | `query-handler.ts` |
-| `observability_required_events_v1` | Emits governance/telemetry events in query path when true; emitter creation in `index.ts` gated on flag; production bootstrap requires trace sample rate &lt; 1 when flag + rollout | Dynamic (query); static (bootstrap `index.ts` emitter) | `query-handler.ts`, `server/index.ts`, `bootstrap/index.ts` |
-| `security_hard_controls_enabled` | Security audit writes / policy event path in query handler; coding-agent tool audit when policy audit level allows | Dynamic | `query-handler.ts`, `coding-agent-pipeline.ts` |
-| `enable_cost_caps` | Strips or applies cost budget from plan when disabled/enabled; preflight **warn** if false | Dynamic | `query-handler.ts`, `preflight.ts` |
+| `observability_required_events_v1` | Emits governance/telemetry events in query path when true; emitter creation in `index.ts` gated on flag; production bootstrap requires trace sample rate &lt; 1 when flag + rollout | **Dynamic** (`resolveFeatureFlagEnabled`) in `query-handler.ts`, **`server/index.ts`**, **`bootstrap/index.ts`** | `query-handler.ts`, `server/index.ts`, `bootstrap/index.ts` |
+| `security_hard_controls_enabled` | Security audit writes / policy event path in query handler; coding-agent tool audit when policy audit level allows; production **`GET /v1/preflight`** check | **Dynamic** (incl. `preflight.ts`) | `query-handler.ts`, `coding-agent-pipeline.ts`, `preflight.ts` |
+| `enable_cost_caps` | Strips or applies cost budget from plan when disabled/enabled; preflight **warn** if false | **Dynamic** (incl. `preflight.ts`) | `query-handler.ts`, `preflight.ts` |
 | `memory_retrieval_enabled` | Gating retrieval / memory features in query path | Dynamic | `query-handler.ts` |
 | `enable_org_memory` | Policy `memory_scope` **org** vs **none** | Dynamic (caller org/app/user) | `policy-evaluator.ts` |
 | `harness_autonomous_execution_enabled` | Enables autonomous harness loop in coding-agent pipeline when tools allowlisted | Dynamic (caller org/app/user) | `coding-agent-pipeline.ts` |

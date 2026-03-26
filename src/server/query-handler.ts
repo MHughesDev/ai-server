@@ -49,30 +49,10 @@ import { redact, type RedactionLevel } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
 import { getDefaultStore } from "../memory/default-store.js";
 import { runRetrieval } from "../memory/retrieval-service.js";
-
-class RequestDeadlineExceededError extends Error {
-  constructor(public readonly deadlineMs: number) {
-    super(`Request deadline exceeded after ${deadlineMs}ms`);
-    this.name = "RequestDeadlineExceededError";
-  }
-}
-
-async function withDeadline<T>(promise: Promise<T>, deadlineMs?: number): Promise<T> {
-  if (!deadlineMs || deadlineMs <= 0) return promise;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new RequestDeadlineExceededError(deadlineMs));
-        }, deadlineMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
+import {
+  RequestDeadlineExceededError,
+  withDeadline,
+} from "../utils/async-deadline.js";
 
 function emit(event: TelemetryEvent): void {
   const obs = getObservability();
@@ -448,19 +428,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
               pipeline_type: plan.pipeline_type,
               status: retrievalResult.result.hits.length > 0 ? "hit" : "miss",
             });
-            if (observabilityEnabled) {
-              emit(
-                buildEvent(
-                  "MEMORY_QUERY",
-                  {
-                    hit_count: retrievalResult.result.hits.length,
-                    latency_ms: retrievalResult.result.latency_ms,
-                    scope: memoryScope,
-                  },
-                  redactionLevel
-                )
-              );
-            }
+            /* MEMORY_QUERY emitted inside runRetrieval (taxonomy-events) for hit/miss/degraded */
           }
         } catch (err) {
           incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "error" });
@@ -509,7 +477,13 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         app_id: ingressResult.callerContext.appId,
         user_id: ingressResult.callerContext.userId,
       });
-      const pipelineUsesMemory = pipelineUsesMemoryEngine ? { memoryStore: getDefaultStore() } : undefined;
+      const pipelineUsesMemory = pipelineUsesMemoryEngine
+        ? {
+            memoryStore: getDefaultStore(),
+            memoryMaxContextTokens: config.memory.max_context_tokens,
+            memoryRetrievalTimeoutMs: config.memory.retrieval_timeout_ms,
+          }
+        : undefined;
       const hasToolsInPlan = (plan.tools_enabled?.length ?? 0) > 0;
       if (hasToolsInPlan && !toolExecutionEnabled) {
         console.warn(

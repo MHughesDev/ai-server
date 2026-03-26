@@ -434,6 +434,11 @@ describe("Error taxonomy", () => {
     expect(ERROR_CODES).toContain("MODEL_FAILURE");
     expect(ERROR_CODES).toContain("INTERNAL_ERROR");
     expect(ERROR_CODES).toContain("IDEMPOTENCY_KEY_CONFLICT");
+    expect(ERROR_CODES).toContain("ASYNC_NOT_AVAILABLE");
+    expect(ERROR_CODES).toContain("TIMEOUT");
+    expect(ERROR_CODES).toContain("FLAGS_NOT_AVAILABLE");
+    expect(ERROR_CODES).toContain("NOT_FOUND");
+    expect(ERROR_CODES).toContain("MVP_QUERY_DISABLED");
   });
 
   it("isErrorCode identifies valid codes", () => {
