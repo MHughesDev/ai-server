@@ -2,7 +2,7 @@
 
 **Purpose:** Single document summarizing production readiness, scorecard by dimension, go/no-go checklist for the next release, and where to find evidence in-repo. **This file is also the primary AGENT BRIEFING** for coding agents working toward deployment.
 
-**Last updated:** 2026-03-23
+**Last updated:** 2026-03-28
 
 **Documentation authority:** Target architecture — `docs/ARCHITECTURE/Architecture_document_Finalized.md`. Implementation status and gaps — `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`, `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`.
 
@@ -112,6 +112,62 @@ npm run acceptance:observability   # optional
 - Production **credentials**, **DNS**, **TLS**, **cloud account**.
 - **GO / NO-GO** meeting and **L2-99 / L2-08** evidence sign-off.
 - **Risk acceptance** for partial features (e.g. async in prod).
+
+---
+
+## Ordered release task list (elaborated)
+
+**Purpose:** Single **end-to-end sequence** from repo health through staging validation to human GO/NO-GO. It **extends** the playbook “Execution phases” above with concrete steps and acceptance hints; use both together. **Do phases in order** unless items are explicitly parallel-safe.
+
+### Phase 1 — Technical gate (repository)
+
+1. **Clear ESLint** — Run `npm run lint` and fix all reported errors (common themes: `@typescript-eslint/require-await`, `@typescript-eslint/no-unnecessary-type-assertion`). Do not relax rules in CI to pass.
+2. **Full local verify** — Run `npm run verify:sow` from repo root until it exits 0 (lint → typecheck → build → test). Capture the first failing step if anything breaks after a merge.
+3. **CI-style tests** — Run `npm run test:ci` and resolve failures or coverage policy violations if your release treats this as blocking (matches extra rigor in `.github/workflows/ci.yml`).
+4. **Green CI on the integration commit** — Push the release branch or PR and ensure **GitHub Actions** (see `.github/workflows/ci.yml`) is green on the commit you intend to ship. **Evidence:** link to the successful workflow run, not only a local pass.
+
+### Phase 2 — Contracts and documentation accuracy
+
+5. **Route truth check** — After any HTTP changes, confirm `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` still match **`src/server/routes.ts`** (canonical path list). Update specs if routes were added, removed, or renamed.
+6. **Gaps report** — Walk `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` against current code; mark items fixed, strike stale claims, or add a “verified as of YYYY-MM-DD” note so the register does not contradict the implementation.
+7. **SOW / gap-closure doc** — Reconcile `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` with the same bar: no row should assert “missing” for shipped behavior or “complete” for unimplemented behavior without evidence.
+8. **Deployment guide honesty** — Edit `docs/OPERATIONS/Production-Deployment-Guide.md` so procedures, queue backends, and probe/auth behavior match what `Dockerfile`, `docker-compose.yml`, `k8s/`, and `src/queue/` actually do.
+
+### Phase 3 — Container and deploy path
+
+9. **Image build** — From a **clean checkout**, run `docker build` (see `Dockerfile`) until it succeeds. Fix multi-stage copy, `npm ci`, and `dist/` layout issues if the build fails.
+10. **Runtime smoke** — Run the built image (or `docker compose` per `docker-compose.yml`) with a representative env file (no real secrets in git). Confirm the process starts and **`/healthz`** (and your agreed readiness endpoint) return expected status codes.
+11. **Pipeline wiring** — Validate that your deploy automation (e.g. `.github/workflows/deploy-aws.yml`) publishes/consumes the **correct image digest or tag** that staging/production will run. Confirm Terraform/K8s/ECS references match that artifact.
+12. **Staging deploy** — Deploy to staging with **release-like** config (feature flags, queue backend, Redis/DB URLs as in prod class). **Evidence:** deploy log, ticket, or runbook entry with timestamp and version identifier.
+
+### Phase 4 — Runtime configuration, auth, and safety
+
+13. **Identity and apps** — Production IdP and app registration: no dev-only redirect URIs, client IDs, or signing keys; token issuers/audiences match `src/config/schema.ts` and deployment env.
+14. **Model and tool providers** — Real provider endpoints and keys (via secret store), not synthetic stubs; health/timeouts acceptable for production traffic.
+15. **Release traceability** — Set **`RELEASE_ID`** and **`BUILD_ID`** (or equivalent) in the target environment if required; confirm **`/v1/version`** (or documented equivalent) surfaces them for support and audits.
+16. **Ops endpoint protection** — If **`OPERATIONAL_BEARER_TOKEN`** is set, ensure callers (humans, probes, dashboards) send **`Authorization: Bearer …`**; if probes must be unauthenticated, that path must be **deliberately** implemented and isolated—never accidental exposure of admin routes.
+17. **Rollout kill switch** — Decide **`platform_production_rollout_enabled`** (and related flags per `docs/SPEC/20_Config_and_FeatureFlags.md`). In **staging**, verify flip-off blocks or degrades as designed and flip-on restores service.
+18. **Auth end-to-end** — Staging smoke: obtain a real token (or service path), call a protected **`/v1/*`** route, and confirm 401/403 vs 200 behavior matches policy.
+19. **Rate limiting** — Confirm limiter behavior matches topology (single instance vs Redis-backed); load or script a quick burst if policy requires evidence.
+20. **Tool gateway posture** — Explicitly document deny-by-default vs allowlisted tools; if tools execute, record sandbox/network review completion.
+21. **Async and jobs** (if in scope for this release) — `QUEUE_BACKEND` and env in deployment match **`src/queue/`** implementations. Exercise **`POST /v1/query/async`** and **`/v1/jobs/*`** in staging (submit, status, cancel, list). **Alternative:** disable or document async as out of scope for this cut.
+22. **Memory and retrieval** (if enabled) — State whether retrieval is off, dev-only, or production-backed; validate retention, chunk limits, and tenant isolation in staging.
+
+### Phase 5 — Observability, operations, and governance evidence
+
+23. **Audit and telemetry** — Confirm audit/event sinks are writable in the deployed environment and that critical paths still emit expected events/metrics (see L2-04 references in-repo if applicable).
+24. **Alerts and on-call** — Agree who gets paged for failed deploys, error-rate spikes, or dependency outages during rollout.
+25. **Runbooks** — Refresh `docs/SPEC/22_Runbooks_and_Operations.md` and `docs/OPERATIONS/RUNBOOKS/*` for this version (rollback, incident, deploy).
+26. **Rollback drill (L2-08)** — Execute and record per `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` (or your program’s equivalent).
+27. **Evidence pack (L2-99)** — Fill `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` with owners, dates, and links to CI runs, staging proof, and config reviews.
+28. **Formal GO / NO-GO** — Hold decision meeting (or async approval) and record outcome; narrow/internal releases may proceed with **written risk acceptance** instead of full GO.
+
+### Phase 6 — Organization and environment (outside the repo)
+
+29. **Infrastructure readiness** — DNS names, TLS certificates, cloud accounts, quotas, and network paths (VPC, egress, mTLS if used) are ready for production traffic.
+30. **Release record** — Capture release name, Git tag/SHA, release captain, deploy window, green CI URL, staging sign-off date, and production GO date in your tracker or the “Release record” table later in this document.
+
+**Note:** Re-run **Phase 1** after large merges; re-run **Phase 3** when Dockerfile, compose, or deploy workflows change.
 
 ---
 
@@ -435,4 +491,5 @@ These are **not** always in generic checklists; add a line of evidence if your r
 
 | Date | `verify:sow` | Commit / branch | Notes |
 |------|----------------|-----------------|-------|
+| 2026-03-28 | — | (doc) | Added **Ordered release task list (elaborated)** section; re-run `verify:sow` on release branch before ticking gates. |
 | 2026-03-23 | pass | (local) | Lint cleanup, OpenAPI/SPEC 02 aligned to `routes.ts`; Dockerfile/probes/deploy workflow fixes. |

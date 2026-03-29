@@ -81,7 +81,16 @@ const ALLOWLIST_MINIMAL = new Set([
 
 export type RedactionLevel = "none" | "minimal" | "full";
 
-function redactArrayElement(value: unknown, level: RedactionLevel): unknown {
+export type RedactOptions = {
+  /** When true, treat the object as a telemetry event `payload` body: allow non-allowlisted keys except sensitive. */
+  payloadRoot?: boolean;
+};
+
+function redactArrayElement(
+  value: unknown,
+  level: RedactionLevel,
+  insideTelemetryPayload: boolean
+): unknown {
   if (value === null || value === undefined) {
     return value;
   }
@@ -91,18 +100,13 @@ function redactArrayElement(value: unknown, level: RedactionLevel): unknown {
     }
     return value;
   }
-  return redact(value, level);
+  return redactRecord(value, level, insideTelemetryPayload);
 }
 
-/**
- * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.
- * - none: remove only SENSITIVE_KEYS (and nested keys containing them).
- * - minimal: only allow ALLOWLIST_MINIMAL at top level; payload may contain allowlisted payload keys.
- * - full: same as minimal but also redact string values to length-only or "[REDACTED]".
- */
-export function redact(
+function redactRecord(
   obj: unknown,
-  level: RedactionLevel = "minimal"
+  level: RedactionLevel,
+  insideTelemetryPayload: boolean
 ): Record<string, unknown> {
   if (obj === null || obj === undefined) {
     return {};
@@ -122,7 +126,8 @@ export function redact(
     ) {
       continue;
     }
-    if (level === "minimal" || level === "full") {
+    const applyAllowlist = (level === "minimal" || level === "full") && !insideTelemetryPayload;
+    if (applyAllowlist) {
       const allowed =
         ALLOWLIST_MINIMAL.has(key) ||
         ALLOWLIST_MINIMAL.has(key.toLowerCase()) ||
@@ -130,10 +135,11 @@ export function redact(
       if (!allowed && level === "minimal") continue;
       if (!allowed && level === "full") continue;
     }
+    const descendPayload = insideTelemetryPayload || key === "payload";
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      out[key] = redact(value, level);
+      out[key] = redactRecord(value, level, descendPayload);
     } else if (Array.isArray(value)) {
-      out[key] = value.map((v) => redactArrayElement(v, level));
+      out[key] = value.map((v) => redactArrayElement(v, level, descendPayload));
     } else if (level === "full" && typeof value === "string" && value.length > 0) {
       out[key] = "[REDACTED]";
     } else {
@@ -141,6 +147,20 @@ export function redact(
     }
   }
   return out;
+}
+
+/**
+ * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.
+ * - none: remove only SENSITIVE_KEYS (and nested keys containing them).
+ * - minimal: only allow ALLOWLIST_MINIMAL at top level; nested under `payload` (or with `payloadRoot: true`) keeps non-sensitive keys.
+ * - full: same as minimal but also redact string values to length-only or "[REDACTED]".
+ */
+export function redact(
+  obj: unknown,
+  level: RedactionLevel = "minimal",
+  options?: RedactOptions
+): Record<string, unknown> {
+  return redactRecord(obj, level, options?.payloadRoot ?? false);
 }
 
 /**

@@ -482,10 +482,11 @@ async function processRequest(
       });
       return;
     }
+    const queue = jobQueueService;
     try {
       await withRequestTimeout(
         (async () => {
-          const job = await jobQueueService!.getJob(jobId);
+          const job = await queue.getJob(jobId);
           if (!job) {
             sendJson(res, 404, {
               status: "error",
@@ -524,10 +525,11 @@ async function processRequest(
       });
       return;
     }
+    const queue = jobQueueService;
     try {
       await withRequestTimeout(
         (async () => {
-          const cancelled = await jobQueueService!.cancelJob(jobId);
+          const cancelled = await queue.cancelJob(jobId);
           if (!cancelled) {
             sendJson(res, 409, {
               status: "error",
@@ -562,10 +564,11 @@ async function processRequest(
       return;
     }
     const urlParams = new URLSearchParams(url.search);
+    const queue = jobQueueService;
     try {
       await withRequestTimeout(
         (async () => {
-          const jobs = await jobQueueService!.listJobs({
+          const jobs = await queue.listJobs({
             status: urlParams.get("status") as JobStatus | undefined,
             org_id: urlParams.get("org_id") ?? undefined,
             app_id: urlParams.get("app_id") ?? undefined,
@@ -644,21 +647,23 @@ async function processRequest(
       const done = await withProcessingOrTimeout(
         req,
         res,
-        (async () => {
-          flagService.setOverride({
-            flag_name: String(body.flag_name ?? ""),
-            scope: body.scope as FlagScope,
-            scope_id: String(body.scope_id ?? ""),
-            enabled: body.enabled === true,
-            variant: typeof body.variant === "string" ? body.variant : undefined,
-            payload:
-              body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
-                ? (body.payload as Record<string, unknown>)
-                : undefined,
-            expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
-          });
-          return true as const;
-        })()
+        Promise.resolve(
+          (() => {
+            flagService.setOverride({
+              flag_name: String(body.flag_name ?? ""),
+              scope: body.scope as FlagScope,
+              scope_id: String(body.scope_id ?? ""),
+              enabled: body.enabled === true,
+              variant: typeof body.variant === "string" ? body.variant : undefined,
+              payload:
+                body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+                  ? (body.payload as Record<string, unknown>)
+                  : undefined,
+              expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
+            });
+            return true as const;
+          })()
+        )
       );
       if (done === null) return;
       sendJson(res, 201, { status: "ok", message: "Override created" });
@@ -673,10 +678,12 @@ async function processRequest(
         const done = await withProcessingOrTimeout(
           req,
           res,
-          (async () => {
-            flagService.removeOverride(flagName, scope as FlagScope, scopeId);
-            return true as const;
-          })()
+          Promise.resolve(
+            (() => {
+              flagService.removeOverride(flagName, scope as FlagScope, scopeId);
+              return true as const;
+            })()
+          )
         );
         if (done === null) return;
         sendJson(res, 200, { status: "ok", message: "Override removed" });

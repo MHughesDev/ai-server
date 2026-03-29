@@ -10,39 +10,45 @@ function createMockStore(): {
 } {
   const store = new Map<string, Record<string, string>>();
   const client: RedisClient = {
-    async connect() {},
-    async disconnect() {},
-    async ping() {
-      return "PONG";
+    connect() {
+      return Promise.resolve();
     },
-    async hset(key, field, value) {
+    disconnect() {
+      return Promise.resolve();
+    },
+    ping() {
+      return Promise.resolve("PONG");
+    },
+    hset(key, field, value) {
       const row = store.get(key) ?? {};
       row[field] = value;
       store.set(key, row);
-      return 1;
+      return Promise.resolve(1);
     },
-    async hgetall(key) {
-      return { ...(store.get(key) ?? {}) };
+    hgetall(key) {
+      return Promise.resolve({ ...(store.get(key) ?? {}) });
     },
-    async hdel() {
-      return 0;
+    hdel() {
+      return Promise.resolve(0);
     },
-    async keys(pattern) {
+    keys(pattern) {
       const star = pattern.endsWith("*") ? pattern.slice(0, -1) : pattern;
-      return [...store.keys()].filter((k) => k.startsWith(star));
+      return Promise.resolve([...store.keys()].filter((k) => k.startsWith(star)));
     },
-    async del(key, ...rest) {
+    del(key, ...rest) {
       const all = [key, ...rest];
       let n = 0;
       for (const k of all) {
         if (store.delete(k)) n += 1;
       }
-      return n;
+      return Promise.resolve(n);
     },
-    async expire() {
-      return 1;
+    expire() {
+      return Promise.resolve(1);
     },
-    async quit() {},
+    quit() {
+      return Promise.resolve();
+    },
   };
   return { store, client };
 }

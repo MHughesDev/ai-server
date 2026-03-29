@@ -196,13 +196,13 @@ describe("workflow runner budget enforcement", () => {
       input: makeInput(workflowId, { tool_budget: 0, deadline_ms: 10_000 }),
       deps: {
         getEngine: () => ({
-          async invoke() {
-            return {
+          invoke() {
+            return Promise.resolve({
               invocation_id: "x",
               status: "success",
               result_artifacts: [],
               metrics: {},
-            };
+            });
           },
         }),
         getPipelineForWorkflow: () => undefined,

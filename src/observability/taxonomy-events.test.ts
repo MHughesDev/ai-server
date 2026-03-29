@@ -21,8 +21,9 @@ describe("taxonomy-events", () => {
     const emitter = createEmitter({ capture: captured });
     setObservability({ events: emitter, getContext: () => getTraceContext() });
 
-    await runWithContextAsync(createContext("req-verify", "tr-verify"), async () => {
+    await runWithContextAsync(createContext("req-verify", "tr-verify"), () => {
       emitVerifyResultEvent({ passed: true, score: 0.85 });
+      return Promise.resolve();
     });
 
     expect(captured).toHaveLength(1);
@@ -39,13 +40,14 @@ describe("taxonomy-events", () => {
       getContext: () => getTraceContext(),
     });
 
-    await runWithContextAsync(createContext("req-mw", "tr-mw"), async () => {
+    await runWithContextAsync(createContext("req-mw", "tr-mw"), () => {
       emitMemoryWriteEvent({
         document_id: "doc1",
         scope: "org",
         chunks_written: 2,
         store: "in_memory",
       });
+      return Promise.resolve();
     });
 
     expect(captured[0]?.event_type).toBe("MEMORY_WRITE");
@@ -59,8 +61,9 @@ describe("taxonomy-events", () => {
       getContext: () => getTraceContext(),
     });
 
-    await runWithContextAsync(createContext("req-memq", "tr-memq"), async () => {
+    await runWithContextAsync(createContext("req-memq", "tr-memq"), () => {
       emitMemoryQueryEvent({ hit_count: 2, latency_ms: 12, scope: "user", degraded: false });
+      return Promise.resolve();
     });
 
     expect(captured[0]?.event_type).toBe("MEMORY_QUERY");

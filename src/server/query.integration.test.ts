@@ -291,7 +291,9 @@ describe("POST /v1/query integration", () => {
   /** L2-99: Autonomous harness – when HARNESS_AUTONOMOUS_EXECUTION_ENABLED=true, coding_agent runs (execution ↔ tool)* loop and can perform multiple tool rounds */
   it("runs coding_agent with autonomous harness loop when HARNESS_AUTONOMOUS_EXECUTION_ENABLED=true", async () => {
     const prev = process.env.HARNESS_AUTONOMOUS_EXECUTION_ENABLED;
+    const prevTools = process.env.TOOL_EXECUTION_ENABLED;
     process.env.HARNESS_AUTONOMOUS_EXECUTION_ENABLED = "true";
+    process.env.TOOL_EXECUTION_ENABLED = "true";
     resetConfigForTest();
     const { server: autonomousServer, port: autonomousPort } = await (() =>
       new Promise<{ server: ReturnType<typeof createServer>; port: number }>((resolve) => {
@@ -316,14 +318,22 @@ describe("POST /v1/query integration", () => {
       const { statusCode, body } = await httpPost(autonomousPort, "/v1/query", bodyWithToolHint);
       expect(statusCode).toBe(200);
       const parsed = JSON.parse(body);
-      expect(parsed.status).toBe("ok");
       expect(parsed.telemetry?.pipeline).toBe("coding_agent");
       expect(parsed.telemetry?.tool_calls).toBeGreaterThanOrEqual(1);
+      // Stub execution always proposes another tool; the harness blocks with BUDGET_EXCEEDED once tool_budget is exhausted (parity with workflow runner).
+      if (parsed.status === "blocked") {
+        expect(parsed.error?.code).toBe("BUDGET_EXCEEDED");
+        expect(parsed.error?.detail).toMatchObject({ dimension: "tool_budget" });
+      } else {
+        expect(parsed.status).toBe("ok");
+      }
       validateResponseEnvelope(parsed);
     } finally {
       autonomousServer.close();
       if (prev !== undefined) process.env.HARNESS_AUTONOMOUS_EXECUTION_ENABLED = prev;
       else delete process.env.HARNESS_AUTONOMOUS_EXECUTION_ENABLED;
+      if (prevTools !== undefined) process.env.TOOL_EXECUTION_ENABLED = prevTools;
+      else delete process.env.TOOL_EXECUTION_ENABLED;
       resetConfigForTest();
       bootstrap();
     }

@@ -47,7 +47,9 @@ export function createEmitter(options?: {
       const level = (event.redaction_level as RedactionLevel) ?? redactionLevel;
       const redacted: TelemetryEvent = {
         ...event,
-        payload: event.payload ? (redact(event.payload, level) as TelemetryEvent["payload"]) : undefined,
+        payload: event.payload
+          ? (redact(event.payload, level, { payloadRoot: true }) as TelemetryEvent["payload"])
+          : undefined,
       };
       const out = redact(redacted, level) as TelemetryEvent;
       if (capture) {

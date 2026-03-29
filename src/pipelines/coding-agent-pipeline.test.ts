@@ -43,13 +43,13 @@ function harnessInput(toolBudget: number) {
 describe("createCodingAgentPipeline tool_budget (WANT-014)", () => {
   it("returns blocked BUDGET_EXCEEDED when model proposes a tool but tool_budget is 0", async () => {
     const modelGateway: IModelGateway = {
-      async complete() {
-        return { text: "step", tokens_in: 1, tokens_out: 1, model: "stub" };
+      complete() {
+        return Promise.resolve({ text: "step", tokens_in: 1, tokens_out: 1, model: "stub" });
       },
     };
     const toolGateway: IToolGateway = {
-      async invoke(req) {
-        return { allowed: true, tool_id: req.tool_id, result: { ok: true } };
+      invoke(req) {
+        return Promise.resolve({ allowed: true, tool_id: req.tool_id, result: { ok: true } });
       },
     };
     const pipeline = createCodingAgentPipeline({ modelGateway, toolGateway });
@@ -64,15 +64,17 @@ describe("createCodingAgentPipeline tool_budget (WANT-014)", () => {
   });
 
   it("allows tool_budget greater than the old implicit cap of 10 (absolute cap still applies)", async () => {
-    const toolInvoke = jest.fn(async (req: Parameters<IToolGateway["invoke"]>[0]) => ({
-      allowed: true as const,
-      tool_id: req.tool_id,
-      result: { echo: "ok" },
-    }));
+    const toolInvoke = jest.fn((req: Parameters<IToolGateway["invoke"]>[0]) =>
+      Promise.resolve({
+        allowed: true as const,
+        tool_id: req.tool_id,
+        result: { echo: "ok" },
+      })
+    );
     const toolGateway: IToolGateway = { invoke: toolInvoke };
     const modelGateway: IModelGateway = {
-      async complete() {
-        return { text: "step", tokens_in: 1, tokens_out: 1, model: "stub" };
+      complete() {
+        return Promise.resolve({ text: "step", tokens_in: 1, tokens_out: 1, model: "stub" });
       },
     };
     const pipeline = createCodingAgentPipeline({ modelGateway, toolGateway });

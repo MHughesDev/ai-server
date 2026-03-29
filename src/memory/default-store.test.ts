@@ -89,7 +89,7 @@ describe("default store wiring", () => {
       scope: "org",
       scope_keys: { org_id: "o1" },
     });
-    const out = await store.retrieve!({
+    const out = await store.retrieve({
       query_text: "hello",
       scope: "org",
       scope_keys: { org_id: "o1" },

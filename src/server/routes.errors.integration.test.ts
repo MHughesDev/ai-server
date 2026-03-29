@@ -143,11 +143,11 @@ describe("HTTP request processing deadline (WANT-015)", () => {
     const never = new Promise<never>(() => {});
     const stallSubmit: JobQueueService = {
       submitJob: () => never,
-      getJob: async () => null,
-      cancelJob: async () => false,
-      listJobs: async () => [],
-      start: async () => {},
-      stop: async () => {},
+      getJob: () => Promise.resolve(null),
+      cancelJob: () => Promise.resolve(false),
+      listJobs: () => Promise.resolve([]),
+      start: () => Promise.resolve(),
+      stop: () => Promise.resolve(),
     } as unknown as JobQueueService;
     setJobQueueService(stallSubmit);
     try {
@@ -176,14 +176,12 @@ describe("HTTP request processing deadline (WANT-015)", () => {
     const { server, port } = await createTestServer();
     const never = new Promise<never>(() => {});
     const stallGet: JobQueueService = {
-      submitJob: async () => {
-        throw new Error("not used");
-      },
+      submitJob: () => Promise.reject(new Error("not used")),
       getJob: () => never,
-      cancelJob: async () => false,
-      listJobs: async () => [],
-      start: async () => {},
-      stop: async () => {},
+      cancelJob: () => Promise.resolve(false),
+      listJobs: () => Promise.resolve([]),
+      start: () => Promise.resolve(),
+      stop: () => Promise.resolve(),
     } as unknown as JobQueueService;
     setJobQueueService(stallGet);
     try {
@@ -208,14 +206,12 @@ describe("HTTP request processing deadline (WANT-015)", () => {
     const { server, port } = await createTestServer();
     const never = new Promise<never>(() => {});
     const stallList: JobQueueService = {
-      submitJob: async () => {
-        throw new Error("not used");
-      },
-      getJob: async () => null,
-      cancelJob: async () => false,
+      submitJob: () => Promise.reject(new Error("not used")),
+      getJob: () => Promise.resolve(null),
+      cancelJob: () => Promise.resolve(false),
       listJobs: () => never,
-      start: async () => {},
-      stop: async () => {},
+      start: () => Promise.resolve(),
+      stop: () => Promise.resolve(),
     } as unknown as JobQueueService;
     setJobQueueService(stallList);
     try {
@@ -239,14 +235,12 @@ describe("HTTP request processing deadline (WANT-015)", () => {
     const { server, port } = await createTestServer();
     const never = new Promise<never>(() => {});
     const stallCancel: JobQueueService = {
-      submitJob: async () => {
-        throw new Error("not used");
-      },
-      getJob: async () => null,
+      submitJob: () => Promise.reject(new Error("not used")),
+      getJob: () => Promise.resolve(null),
       cancelJob: () => never,
-      listJobs: async () => [],
-      start: async () => {},
-      stop: async () => {},
+      listJobs: () => Promise.resolve([]),
+      start: () => Promise.resolve(),
+      stop: () => Promise.resolve(),
     } as unknown as JobQueueService;
     setJobQueueService(stallCancel);
     try {

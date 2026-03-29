@@ -12,7 +12,7 @@
     "lint": "node node_modules/eslint/bin/eslint.js src --ext .ts",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
-    "test:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --ci --coverage --maxWorkers=2 --runInBand",
+    "test:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --ci --coverage --runInBand",
     "eval": "tsx src/eval/run-eval.ts",
     "eval:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathPattern=eval/runner.test",
     "acceptance:observability": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathPattern=observability-acceptance",
