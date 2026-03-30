@@ -5,6 +5,7 @@
  */
 import { scopeAllowsAccess } from "./memory-abstraction.js";
 import { chunkText } from "./chunker.js";
+import { emitMemoryWriteEvent } from "../observability/taxonomy-events.js";
 import { randomUUID } from "node:crypto";
 const defaultTopK = 10;
 const defaultMaxChunksPerIngest = 128;
@@ -86,22 +87,39 @@ export class InMemoryStore {
     async ingest(input) {
         await Promise.resolve();
         if (!this.available) {
-            return {
+            const unavailable = {
                 document_id: input.document_id,
                 chunks_written: 0,
                 error: "store_unavailable",
             };
+            emitMemoryWriteEvent({
+                document_id: unavailable.document_id,
+                scope: input.scope,
+                chunks_written: 0,
+                error: unavailable.error,
+                store: "in_memory",
+            });
+            return unavailable;
         }
         const chunkStrings = chunkText(input.text, { chunk_size: 512, overlap: 64 });
         const maxChunksPerIngest = this.retention?.max_chunks_per_ingest ?? defaultMaxChunksPerIngest;
         const capPolicy = this.retention?.ingest_chunk_cap_policy ?? "trim";
         if (chunkStrings.length > maxChunksPerIngest && capPolicy === "reject") {
-            return {
+            const rejected = {
                 document_id: input.document_id,
                 chunks_written: 0,
                 chunks_dropped: chunkStrings.length,
                 error: "ingest_chunk_cap_exceeded",
             };
+            emitMemoryWriteEvent({
+                document_id: rejected.document_id,
+                scope: input.scope,
+                chunks_written: 0,
+                chunks_dropped: rejected.chunks_dropped,
+                error: rejected.error,
+                store: "in_memory",
+            });
+            return rejected;
         }
         const boundedChunks = chunkStrings.length > maxChunksPerIngest
             ? chunkStrings.slice(0, maxChunksPerIngest)
@@ -128,12 +146,21 @@ export class InMemoryStore {
             written++;
         }
         this.evictByRetention();
-        return {
+        const done = {
             document_id: input.document_id,
             chunks_written: written,
             chunks_dropped: dropped,
             error: dropped > 0 ? "ingest_chunks_trimmed" : undefined,
         };
+        emitMemoryWriteEvent({
+            document_id: done.document_id,
+            scope: input.scope,
+            chunks_written: done.chunks_written,
+            chunks_dropped: done.chunks_dropped,
+            ...(done.error ? { error: done.error } : {}),
+            store: "in_memory",
+        });
+        return done;
     }
     async isAvailable() {
         await Promise.resolve();

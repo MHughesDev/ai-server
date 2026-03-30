@@ -8,6 +8,7 @@
 import { policyDenyReasonToErrorCode } from "../contracts/policy-decision.js";
 import { getConfig } from "../bootstrap/index.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import { toolIdRequiresFilesystemAccess, toolIdRequiresNetworkAccess, } from "../gateways/tool-gateway.js";
 /** Router: deny when policy denied; else allow with reactive_chat or coding_agent plan. */
 export const defaultRouter = {
     plan(input) {
@@ -102,19 +103,40 @@ export const defaultRouter = {
                                                 : "reactive",
             execution_mode: "sync_stream",
             ...(harnessAutonomousExecution ? { harness_autonomous_execution: true } : {}),
-            budgets: input.policy.max_budgets
-                ? {
-                    token_budget: input.policy.max_budgets.token_budget ?? 4096,
-                    tool_budget: input.policy.max_budgets.tool_budget ?? 10,
-                    deadline_ms: input.policy.max_budgets.deadline_ms ?? 30_000,
-                    cost_budget_usd: input.policy.max_budgets.cost_budget_usd ?? 0.5,
-                }
-                : { token_budget: 4096, tool_budget: 10, deadline_ms: 30_000, cost_budget_usd: 0.5 },
+            budgets: (() => {
+                const base = input.policy.max_budgets
+                    ? {
+                        token_budget: input.policy.max_budgets.token_budget ?? 4096,
+                        tool_budget: input.policy.max_budgets.tool_budget ?? 10,
+                        deadline_ms: input.policy.max_budgets.deadline_ms ?? 30_000,
+                        cost_budget_usd: input.policy.max_budgets.cost_budget_usd ?? 0.5,
+                    }
+                    : { token_budget: 4096, tool_budget: 10, deadline_ms: 30_000, cost_budget_usd: 0.5 };
+                if (!harnessAutonomousExecution)
+                    return base;
+                // L2-99: Autonomous (execution ↔ tool)* grows prompts and sums gateway-reported tokens across rounds;
+                // the query-handler post-check vs token_budget must not block a successful harness run.
+                const scaled = Math.min(2_000_000, Math.max(base.token_budget * 48, 200_000));
+                return { ...base, token_budget: scaled };
+            })(),
             verification_level: "basic",
             tools_enabled: toolsEnabled,
-            /** L2-05: sandbox from budget deadline for tool timeout. */
-            sandbox: toolsEnabled.length > 0 && input.policy.max_budgets?.deadline_ms != null
-                ? { timeout_ms: Math.min(input.policy.max_budgets.deadline_ms, 30_000) }
+            /**
+             * L2-05: tool timeout from budget; network/filesystem flags match built-in tool requirements
+             * so AllowlistToolGateway does not deny web_search / file_write_preview when policy allows them (§9.12).
+             */
+            sandbox: toolsEnabled.length > 0
+                ? {
+                    ...(input.policy.max_budgets?.deadline_ms != null
+                        ? { timeout_ms: Math.min(input.policy.max_budgets.deadline_ms, 30_000) }
+                        : {}),
+                    ...(toolsEnabled.some((id) => toolIdRequiresNetworkAccess(id))
+                        ? { network_access: true }
+                        : {}),
+                    ...(toolsEnabled.some((id) => toolIdRequiresFilesystemAccess(id))
+                        ? { filesystem_access: true }
+                        : {}),
+                }
                 : undefined,
         };
         return Promise.resolve({ allowed: true, pipelinePlan: plan });

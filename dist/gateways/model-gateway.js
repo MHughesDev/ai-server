@@ -217,7 +217,7 @@ class OpenAiCompatibleModelGateway {
         if (!resp.ok) {
             const status = resp.status;
             const bodyText = await resp.text();
-            throw new ModelGatewayError(`Model provider '${this.providerId}' HTTP ${status}: ${bodyText.slice(0, 400)}`, "MODEL_FAILURE", status === 408 || status === 409 || status === 429 || status >= 500);
+            throw new ModelGatewayError(`Model provider '${this.providerId}' HTTP ${status}: ${bodyText.slice(0, 400)}`, "MODEL_FAILURE", isRetryableModelProviderHttpStatus(status));
         }
         const body = (await resp.json());
         const text = body.choices?.[0]?.message?.content ??
@@ -373,9 +373,50 @@ export async function runProviderHealthChecks(config, testRequest) {
     }
     return results;
 }
+const GATEWAY_TIMEOUT_MESSAGE = "Model gateway timeout";
+/**
+ * HTTP statuses from an OpenAI-compatible provider where a retry may succeed.
+ * 4xx client mistakes (except 408/429) and 409 conflicts are not retried.
+ */
+export function isRetryableModelProviderHttpStatus(status) {
+    if (status === 408 || status === 429)
+        return true;
+    if (status >= 500 && status < 600)
+        return true;
+    return false;
+}
+function transientNodeCauseCode(code) {
+    if (!code)
+        return false;
+    return (code === "ECONNRESET" ||
+        code === "ETIMEDOUT" ||
+        code === "ECONNREFUSED" ||
+        code === "ENOTFOUND" ||
+        code === "EAI_AGAIN" ||
+        code === "UND_ERR_CONNECT_TIMEOUT" ||
+        code === "UND_ERR_SOCKET");
+}
 function classifyRetryability(error) {
     if (error instanceof ModelGatewayError) {
         return { code: error.code, retryable: error.retryable, message: error.message };
+    }
+    if (error instanceof Error) {
+        if (error.message === GATEWAY_TIMEOUT_MESSAGE) {
+            return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+        }
+        if (error.name === "TypeError" && /\bfetch\b/i.test(error.message)) {
+            return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+        }
+        const cause = error.cause;
+        if (cause instanceof Error && transientNodeCauseCode(cause.code)) {
+            return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+        }
+        if (cause && typeof cause === "object" && cause !== null && "code" in cause) {
+            const c = cause.code;
+            if (transientNodeCauseCode(c)) {
+                return { code: "MODEL_FAILURE", retryable: true, message: error.message };
+            }
+        }
     }
     if (typeof error === "object" && error !== null) {
         const errObj = error;
@@ -414,7 +455,7 @@ export function withTimeoutAndRetry(gateway, config = {}) {
                 let timer;
                 try {
                     const timeoutPromise = new Promise((_, reject) => {
-                        timer = setTimeout(() => reject(new Error("Model gateway timeout")), timeoutMs);
+                        timer = setTimeout(() => reject(new Error(GATEWAY_TIMEOUT_MESSAGE)), timeoutMs);
                     });
                     const result = await Promise.race([gateway.complete(req), timeoutPromise]);
                     return result;

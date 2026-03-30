@@ -47,6 +47,10 @@ export declare class StubAllowedToolGateway implements IToolGateway {
     constructor(resultPayload?: unknown);
     invoke(request: ToolInvokeRequest): Promise<ToolInvokeResult>;
 }
+/** Whether a built-in executable tool performs outbound network I/O (for plan sandbox alignment). */
+export declare function toolIdRequiresNetworkAccess(toolId: string): boolean;
+/** Whether a built-in executable tool writes under `TOOL_FILESYSTEM_ROOT` (for plan sandbox alignment). */
+export declare function toolIdRequiresFilesystemAccess(toolId: string): boolean;
 export declare class ExecutableToolGateway implements IToolGateway {
     private readonly registry;
     constructor(registry?: ExecutableToolRegistry);

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfigFromEnv } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
+import { safeLogError } from "../observability/redact.js";
 import { assertProductionReleaseMetadataWhenRollout, validateReleaseConfig, } from "../rollout/policy.js";
 import { createJobQueueService } from "../queue/job-queue.js";
 import { setJobQueueService } from "../server/routes.js";
@@ -14,7 +15,8 @@ import { initializeFeatureFlags, resetFeatureFlags, resolveFeatureFlagEnabled, }
 let config = null;
 let jobQueue = null;
 function assertProductionReadiness(cfg) {
-    if (cfg.env !== "production" || !cfg.flags.platform_production_rollout_enabled) {
+    if (cfg.env !== "production" ||
+        !resolveFeatureFlagEnabled("platform_production_rollout_enabled", cfg)) {
         return;
     }
     const secret = cfg.auth.ai_jwt_secret?.trim() ?? "";
@@ -55,8 +57,15 @@ export function bootstrap() {
     if (config.env === "production" && !config.operationalBearerToken) {
         throw new Error("OPERATIONAL_BEARER_TOKEN is required in production to protect operational endpoints");
     }
+    if (config.env === "production") {
+        const hasRealModelProvider = config.model_gateway.providers.some((p) => p.kind === "openai_compatible");
+        if (!hasRealModelProvider) {
+            throw new Error("Production requires at least one model_gateway provider with kind openai_compatible (set MODEL_GATEWAY_PROVIDERS_JSON). Stub/framed_echo-only defaults are for dev/staging (WANT-023).");
+        }
+    }
     assertProductionSinkPathsWritable(config);
-    if (config.env === "production" && config.flags.platform_production_rollout_enabled) {
+    if (config.env === "production" &&
+        resolveFeatureFlagEnabled("platform_production_rollout_enabled", config)) {
         const syntheticProviders = config.model_gateway.providers
             .filter((p) => p.kind === "stub" || p.kind === "framed_echo")
             .map((p) => `${p.id}:${p.kind}`);
@@ -84,7 +93,7 @@ export function bootstrap() {
         if (jobQueue) {
             setJobQueueService(jobQueue);
             void jobQueue.start().catch((err) => {
-                console.error("[bootstrap] Failed to start async job queue", err);
+                console.error("[bootstrap] Failed to start async job queue", safeLogError(err));
             });
             console.info("[bootstrap] Async job queue initialized");
         }
@@ -92,7 +101,7 @@ export function bootstrap() {
     // Gap 3D: Initialize feature flag service
     const flagService = initializeFeatureFlags(config);
     void flagService.initialize().catch((err) => {
-        console.error("[bootstrap] Failed to initialize feature flags", err);
+        console.error("[bootstrap] Failed to initialize feature flags", safeLogError(err));
     });
     console.info("[bootstrap] Feature flag service initialized");
     // Startup validation: non-secret settings (for logs / runbooks)
@@ -132,7 +141,7 @@ function main() {
         process.exit(0);
     }
     catch (err) {
-        console.error("Bootstrap failed:", err);
+        console.error("Bootstrap failed:", safeLogError(err));
         process.exit(1);
     }
 }

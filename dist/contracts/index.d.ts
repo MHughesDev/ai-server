@@ -285,6 +285,8 @@ export declare function validateEngineInvocation(data: unknown): {
     } | undefined;
     metadata?: {
         contract_version?: string | undefined;
+        redaction_level?: "none" | "minimal" | "full" | undefined;
+        audit_level?: "none" | "full" | "summary" | undefined;
         trace_id?: string | undefined;
     } | undefined;
     actor_context?: {

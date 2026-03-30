@@ -20,6 +20,25 @@ export const ERROR_CODES = [
     "MULTIMODAL_UNSUPPORTED",
     /** Async POST /v1/query/async: Idempotency-Key reused with a different request body */
     "IDEMPOTENCY_KEY_CONFLICT",
+    /** Job HTTP API: queue worker not configured (`routes.ts` 503) */
+    "ASYNC_NOT_AVAILABLE",
+    /** GET /v1/jobs/{id}: malformed job id */
+    "INVALID_JOB_ID",
+    /** GET /v1/jobs/{id}: no such job */
+    "JOB_NOT_FOUND",
+    /** POST /v1/jobs/{id}/cancel: job missing or not cancellable */
+    "CANNOT_CANCEL",
+    /** GET /admin/flags*: feature flag service not initialized */
+    "FLAGS_NOT_AVAILABLE",
+    /**
+     * HTTP layer: overall request processing timeout (`withRequestTimeout` on `/v1/query`).
+     * Distinct from TOOL_TIMEOUT (tool gateway).
+     */
+    "TIMEOUT",
+    /** No matching route (fall-through in `routes.ts`) */
+    "NOT_FOUND",
+    /** `POST /v1/query` when `runtime_mvp_query_chat_enabled` is false */
+    "MVP_QUERY_DISABLED",
 ];
 /** Map from error code to HTTP status suggestion and retry guidance */
 export const ERROR_TAXONOMY = {
@@ -55,6 +74,46 @@ export const ERROR_TAXONOMY = {
         httpStatus: 409,
         retryable: false,
         description: "Idempotency-Key already used for a different async query body in this scope",
+    },
+    ASYNC_NOT_AVAILABLE: {
+        httpStatus: 503,
+        retryable: true,
+        description: "Async job queue is not configured",
+    },
+    INVALID_JOB_ID: {
+        httpStatus: 400,
+        retryable: false,
+        description: "Job id path parameter is not valid",
+    },
+    JOB_NOT_FOUND: {
+        httpStatus: 404,
+        retryable: false,
+        description: "No job exists for the given id",
+    },
+    CANNOT_CANCEL: {
+        httpStatus: 409,
+        retryable: false,
+        description: "Job cannot be cancelled (missing or already completed)",
+    },
+    FLAGS_NOT_AVAILABLE: {
+        httpStatus: 503,
+        retryable: true,
+        description: "Feature flag service not initialized",
+    },
+    TIMEOUT: {
+        httpStatus: 504,
+        retryable: true,
+        description: "HTTP request processing exceeded configured timeout",
+    },
+    NOT_FOUND: {
+        httpStatus: 404,
+        retryable: false,
+        description: "No handler for the requested path/method",
+    },
+    MVP_QUERY_DISABLED: {
+        httpStatus: 404,
+        retryable: false,
+        description: "MVP query/chat route disabled by feature flag",
     },
 };
 export function isErrorCode(code) {

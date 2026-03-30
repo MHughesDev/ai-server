@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { safeLogError } from "../observability/redact.js";
 import { runEvalHarness } from "./runner.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const baselinePath = resolve(__dirname, "baseline.json");
@@ -30,7 +31,7 @@ async function main() {
     process.exit(0);
 }
 main().catch((err) => {
-    console.error("Eval harness failed:", err);
+    console.error("Eval harness failed:", safeLogError(err));
     process.exit(1);
 });
 //# sourceMappingURL=run-eval.js.map

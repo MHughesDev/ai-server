@@ -52,4 +52,4 @@
 - Eval: extend `src/eval/baseline.json` for new behaviors; run `npm run eval` before release
 - Runbook: `docs/OPERATIONS/RUNBOOKS/Observability-and-Eval.md` or `docs/OPERATIONS/RUNBOOKS/Observability-and-Eval.md` – missing telemetry, alert tuning, eval triage, alert definitions reference
 
-L2-05 and L2-06 can start with complete observability support; downstream teams consume governance event contracts and trace/metric hooks as documented in L2-04 Handoff.
+L2-05 and L2-06 can start with complete observability support; downstream teams consume governance event contracts and trace/metric hooks as documented in `L2-04_Observability-and-Evaluation-Implementation.md` §15 (sprint handoff archive).

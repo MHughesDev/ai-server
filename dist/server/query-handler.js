@@ -24,33 +24,7 @@ import { redact } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
 import { getDefaultStore } from "../memory/default-store.js";
 import { runRetrieval } from "../memory/retrieval-service.js";
-class RequestDeadlineExceededError extends Error {
-    deadlineMs;
-    constructor(deadlineMs) {
-        super(`Request deadline exceeded after ${deadlineMs}ms`);
-        this.deadlineMs = deadlineMs;
-        this.name = "RequestDeadlineExceededError";
-    }
-}
-async function withDeadline(promise, deadlineMs) {
-    if (!deadlineMs || deadlineMs <= 0)
-        return promise;
-    let timer;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise((_, reject) => {
-                timer = setTimeout(() => {
-                    reject(new RequestDeadlineExceededError(deadlineMs));
-                }, deadlineMs);
-            }),
-        ]);
-    }
-    finally {
-        if (timer)
-            clearTimeout(timer);
-    }
-}
+import { RequestDeadlineExceededError, withDeadline, } from "../utils/async-deadline.js";
 function emit(event) {
     const obs = getObservability();
     if (obs)
@@ -321,13 +295,7 @@ export async function handleQuery(ingressResult) {
                             pipeline_type: plan.pipeline_type,
                             status: retrievalResult.result.hits.length > 0 ? "hit" : "miss",
                         });
-                        if (observabilityEnabled) {
-                            emit(buildEvent("MEMORY_QUERY", {
-                                hit_count: retrievalResult.result.hits.length,
-                                latency_ms: retrievalResult.result.latency_ms,
-                                scope: memoryScope,
-                            }, redactionLevel));
-                        }
+                        /* MEMORY_QUERY emitted inside runRetrieval (taxonomy-events) for hit/miss/degraded */
                     }
                 }
                 catch (err) {
@@ -370,7 +338,13 @@ export async function handleQuery(ingressResult) {
                 app_id: ingressResult.callerContext.appId,
                 user_id: ingressResult.callerContext.userId,
             });
-            const pipelineUsesMemory = pipelineUsesMemoryEngine ? { memoryStore: getDefaultStore() } : undefined;
+            const pipelineUsesMemory = pipelineUsesMemoryEngine
+                ? {
+                    memoryStore: getDefaultStore(),
+                    memoryMaxContextTokens: config.memory.max_context_tokens,
+                    memoryRetrievalTimeoutMs: config.memory.retrieval_timeout_ms,
+                }
+                : undefined;
             const hasToolsInPlan = (plan.tools_enabled?.length ?? 0) > 0;
             if (hasToolsInPlan && !toolExecutionEnabled) {
                 console.warn("[query] tools requested in plan but TOOL_EXECUTION_ENABLED is false; using deny-only gateway");

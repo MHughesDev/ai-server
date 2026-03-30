@@ -8,5 +8,8 @@ import type { IModelGateway } from "../gateways/types.js";
 import type { IMemoryStore } from "../memory/memory-abstraction.js";
 export declare function createChatPipeline(gateway: IModelGateway, options?: {
     memoryStore?: IMemoryStore;
+    /** Config cap; combined with plan.token_budget like `query-handler` pre-pipeline retrieval. */
+    memoryMaxContextTokens?: number;
+    memoryRetrievalTimeoutMs?: number;
 }): IPipeline;
 //# sourceMappingURL=chat-pipeline.d.ts.map

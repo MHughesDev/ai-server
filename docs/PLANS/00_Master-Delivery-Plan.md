@@ -14,6 +14,24 @@
 - **Implementation status (SOW):** Core implementation phases are complete, but production readiness remains conditional on closing active gaps in `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` (observability sink hardening, readiness dependency checks, and doc/runtime parity updates). Completion language in this plan should be interpreted as implementation-complete, not production-ready.
 - Review Cadence: Weekly delivery review + daily async status
 
+## 0.1) Canonical L2 implementation write-ups (Plans 01–08 and 99)
+
+The former numbered drafts at `docs/PLANS/01_*.md` … `docs/PLANS/99_*.md` duplicated the L2 implementation series and were **removed** to reduce drift. Use these documents as the phased delivery source of truth:
+
+| Plan | Canonical implementation document |
+|------|-----------------------------------|
+| 01 | [`implementation/L2-01_Contracts-and-Project-Scaffold.md`](./implementation/L2-01_Contracts-and-Project-Scaffold.md) |
+| 02 | [`implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md`](./implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md) |
+| 03 | [`implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md`](./implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md) |
+| 04 | [`implementation/L2-04_Observability-and-Evaluation-Implementation.md`](./implementation/L2-04_Observability-and-Evaluation-Implementation.md) |
+| 05 | [`implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md`](./implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md) |
+| 06 | [`implementation/L2-06_Memory-and-Retrieval-Implementation.md`](./implementation/L2-06_Memory-and-Retrieval-Implementation.md) |
+| 07 | [`implementation/L2-07_Multimodal-Input-Path-Implementation.md`](./implementation/L2-07_Multimodal-Input-Path-Implementation.md) |
+| 08 | [`implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md`](./implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md) |
+| 99 | [`implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md`](./implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md) |
+
+Sprint handoff material previously in separate `*_Handoff.md` files is merged into each L2 doc under **Sprint handoff archive**.
+
 ## 1) Purpose and Outcome
 ### 1.1 Purpose
 Coordinate platform work so the system reaches production-ready status only after active operational and security gaps are closed. **Coding agent harness (autonomous loop) is implemented** and gated by `harness_autonomous_execution_enabled`; enable after L2-99 readiness gate passes.

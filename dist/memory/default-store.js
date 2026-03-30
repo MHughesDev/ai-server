@@ -51,9 +51,8 @@ function createEmbeddingProvider(config) {
             return new OpenAiEmbeddingProvider(apiKey, config.model, config.base_url || "https://api.openai.com");
         }
         case "gateway": {
-            // FUTURE: Gateway embedding provider using IModelGateway for embeddings via model providers
-            // Current: Falls back to hash provider with a warning (hash is deterministic local embeddings)
-            console.warn(`[memory] Embedding provider 'gateway' uses hash fallback until full gateway embeddings are available.`);
+            // Not implemented: no IModelGateway → embeddings bridge yet; hash is deterministic local fallback.
+            console.warn(`[memory] Embedding provider 'gateway' is not implemented; using hash embeddings until a model-gateway embedding path exists.`);
             return new HashEmbeddingProvider(config.dimensions);
         }
         case "hash":
@@ -68,6 +67,13 @@ function createEmbeddingProvider(config) {
 function createVectorStore(memoryRuntime) {
     const embeddingConfig = memoryRuntime.embedding;
     const embeddingProvider = createEmbeddingProvider(embeddingConfig);
+    const retention = getMemoryRetentionConfig();
+    const retentionForVector = retention.ttl_seconds != null || retention.max_chunks_per_scope != null
+        ? {
+            ttl_seconds: retention.ttl_seconds,
+            max_chunks_per_scope: retention.max_chunks_per_scope,
+        }
+        : undefined;
     // Determine vector backend type
     const redisUrl = process.env.REDIS_URL?.trim();
     const vectorStorePath = process.env.MEMORY_VECTOR_STORE_PATH?.trim();
@@ -95,6 +101,8 @@ function createVectorStore(memoryRuntime) {
     return new VectorRetrievalAdapter(embeddingProvider, vectorBackend, {
         max_chunks_per_ingest: memoryRuntime.max_chunks_per_ingest,
         ingest_chunk_cap_policy: memoryRuntime.ingest_chunk_cap_policy,
+        /** TTL / per-scope caps: `VectorRetrievalAdapter` calls `pruneRetention` on retrieve/ingest (in-memory, file, and Redis vector backends). */
+        retention: retentionForVector,
     });
 }
 /**

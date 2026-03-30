@@ -7,6 +7,7 @@
 import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
+import { safeLogError } from "./redact.js";
 /** L2-04: Global backpressure state */
 let backpressureActive = false;
 let backpressureCallback = null;
@@ -92,7 +93,7 @@ export function createFileEventSink(filePath, options = {}) {
         }
         catch (err) {
             lastError = err instanceof Error ? err.message : String(err);
-            console.error("[observability] event sink async write failed", err);
+            console.error("[observability] event sink async write failed", safeLogError(err));
         }
         finally {
             draining = false;
@@ -126,7 +127,7 @@ export function createFileEventSink(filePath, options = {}) {
                     backpressureCallback();
                 }
                 catch (err) {
-                    console.error("[observability] backpressure callback failed", err);
+                    console.error("[observability] backpressure callback failed", safeLogError(err));
                 }
             }
             if (!draining) {

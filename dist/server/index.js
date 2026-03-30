@@ -7,7 +7,7 @@ import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
-import { setObservability, createEmitter, getTraceContext, setEventSink, getEventSink, createFileEventSink, } from "../observability/index.js";
+import { setObservability, createEmitter, getTraceContext, setEventSink, getEventSink, createFileEventSink, safeLogError, } from "../observability/index.js";
 import { setAuditSink, createFileAuditSink, shutdownPersistentAuditFileSink, } from "../security/audit-logger.js";
 import { handleRequest } from "./routes.js";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -62,7 +62,7 @@ function requestListener(req, res) {
         return;
     }
     handleRequest(req, res).catch((err) => {
-        console.error("[server] unhandled", err);
+        console.error("[server] unhandled", safeLogError(err));
         if (!res.headersSent) {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Internal server error" }));
@@ -143,7 +143,7 @@ function main() {
             });
         }
         catch (err) {
-            throw new Error(`TLS is configured but key/cert could not be loaded: ${String(err)}`);
+            throw new Error(`TLS is configured but key/cert could not be loaded: ${safeLogError(err)}`);
         }
     }
     // Graceful shutdown with connection draining (L2-05 Phase 1)
@@ -193,13 +193,13 @@ function main() {
                 await shutdownPersistentAuditFileSink();
             }
             catch (err) {
-                console.error("[server] audit file sink shutdown error", err);
+                console.error("[server] audit file sink shutdown error", safeLogError(err));
             }
             try {
                 await getEventSink()?.close?.();
             }
             catch (err) {
-                console.error("[server] event sink shutdown error", err);
+                console.error("[server] event sink shutdown error", safeLogError(err));
             }
             if (httpsServer) {
                 const tlsServer = httpsServer;
@@ -213,7 +213,7 @@ function main() {
             process.exit(0);
         }
         catch (err) {
-            console.error("[server] graceful shutdown failed", err);
+            console.error("[server] graceful shutdown failed", safeLogError(err));
             process.exit(1);
         }
     };

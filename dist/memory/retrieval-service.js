@@ -5,6 +5,7 @@
  */
 import { citationsFromRetrievalHits } from "./citation-formatter.js";
 import { buildTokenBoundedContext, DEFAULT_MAX_CONTEXT_TOKENS, AVG_CHARS_PER_TOKEN, } from "../utils/tokens.js";
+import { emitMemoryQueryEvent } from "../observability/taxonomy-events.js";
 const DEFAULT_TOP_K = 5;
 const DEFAULT_RETRIEVAL_TIMEOUT_MS = 1_500;
 /**
@@ -43,6 +44,12 @@ export async function runRetrieval(store, input) {
     };
     const start = Date.now();
     const result = await withTimeoutOrDegraded(store.retrieve(request), timeoutMs, start);
+    emitMemoryQueryEvent({
+        hit_count: result.hits.length,
+        latency_ms: result.latency_ms ?? Date.now() - start,
+        scope: input.scope,
+        degraded: result.degraded === true,
+    });
     // Use token-bounded context building for accurate LLM budgeting
     const bounded = buildTokenBoundedContext(result.hits.map((h) => ({ text: h.chunk.text, ...h })), { maxTokens: maxContextTokens });
     const hitsIncluded = bounded.includedIndices.map((i) => result.hits[i]);

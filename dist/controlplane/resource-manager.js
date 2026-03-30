@@ -11,7 +11,7 @@ const DEFAULTS = {
 /**
  * Compute effective per-request budgets from policy max_budgets and request context.
  * Deterministic: same policy + request → same effective budgets.
- * PRODUCTION: deadline_ms and cost_budget_usd are passed through but not enforced in this module; runtime/pipeline must enforce them to avoid runaway requests or cost overruns.
+ * Enforcement split: this module applies ingress **token_estimate** vs **token_budget** only. **deadline_ms**, **cost_budget_usd**, **tool_budget**, and **cumulative token_budget** for multi-step workflows are enforced in **`query-handler`** / pipelines / **`workflows/runner`** (see WANT-014).
  */
 export function assignBudgets(policy, _canonical) {
     const max = policy.max_budgets;

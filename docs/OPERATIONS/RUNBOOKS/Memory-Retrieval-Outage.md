@@ -79,4 +79,4 @@ Production target assumes persistent/shared retrieval backends with bounded late
 
 - Plan: L2-06 Memory and Retrieval Implementation  
 - Spec: 17 MemoryAbstraction Spec, 11 FailureManager Spec  
-- Handoff: `docs/PLANS/implementation/L2-06_Handoff.md`
+- Handoff: `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md` §14 (sprint handoff archive)

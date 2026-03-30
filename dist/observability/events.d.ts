@@ -17,14 +17,14 @@ export declare const RouteDecisionPayloadSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     pipeline_type?: string | undefined;
     strategy_id?: string | undefined;
-    reason?: string | undefined;
     route?: string | undefined;
+    reason?: string | undefined;
     deny?: boolean | undefined;
 }, {
     pipeline_type?: string | undefined;
     strategy_id?: string | undefined;
-    reason?: string | undefined;
     route?: string | undefined;
+    reason?: string | undefined;
     deny?: boolean | undefined;
 }>;
 export declare const PolicyDecisionPayloadSchema: z.ZodObject<{

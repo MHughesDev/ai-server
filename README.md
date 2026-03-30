@@ -16,8 +16,7 @@ Production-grade, modular, multimodal AI server with strict cognition boundary a
 - [Production Deployment Guide](docs/OPERATIONS/Production-Deployment-Guide.md) – canonical deployment and launch runbook
 - [Scope of Work](docs/PLANS/Scope-of-Work.md) – implementation phases, segments, file paths, verification (§4.1, §9)
 - [Master Delivery Plan](docs/PLANS/00_Master-Delivery-Plan.md)
-- [L2-01 Contracts and Project Scaffold](docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md)
-- [L2-01 Handoff](docs/PLANS/implementation/L2-01_Handoff.md) (Sprint 1 checklist, compatibility matrix, runbook)
+- [L2-01 Contracts and Project Scaffold](docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md) (includes §14 sprint handoff: checklist, compatibility matrix, runbook pointers)
 
 ## Documentation Governance
 

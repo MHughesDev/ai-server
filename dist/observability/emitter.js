@@ -4,7 +4,7 @@
  */
 import { createHash } from "node:crypto";
 import { getEventSink } from "./event-sink.js";
-import { redact } from "./redact.js";
+import { redact, safeLogError } from "./redact.js";
 /** Deterministic sample decision from trace_id (0–1); same trace_id => same result */
 function shouldSampleTrace(traceId, sampleRate) {
     const h = createHash("sha256").update(traceId).digest();
@@ -32,7 +32,9 @@ export function createEmitter(options) {
             const level = event.redaction_level ?? redactionLevel;
             const redacted = {
                 ...event,
-                payload: event.payload ? redact(event.payload, level) : undefined,
+                payload: event.payload
+                    ? redact(event.payload, level, { payloadRoot: true })
+                    : undefined,
             };
             const out = redact(redacted, level);
             if (capture) {
@@ -50,7 +52,7 @@ export function createEmitter(options) {
                     sink.write(out);
                 }
                 catch (err) {
-                    console.error("[observability] event sink write failed", err);
+                    console.error("[observability] event sink write failed", safeLogError(err));
                 }
             }
         },

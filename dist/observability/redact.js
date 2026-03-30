@@ -2,7 +2,7 @@
  * Redaction utility for logs, events, and traces.
  * @see docs/SPEC/18_Observability_Spec.md, L2-04 Phase 0 – no PII/secrets in telemetry
  */
-/** Keys that must never appear in telemetry (secrets, PII) */
+/** Keys that must never appear in telemetry (secrets, PII); match on normalized key only */
 const SENSITIVE_KEYS = new Set([
     "password",
     "secret",
@@ -11,6 +11,7 @@ const SENSITIVE_KEYS = new Set([
     "auth",
     "api_key",
     "apikey",
+    "api_secret",
     "cookie",
     "session_id",
     "user_id",
@@ -19,6 +20,16 @@ const SENSITIVE_KEYS = new Set([
     "credit_card",
     "content_b64",
     "bearer",
+    "client_secret",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "private_key",
+    "passwd",
+    "credentials",
+    "credential",
+    "signing_key",
+    "webhook_secret",
 ]);
 /** Keys allowed in telemetry at "minimal" redaction (ids only, no content) */
 const ALLOWLIST_MINIMAL = new Set([
@@ -54,20 +65,30 @@ const ALLOWLIST_MINIMAL = new Set([
     "workflow_id",
     "engine_type",
     "invocation_id",
+    "tool_id",
+    "roles",
     "hit_count",
     "latency_ms",
     "scope",
+    "degraded",
+    "error",
     "caller_org",
     "caller_app",
     "caller_user",
 ]);
-/**
- * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.
- * - none: remove only SENSITIVE_KEYS (and nested keys containing them).
- * - minimal: only allow ALLOWLIST_MINIMAL at top level; payload may contain allowlisted payload keys.
- * - full: same as minimal but also redact string values to length-only or "[REDACTED]".
- */
-export function redact(obj, level = "minimal") {
+function redactArrayElement(value, level, insideTelemetryPayload) {
+    if (value === null || value === undefined) {
+        return value;
+    }
+    if (typeof value !== "object") {
+        if (level === "full" && typeof value === "string" && value.length > 0) {
+            return "[REDACTED]";
+        }
+        return value;
+    }
+    return redactRecord(value, level, insideTelemetryPayload);
+}
+function redactRecord(obj, level, insideTelemetryPayload) {
     if (obj === null || obj === undefined) {
         return {};
     }
@@ -78,10 +99,14 @@ export function redact(obj, level = "minimal") {
     const out = {};
     for (const [key, value] of Object.entries(record)) {
         const keyLower = key.toLowerCase().replace(/[-_]/g, "_");
-        if (SENSITIVE_KEYS.has(key) || keyLower.includes("password") || keyLower.includes("secret")) {
+        if (SENSITIVE_KEYS.has(keyLower) ||
+            keyLower.includes("password") ||
+            keyLower.includes("secret") ||
+            keyLower.includes("credential")) {
             continue;
         }
-        if (level === "minimal" || level === "full") {
+        const applyAllowlist = (level === "minimal" || level === "full") && !insideTelemetryPayload;
+        if (applyAllowlist) {
             const allowed = ALLOWLIST_MINIMAL.has(key) ||
                 ALLOWLIST_MINIMAL.has(key.toLowerCase()) ||
                 key === "payload";
@@ -90,11 +115,12 @@ export function redact(obj, level = "minimal") {
             if (!allowed && level === "full")
                 continue;
         }
+        const descendPayload = insideTelemetryPayload || key === "payload";
         if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-            out[key] = redact(value, level);
+            out[key] = redactRecord(value, level, descendPayload);
         }
         else if (Array.isArray(value)) {
-            out[key] = value.map((v) => redact(v, level));
+            out[key] = value.map((v) => redactArrayElement(v, level, descendPayload));
         }
         else if (level === "full" && typeof value === "string" && value.length > 0) {
             out[key] = "[REDACTED]";
@@ -104,6 +130,23 @@ export function redact(obj, level = "minimal") {
         }
     }
     return out;
+}
+/**
+ * Redact an object for telemetry: strip sensitive keys and optionally restrict to allowlist.
+ * - none: remove only SENSITIVE_KEYS (and nested keys containing them).
+ * - minimal: only allow ALLOWLIST_MINIMAL at top level; nested under `payload` (or with `payloadRoot: true`) keeps non-sensitive keys.
+ * - full: same as minimal but also redact string values to length-only or "[REDACTED]".
+ */
+export function redact(obj, level = "minimal", options) {
+    return redactRecord(obj, level, options?.payloadRoot ?? false);
+}
+/**
+ * One-line error text for console logs — message only, no stack (WANT-012).
+ */
+export function safeLogError(err) {
+    if (err instanceof Error)
+        return err.message;
+    return String(err);
 }
 /**
  * Redact a string that might contain secrets (e.g. headers).

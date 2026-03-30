@@ -15,6 +15,7 @@ import { IdempotencyKeyConflictError } from "../queue/job-queue.js";
 import { fingerprintAsyncQueryEnvelope, MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH, } from "../queue/async-idempotency.js";
 import { getFeatureFlagService, resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { runProductionPreflight } from "./preflight.js";
+import { redact } from "../observability/redact.js";
 // Global request queue for backpressure (Phase 7.1)
 const requestQueue = new RequestQueue({
     maxConcurrent: parseInt(process.env.MAX_CONCURRENT_REQUESTS ?? "100", 10),
@@ -49,6 +50,22 @@ async function withRequestTimeout(promise, timeoutMs) {
     finally {
         if (timer)
             clearTimeout(timer);
+    }
+}
+function getRequestProcessingTimeoutMs() {
+    return parseInt(process.env.REQUEST_PROCESSING_TIMEOUT_MS ?? "120000", 10);
+}
+/** Same wall-clock cap as query routes (`REQUEST_PROCESSING_TIMEOUT_MS`); on timeout sends 504 and returns null. */
+async function withProcessingOrTimeout(req, res, work) {
+    try {
+        return await withRequestTimeout(work, getRequestProcessingTimeoutMs());
+    }
+    catch (err) {
+        if (err instanceof RequestProcessingTimeoutError) {
+            sendRequestProcessingTimeout(req, res, err);
+            return null;
+        }
+        throw err;
     }
 }
 export async function handleRequest(req, res) {
@@ -91,7 +108,9 @@ async function processRequest(req, res) {
             return;
         }
         // L2-04: Async dependency-aware health check
-        const deps = await checkOperationalDependenciesAsync(config);
+        const deps = await withProcessingOrTimeout(req, res, checkOperationalDependenciesAsync(config));
+        if (deps === null)
+            return;
         sendJson(res, deps.healthy ? 200 : 503, {
             status: deps.healthy ? "ok" : "degraded",
             version: deps.version,
@@ -108,7 +127,9 @@ async function processRequest(req, res) {
             return;
         }
         // L2-04: Async dependency-aware readiness check
-        const deps = await checkOperationalDependenciesAsync(config);
+        const deps = await withProcessingOrTimeout(req, res, checkOperationalDependenciesAsync(config));
+        if (deps === null)
+            return;
         sendJson(res, deps.ready ? 200 : 503, {
             ready: deps.ready,
             version: deps.version,
@@ -124,19 +145,23 @@ async function processRequest(req, res) {
             });
             return;
         }
-        const { getCounterSnapshot, getHistogramSnapshot, getPrometheusText } = await import("../observability/metrics.js");
-        const urlFormat = url.searchParams.get("format");
-        const accept = req.headers["accept"] ?? "";
-        const wantsPrometheus = urlFormat === "prometheus" || accept.includes("text/plain");
-        if (wantsPrometheus) {
-            const text = getPrometheusText();
-            res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-            res.end(text);
+        const metricsDone = await withProcessingOrTimeout(req, res, (async () => {
+            const { getCounterSnapshot, getHistogramSnapshot, getPrometheusText } = await import("../observability/metrics.js");
+            const urlFormat = url.searchParams.get("format");
+            const accept = req.headers["accept"] ?? "";
+            const wantsPrometheus = urlFormat === "prometheus" || accept.includes("text/plain");
+            if (wantsPrometheus) {
+                const text = getPrometheusText();
+                res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+                res.end(text);
+                return;
+            }
+            const counters = getCounterSnapshot();
+            const histograms = getHistogramSnapshot();
+            sendJson(res, 200, { counters, histograms });
+        })());
+        if (metricsDone === null)
             return;
-        }
-        const counters = getCounterSnapshot();
-        const histograms = getHistogramSnapshot();
-        sendJson(res, 200, { counters, histograms });
         return;
     }
     if (method === "GET" && path === "/v1/version") {
@@ -147,17 +172,23 @@ async function processRequest(req, res) {
             });
             return;
         }
-        const versionPayload = {
-            contract_version: CONTRACT_VERSION,
-            api: "v1",
-            version: process.env.APP_VERSION ?? "0.1.0",
-        };
-        if (config.release?.release_id)
-            versionPayload.release_id = config.release.release_id;
-        if (config.release?.build_id)
-            versionPayload.build_id = config.release.build_id;
-        if (config.env)
-            versionPayload.env = config.env;
+        // WANT-015: same `REQUEST_PROCESSING_TIMEOUT_MS` wall-clock cap as other operational GETs
+        const versionPayload = await withProcessingOrTimeout(req, res, Promise.resolve().then(() => {
+            const payload = {
+                contract_version: CONTRACT_VERSION,
+                api: "v1",
+                version: process.env.APP_VERSION ?? "0.1.0",
+            };
+            if (config.release?.release_id)
+                payload.release_id = config.release.release_id;
+            if (config.release?.build_id)
+                payload.build_id = config.release.build_id;
+            if (config.env)
+                payload.env = config.env;
+            return payload;
+        }));
+        if (versionPayload === null)
+            return;
         sendJson(res, 200, versionPayload);
         return;
     }
@@ -169,7 +200,9 @@ async function processRequest(req, res) {
             });
             return;
         }
-        const report = await runProductionPreflight(config);
+        const report = await withProcessingOrTimeout(req, res, runProductionPreflight(config));
+        if (report === null)
+            return;
         sendJson(res, report.summary.status === "pass" ? 200 : 503, report);
         return;
     }
@@ -186,7 +219,9 @@ async function processRequest(req, res) {
             const body = await readJsonBody(req, config.maxRequestBodyBytes, {
                 timeoutMs: config.requestReadTimeoutMs,
             });
-            const response = await exchangeToken(body, config);
+            const response = await withProcessingOrTimeout(req, res, exchangeToken(body, config));
+            if (response === null)
+                return;
             sendJson(res, 200, response);
         }
         catch (err) {
@@ -289,62 +324,66 @@ async function processRequest(req, res) {
             if (!rateLimitDecision.allowed) {
                 throw createRateLimitedRejection(rateLimitDecision);
             }
-            const governanceBlocked = await preflightAsyncQueryGovernance(ingressResult);
-            if (governanceBlocked) {
-                sendJson(res, 200, governanceBlocked);
-                return;
-            }
-            let idempotencyKey;
-            const idemHeaderRaw = getHeaderValue(req.headers["idempotency-key"]);
-            if (idemHeaderRaw !== undefined) {
-                const trimmed = idemHeaderRaw.trim();
-                if (trimmed.length > MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH) {
-                    sendJson(res, 400, {
-                        status: "error",
-                        error: {
-                            code: "INVALID_PAYLOAD",
-                            message: `Idempotency-Key exceeds max length (${MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH})`,
-                        },
-                    });
+            await withRequestTimeout((async () => {
+                const governanceBlocked = await preflightAsyncQueryGovernance(ingressResult);
+                if (governanceBlocked) {
+                    sendJson(res, 200, governanceBlocked);
                     return;
                 }
-                if (trimmed.length > 0) {
-                    idempotencyKey = trimmed;
-                }
-            }
-            // Extract webhook URL from headers if provided
-            const webhookUrl = req.headers["x-webhook-url"];
-            const submission = {
-                request: ingressResult,
-                webhook_url: webhookUrl,
-                max_attempts: 3,
-                metadata: {
-                    org_id: ingressResult.callerContext.orgId,
-                    app_id: ingressResult.callerContext.appId,
-                    user_id: ingressResult.callerContext.userId,
-                    trace_id: requestIdHeader,
-                },
-                ...(idempotencyKey
-                    ? {
-                        idempotency: {
-                            key: idempotencyKey,
-                            fingerprint: fingerprintAsyncQueryEnvelope(ingressResult.envelope),
-                        },
+                let idempotencyKey;
+                const idemHeaderRaw = getHeaderValue(req.headers["idempotency-key"]);
+                if (idemHeaderRaw !== undefined) {
+                    const trimmed = idemHeaderRaw.trim();
+                    if (trimmed.length > MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH) {
+                        sendJson(res, 400, {
+                            status: "error",
+                            error: {
+                                code: "INVALID_PAYLOAD",
+                                message: `Idempotency-Key exceeds max length (${MAX_ASYNC_IDEMPOTENCY_KEY_LENGTH})`,
+                            },
+                        });
+                        return;
                     }
-                    : {}),
-            };
-            // Submit async job
-            const job = await jobQueueService.submitJob(submission);
-            sendJson(res, 202, {
-                status: "accepted",
-                job_id: job.id,
-                status_url: `/v1/jobs/${job.id}`,
-                created_at: job.created_at,
-            });
+                    if (trimmed.length > 0) {
+                        idempotencyKey = trimmed;
+                    }
+                }
+                const webhookUrl = req.headers["x-webhook-url"];
+                const submission = {
+                    request: ingressResult,
+                    webhook_url: webhookUrl,
+                    max_attempts: 3,
+                    metadata: {
+                        org_id: ingressResult.callerContext.orgId,
+                        app_id: ingressResult.callerContext.appId,
+                        user_id: ingressResult.callerContext.userId,
+                        trace_id: requestIdHeader,
+                    },
+                    ...(idempotencyKey
+                        ? {
+                            idempotency: {
+                                key: idempotencyKey,
+                                fingerprint: fingerprintAsyncQueryEnvelope(ingressResult.envelope),
+                            },
+                        }
+                        : {}),
+                };
+                const job = await jobQueueService.submitJob(submission);
+                sendJson(res, 202, {
+                    status: "accepted",
+                    job_id: job.id,
+                    status_url: `/v1/jobs/${job.id}`,
+                    created_at: job.created_at,
+                });
+            })(), getRequestProcessingTimeoutMs());
         }
         catch (err) {
             if (isIngressRejection(err)) {
                 sendErrorRejection(res, err);
+                return;
+            }
+            if (err instanceof RequestProcessingTimeoutError) {
+                sendRequestProcessingTimeout(req, res, err);
                 return;
             }
             if (err instanceof IdempotencyKeyConflictError) {
@@ -381,15 +420,27 @@ async function processRequest(req, res) {
             });
             return;
         }
-        const job = await jobQueueService.getJob(jobId);
-        if (!job) {
-            sendJson(res, 404, {
-                status: "error",
-                error: { code: "JOB_NOT_FOUND", message: "Job not found" },
-            });
-            return;
+        const queue = jobQueueService;
+        try {
+            await withRequestTimeout((async () => {
+                const job = await queue.getJob(jobId);
+                if (!job) {
+                    sendJson(res, 404, {
+                        status: "error",
+                        error: { code: "JOB_NOT_FOUND", message: "Job not found" },
+                    });
+                    return;
+                }
+                sendJson(res, 200, { status: "ok", job });
+            })(), getRequestProcessingTimeoutMs());
         }
-        sendJson(res, 200, { status: "ok", job });
+        catch (err) {
+            if (err instanceof RequestProcessingTimeoutError) {
+                sendRequestProcessingTimeout(req, res, err);
+                return;
+            }
+            throw err;
+        }
         return;
     }
     // Gap 3A: Cancel job endpoint
@@ -409,15 +460,30 @@ async function processRequest(req, res) {
             });
             return;
         }
-        const cancelled = await jobQueueService.cancelJob(jobId);
-        if (!cancelled) {
-            sendJson(res, 409, {
-                status: "error",
-                error: { code: "CANNOT_CANCEL", message: "Job cannot be cancelled (not found or already completed)" },
-            });
-            return;
+        const queue = jobQueueService;
+        try {
+            await withRequestTimeout((async () => {
+                const cancelled = await queue.cancelJob(jobId);
+                if (!cancelled) {
+                    sendJson(res, 409, {
+                        status: "error",
+                        error: {
+                            code: "CANNOT_CANCEL",
+                            message: "Job cannot be cancelled (not found or already completed)",
+                        },
+                    });
+                    return;
+                }
+                sendJson(res, 200, { status: "ok", job_id: jobId, cancelled: true });
+            })(), getRequestProcessingTimeoutMs());
         }
-        sendJson(res, 200, { status: "ok", job_id: jobId, cancelled: true });
+        catch (err) {
+            if (err instanceof RequestProcessingTimeoutError) {
+                sendRequestProcessingTimeout(req, res, err);
+                return;
+            }
+            throw err;
+        }
         return;
     }
     // Gap 3A: List jobs endpoint
@@ -430,15 +496,27 @@ async function processRequest(req, res) {
             return;
         }
         const urlParams = new URLSearchParams(url.search);
-        const jobs = await jobQueueService.listJobs({
-            status: urlParams.get("status"),
-            org_id: urlParams.get("org_id") ?? undefined,
-            app_id: urlParams.get("app_id") ?? undefined,
-            user_id: urlParams.get("user_id") ?? undefined,
-            limit: urlParams.get("limit") ? parseInt(urlParams.get("limit"), 10) : undefined,
-            offset: urlParams.get("offset") ? parseInt(urlParams.get("offset"), 10) : undefined,
-        });
-        sendJson(res, 200, { status: "ok", jobs, count: jobs.length });
+        const queue = jobQueueService;
+        try {
+            await withRequestTimeout((async () => {
+                const jobs = await queue.listJobs({
+                    status: urlParams.get("status"),
+                    org_id: urlParams.get("org_id") ?? undefined,
+                    app_id: urlParams.get("app_id") ?? undefined,
+                    user_id: urlParams.get("user_id") ?? undefined,
+                    limit: urlParams.get("limit") ? parseInt(urlParams.get("limit"), 10) : undefined,
+                    offset: urlParams.get("offset") ? parseInt(urlParams.get("offset"), 10) : undefined,
+                });
+                sendJson(res, 200, { status: "ok", jobs, count: jobs.length });
+            })(), getRequestProcessingTimeoutMs());
+        }
+        catch (err) {
+            if (err instanceof RequestProcessingTimeoutError) {
+                sendRequestProcessingTimeout(req, res, err);
+                return;
+            }
+            throw err;
+        }
         return;
     }
     // Gap 3D: Feature flag admin endpoints
@@ -460,7 +538,9 @@ async function processRequest(req, res) {
         }
         // GET /admin/flags - List all flags
         if (method === "GET" && path === "/admin/flags") {
-            const flags = flagService.getAllFlags();
+            const flags = await withProcessingOrTimeout(req, res, Promise.resolve(flagService.getAllFlags()));
+            if (flags === null)
+                return;
             sendJson(res, 200, { status: "ok", flags });
             return;
         }
@@ -469,11 +549,13 @@ async function processRequest(req, res) {
             const body = (await readJsonBody(req, config.maxRequestBodyBytes, {
                 timeoutMs: config.requestReadTimeoutMs,
             }));
-            const result = flagService.evaluateFlag(body.flag_name, {
+            const result = await withProcessingOrTimeout(req, res, Promise.resolve(flagService.evaluateFlag(body.flag_name, {
                 org_id: typeof body.org_id === "string" ? body.org_id : undefined,
                 app_id: typeof body.app_id === "string" ? body.app_id : undefined,
                 user_id: typeof body.user_id === "string" ? body.user_id : undefined,
-            });
+            })));
+            if (result === null)
+                return;
             sendJson(res, 200, { status: "ok", result });
             return;
         }
@@ -482,17 +564,22 @@ async function processRequest(req, res) {
             const body = (await readJsonBody(req, config.maxRequestBodyBytes, {
                 timeoutMs: config.requestReadTimeoutMs,
             }));
-            flagService.setOverride({
-                flag_name: String(body.flag_name ?? ""),
-                scope: body.scope,
-                scope_id: String(body.scope_id ?? ""),
-                enabled: body.enabled === true,
-                variant: typeof body.variant === "string" ? body.variant : undefined,
-                payload: body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
-                    ? body.payload
-                    : undefined,
-                expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
-            });
+            const done = await withProcessingOrTimeout(req, res, Promise.resolve((() => {
+                flagService.setOverride({
+                    flag_name: String(body.flag_name ?? ""),
+                    scope: body.scope,
+                    scope_id: String(body.scope_id ?? ""),
+                    enabled: body.enabled === true,
+                    variant: typeof body.variant === "string" ? body.variant : undefined,
+                    payload: body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+                        ? body.payload
+                        : undefined,
+                    expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
+                });
+                return true;
+            })()));
+            if (done === null)
+                return;
             sendJson(res, 201, { status: "ok", message: "Override created" });
             return;
         }
@@ -501,7 +588,12 @@ async function processRequest(req, res) {
             const parts = path.replace("/admin/flags/overrides/", "").split("/");
             if (parts.length === 3) {
                 const [flagName, scope, scopeId] = parts;
-                flagService.removeOverride(flagName, scope, scopeId);
+                const done = await withProcessingOrTimeout(req, res, Promise.resolve((() => {
+                    flagService.removeOverride(flagName, scope, scopeId);
+                    return true;
+                })()));
+                if (done === null)
+                    return;
                 sendJson(res, 200, { status: "ok", message: "Override removed" });
                 return;
             }
@@ -511,7 +603,9 @@ async function processRequest(req, res) {
             const parts = path.replace("/admin/flags/overrides/", "").split("/");
             if (parts.length === 2) {
                 const [scope, scopeId] = parts;
-                const overrides = flagService.getOverrides(scope, scopeId);
+                const overrides = await withProcessingOrTimeout(req, res, Promise.resolve(flagService.getOverrides(scope, scopeId)));
+                if (overrides === null)
+                    return;
                 sendJson(res, 200, { status: "ok", overrides });
                 return;
             }
@@ -528,7 +622,13 @@ async function processRequest(req, res) {
         }
         // PRODUCTION: Add per-request timeout (e.g. from plan.budgets.deadline_ms) so slow pipelines don't hold connections indefinitely.
         if (!isFeatureFlagEnabled("runtime_mvp_query_chat_enabled", config)) {
-            sendJson(res, 404, { error: "MVP query endpoint not enabled" });
+            sendJson(res, 404, {
+                status: "error",
+                error: {
+                    code: "MVP_QUERY_DISABLED",
+                    message: "MVP query endpoint not enabled",
+                },
+            });
             return;
         }
         try {
@@ -571,16 +671,14 @@ async function processRequest(req, res) {
             // L2-05: Abuse detection
             const abuseResult = detectAbuse(req, ingressResult.callerContext);
             if (abuseResult.detected) {
-                console.warn("[rate-limit] Abuse detected:", {
-                    orgId: ingressResult.callerContext.orgId,
-                    appId: ingressResult.callerContext.appId,
-                    userId: ingressResult.callerContext.userId,
+                console.warn("[rate-limit] Abuse detected:", redact({
+                    org_id: ingressResult.callerContext.orgId,
+                    app_id: ingressResult.callerContext.appId,
                     patterns: abuseResult.patterns,
-                });
+                }, "none"));
                 // Log but don't block - can be enhanced to block if needed
             }
-            const processingTimeoutMs = parseInt(process.env.REQUEST_PROCESSING_TIMEOUT_MS ?? "120000", 10);
-            const response = await withRequestTimeout(handleQuery(ingressResult), processingTimeoutMs);
+            const response = await withRequestTimeout(handleQuery(ingressResult), getRequestProcessingTimeoutMs());
             sendJson(res, 200, response);
         }
         catch (err) {
@@ -595,15 +693,7 @@ async function processRequest(req, res) {
                 return;
             }
             if (err instanceof RequestProcessingTimeoutError) {
-                sendJson(res, 504, {
-                    request_id: req.headers[HEADER_REQUEST_ID] || null,
-                    status: "error",
-                    error: {
-                        code: "TIMEOUT",
-                        message: err.message,
-                        detail: { timeout_ms: err.timeoutMs },
-                    },
-                });
+                sendRequestProcessingTimeout(req, res, err);
                 return;
             }
             if (err instanceof Error && (err.name === "BodyTooLargeError" || err.name === "InvalidJsonError")) {
@@ -648,7 +738,10 @@ async function processRequest(req, res) {
         }
         return;
     }
-    sendJson(res, 404, { error: "Not found" });
+    sendJson(res, 404, {
+        status: "error",
+        error: { code: "NOT_FOUND", message: "Not found" },
+    });
 }
 function getHeaderValue(value) {
     if (!value)
@@ -668,6 +761,17 @@ function isIngressRejection(err) {
         err !== null &&
         "code" in err &&
         "httpStatus" in err);
+}
+function sendRequestProcessingTimeout(req, res, err) {
+    sendJson(res, 504, {
+        request_id: req.headers[HEADER_REQUEST_ID] || null,
+        status: "error",
+        error: {
+            code: "TIMEOUT",
+            message: err.message,
+            detail: { timeout_ms: err.timeoutMs },
+        },
+    });
 }
 function sendErrorRejection(res, rej) {
     sendJson(res, rej.httpStatus, {

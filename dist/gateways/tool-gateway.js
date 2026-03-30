@@ -233,6 +233,14 @@ const BUILTIN_EXECUTABLE_TOOLS = {
         },
     },
 };
+/** Whether a built-in executable tool performs outbound network I/O (for plan sandbox alignment). */
+export function toolIdRequiresNetworkAccess(toolId) {
+    return BUILTIN_EXECUTABLE_TOOLS[toolId]?.requires_network === true;
+}
+/** Whether a built-in executable tool writes under `TOOL_FILESYSTEM_ROOT` (for plan sandbox alignment). */
+export function toolIdRequiresFilesystemAccess(toolId) {
+    return BUILTIN_EXECUTABLE_TOOLS[toolId]?.requires_filesystem === true;
+}
 export class ExecutableToolGateway {
     registry;
     constructor(registry = BUILTIN_EXECUTABLE_TOOLS) {

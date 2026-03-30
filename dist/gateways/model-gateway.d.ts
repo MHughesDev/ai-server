@@ -161,6 +161,11 @@ export declare function createProviderBackedModelGateway(config: ModelGatewayCon
  */
 export declare function runProviderHealthChecks(config: ModelRoutingConfig, testRequest?: ModelCompletionRequest): Promise<HealthCheckResult[]>;
 /**
+ * HTTP statuses from an OpenAI-compatible provider where a retry may succeed.
+ * 4xx client mistakes (except 408/429) and 409 conflicts are not retried.
+ */
+export declare function isRetryableModelProviderHttpStatus(status: number): boolean;
+/**
  * Gateway wrapper that enforces timeout and retries, maps errors to taxonomy.
  */
 export declare function withTimeoutAndRetry(gateway: IModelGateway, config?: Partial<ModelGatewayConfig>): IModelGateway;

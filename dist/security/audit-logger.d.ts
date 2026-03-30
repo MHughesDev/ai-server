@@ -38,8 +38,12 @@ export declare function setAuditSink(sink: ((entry: AuditLogEntry) => void | Pro
 export declare function shutdownPersistentAuditFileSink(): Promise<void>;
 /** L2-04: Set callback for backpressure events */
 export declare function setBackpressureCallback(callback: (() => void) | null): void;
-/** Create a non-blocking file sink with bounded queue and rotation for audit entries. */
-export declare function createFileAuditSink(filePath: string, options?: FileAuditSinkOptions): (entry: AuditLogEntry) => void;
+/**
+ * Create a non-blocking file sink with bounded queue and rotation for audit entries.
+ * Returns a sink that resolves its **per-entry** `Promise` after that line is appended (and optionally fsynced),
+ * so `writeAuditEventAsync` can advance the hash chain only after durable ordering for that entry (WANT-040).
+ */
+export declare function createFileAuditSink(filePath: string, options?: FileAuditSinkOptions): (entry: AuditLogEntry) => Promise<void>;
 export declare function getAuditSinkStatus(): AuditSinkStatus | null;
 /**
  * Test/support: shrink in-memory cap to exercise trimming without 10k writes.

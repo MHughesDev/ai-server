@@ -427,10 +427,22 @@ From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
 
 ---
 
-## 11. References
+## 11. Cross-cutting implementation notes (Agent 3, 2026-03-06)
+
+*Consolidated from removed duplicate `docs/PLANS/implementation/Agent-3-Changes-Summary.md` and `Agent-3-Handoff.md`; normative behavior remains in code and SPECs.*
+
+- **Model gateway:** Circuit breaker, provider health checks, fallback routing, `CAPABILITY_TAXONOMY` — see `docs/SPEC/15_ModelGateway_Spec.md` and `src/gateways/model-gateway.ts`.
+- **Tool gateway:** Caller identity on `ToolInvokeRequest`, deny-by-default allowlist, sandbox metadata from policy/plan — `src/gateways/tool-gateway.ts`, `docs/SPEC/16_ToolGateway_Spec.md`.
+- **Workflow runner:** Decision steps, cycle detection (definition-time), dependency validation, stop conditions (`max_iterations`, `deadline_ms`) — `src/workflows/runner.ts`, `docs/SPEC/10_ExecutionSupervisor_Spec.md`.
+- **Budget enforcement:** Tenant usage recording guard — `src/controlplane/tenant-budget.ts` and related call sites.
+- **Engines:** Evaluation engine and classification engine production paths via Model Gateway — `src/engines/evaluation_engine.ts`, `src/engines/classification_engine.ts`.
+
+---
+
+## 12. References
 
 - **Gate report:** `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md`
-- **L2-05/L2-06 handoffs:** Audit/secrets and memory limits – `L2-05_*`, `L2-06_Handoff.md`
+- **L2-05 / L2-06 sprint handoffs:** Audit/secrets and memory limits are archived in **`docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` §14** and **`L2-06_Memory-and-Retrieval-Implementation.md` §14**.
 - **Cleanup checklist:** `docs/PLANS/Cleanup-and-Finalization-Checklist.md`
 - **Scope of Work:** `docs/PLANS/Scope-of-Work.md`
 - **SPEC 20 (config):** `docs/SPEC/20_Config_and_FeatureFlags.md`

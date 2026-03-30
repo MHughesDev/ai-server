@@ -93,15 +93,7 @@
 | Old path | New path |
 |---|---|
 | `Docs/PLANS/00_Master-Delivery-Plan.md` | `docs/PLANS/00_Master-Delivery-Plan.md` |
-| `Docs/PLANS/01_Platform-Foundation-and-Contracts.md` | `docs/PLANS/01_Platform-Foundation-and-Contracts.md` |
-| `Docs/PLANS/02_MVP-Runtime-Single-Endpoint-Chat.md` | `docs/PLANS/02_MVP-Runtime-Single-Endpoint-Chat.md` |
-| `Docs/PLANS/03_Policy-Budgeting-and-Routing-Core.md` | `docs/PLANS/03_Policy-Budgeting-and-Routing-Core.md` |
-| `Docs/PLANS/04_Observability-and-Evaluation-System.md` | `docs/PLANS/04_Observability-and-Evaluation-System.md` |
-| `Docs/PLANS/05_Security-Isolation-and-Compliance-Controls.md` | `docs/PLANS/05_Security-Isolation-and-Compliance-Controls.md` |
-| `Docs/PLANS/06_Memory-and-Retrieval-Infrastructure.md` | `docs/PLANS/06_Memory-and-Retrieval-Infrastructure.md` |
-| `Docs/PLANS/07_Multimodal-Input-Path.md` | `docs/PLANS/07_Multimodal-Input-Path.md` |
-| `Docs/PLANS/08_Rollout-and-Operational-Readiness.md` | `docs/PLANS/08_Rollout-and-Operational-Readiness.md` |
-| `Docs/PLANS/99_Deferred-Coding-Agent-Harness-Readiness.md` | `docs/PLANS/99_Deferred-Coding-Agent-Harness-Readiness.md` |
+| `Docs/PLANS/01_Platform-Foundation-and-Contracts.md` … `99_Deferred-…` | **Removed (2026-03-29):** Draft plans `docs/PLANS/01_*.md`–`99_*.md` duplicated the L2 implementation series. Canonical mapping: **`docs/PLANS/00_Master-Delivery-Plan.md` §0.1** → `docs/PLANS/implementation/L2-*_*.md`. |
 | `Docs/PLANS/Scope-of-Work.md` | `docs/PLANS/Scope-of-Work.md` |
 | `Docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` | `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` |
 | `Docs/PLANS/Cleanup-and-Finalization-Checklist.md` | `docs/PLANS/Cleanup-and-Finalization-Checklist.md` |
@@ -111,28 +103,20 @@
 
 | Old path | New path |
 |---|---|
-| `docs/PLANS/implementation/Agent-3-Changes-Summary.md` | `docs/PLANS/implementation/Agent-3-Changes-Summary.md` |
-| `docs/PLANS/implementation/Agent-3-Handoff.md` | `docs/PLANS/implementation/Agent-3-Handoff.md` |
+| `docs/PLANS/implementation/Agent-3-*.md` | **Removed (2026-03-29):** Consolidated into `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` §11 and SPECs 10, 15, 16. |
+| `docs/PLANS/implementation/L2-*_Handoff.md` | **Removed (2026-03-29):** Merged into each parent `L2-*_*Implementation*.md` under **§14–§15 Sprint handoff archive** (L2-04 also §15). |
 | `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` | `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` |
-| `docs/PLANS/implementation/L2-01_Handoff.md` | `docs/PLANS/implementation/L2-01_Handoff.md` |
 | `docs/PLANS/implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` | `docs/PLANS/implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` |
-| `docs/PLANS/implementation/L2-03_Handoff.md` | `docs/PLANS/implementation/L2-03_Handoff.md` |
 | `docs/PLANS/implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md` | `docs/PLANS/implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md` |
 | `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` | `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` |
-| `docs/PLANS/implementation/L2-04_Handoff.md` | `docs/PLANS/implementation/L2-04_Handoff.md` |
 | `docs/PLANS/implementation/L2-04_Observability-and-Evaluation-Implementation.md` | `docs/PLANS/implementation/L2-04_Observability-and-Evaluation-Implementation.md` |
-| `docs/PLANS/implementation/L2-05_Handoff.md` | `docs/PLANS/implementation/L2-05_Handoff.md` |
 | `docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` | `docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` |
-| `docs/PLANS/implementation/L2-06_Handoff.md` | `docs/PLANS/implementation/L2-06_Handoff.md` |
 | `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md` | `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md` |
-| `docs/PLANS/implementation/L2-07_Handoff.md` | `docs/PLANS/implementation/L2-07_Handoff.md` |
 | `docs/PLANS/implementation/L2-07_Multimodal-Input-Path-Implementation.md` | `docs/PLANS/implementation/L2-07_Multimodal-Input-Path-Implementation.md` |
-| `docs/PLANS/implementation/L2-08_Handoff.md` | `docs/PLANS/implementation/L2-08_Handoff.md` |
 | `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` | `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` |
 | `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md` | `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md` |
 | `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` | `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` |
 | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` |
-| `docs/PLANS/implementation/L2-99_Handoff.md` | `docs/PLANS/implementation/L2-99_Handoff.md` |
 | `docs/PLANS/implementation/L2-Chroma-Vector-Backend-Implementation.md` | `docs/PLANS/implementation/L2-Chroma-Vector-Backend-Implementation.md` |
 
 ---
