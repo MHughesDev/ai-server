@@ -2,7 +2,11 @@
  * Production model gateway assertion tests (PR-002).
  */
 
-import { assertProductionModelGateway } from "./assert-production-model-gateway.js";
+import {
+  assertProductionModelGateway,
+  assertRuntimeModelGateway,
+  ModelGatewayProductionError,
+} from "./assert-production-model-gateway.js";
 import type { Config } from "./schema.js";
 
 const originalEnv = process.env;
@@ -86,6 +90,20 @@ describe("assertProductionModelGateway", () => {
     expect(() => assertProductionModelGateway(cfg)).toThrow(/openai_compatible/);
   });
 
+  it("throws when stub provider is registered in production (WANT-023)", () => {
+    const cfg = baseProductionConfig();
+    cfg.model_gateway.providers = [
+      {
+        id: "openai",
+        kind: "openai_compatible",
+        default_model: "gpt-4o-mini",
+        api_key_env: "OPENAI_API_KEY",
+      },
+      { id: "stub-dev", kind: "stub", default_model: "stub" },
+    ];
+    expect(() => assertProductionModelGateway(cfg)).toThrow(/stub\/framed_echo/);
+  });
+
   it("throws when openai_compatible provider has no API key", () => {
     delete process.env.OPENAI_API_KEY;
     expect(() => assertProductionModelGateway(baseProductionConfig())).toThrow(
@@ -107,5 +125,42 @@ describe("assertProductionModelGateway", () => {
 
   it("passes with openai provider, key, and registry", () => {
     expect(() => assertProductionModelGateway(baseProductionConfig())).not.toThrow();
+  });
+});
+
+describe("assertRuntimeModelGateway", () => {
+  const productionRuntime = {
+    env: "production" as const,
+    providers: [
+      { id: "openai", kind: "openai_compatible" as const },
+      { id: "framed", kind: "framed_echo" as const },
+    ],
+    registry: {
+      chat: { default: { provider: "openai", model: "gpt-4o-mini" } },
+      vision: { default: { provider: "framed", model: "framed-vision" } },
+    },
+    default_capability: "chat",
+    defaultModel: "gpt-4o-mini",
+  };
+
+  it("no-op outside production", () => {
+    expect(() =>
+      assertRuntimeModelGateway(
+        { ...productionRuntime, env: "development" },
+        { capability: "vision" }
+      )
+    ).not.toThrow();
+  });
+
+  it("throws when selection routes to framed_echo in production", () => {
+    expect(() =>
+      assertRuntimeModelGateway(productionRuntime, { capability: "vision" })
+    ).toThrow(ModelGatewayProductionError);
+  });
+
+  it("allows openai_compatible route in production", () => {
+    expect(() =>
+      assertRuntimeModelGateway(productionRuntime, { capability: "chat" })
+    ).not.toThrow();
   });
 });

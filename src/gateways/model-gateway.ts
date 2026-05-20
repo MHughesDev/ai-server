@@ -4,10 +4,16 @@
  * @see docs/SPEC/15_ModelGateway_Spec.md, L2-02 Phase 2
  */
 
+import { assertRuntimeModelGateway } from "../config/assert-production-model-gateway.js";
 import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import type { IModelGateway, ModelCompletionRequest, ModelCompletionResult } from "./types.js";
 import { getErrorMeta, isErrorCode } from "../contracts/errors.js";
 import type { ErrorCode } from "../contracts/errors.js";
+import type { ModelCapabilityRegistry, ModelRouteConfig, ModelSelectionContext } from "./model-routing.js";
+import { resolveModelRoute } from "./model-routing.js";
+
+export type { ModelRouteConfig, ModelCapabilityRegistry, ModelSelectionContext } from "./model-routing.js";
+export { resolveModelRoute } from "./model-routing.js";
 
 export interface ModelGatewayConfig {
   timeoutMs: number;
@@ -52,24 +58,12 @@ export interface ModelProviderConfig {
   output_cost_per_million_usd?: number;
 }
 
-export interface ModelRouteConfig {
-  provider: string;
-  model: string;
-}
-
-export interface ModelCapabilityRegistry {
-  [capability: string]: {
-    default?: ModelRouteConfig;
-    org?: Record<string, ModelRouteConfig>;
-    app?: Record<string, ModelRouteConfig>;
-    user?: Record<string, ModelRouteConfig>;
-  };
-}
-
 export interface ModelRoutingConfig {
   default_capability: string;
   providers: ModelProviderConfig[];
   registry: ModelCapabilityRegistry;
+  /** Runtime environment for production routing guards (WANT-023). */
+  runtime_env?: "dev" | "staging" | "production";
   /** Provider ID to use when primary fails. If not set, uses first provider as fallback. */
   fallback_provider?: string;
   /** Enable circuit breaker for providers */
@@ -91,13 +85,6 @@ export const CAPABILITY_TAXONOMY = {
 } as const;
 
 export type CapabilityType = keyof typeof CAPABILITY_TAXONOMY;
-
-export interface ModelSelectionContext {
-  capability?: string;
-  org_id?: string;
-  app_id?: string;
-  user_id?: string;
-}
 
 const DEFAULT_CONFIG: ModelGatewayConfig = {
   timeoutMs: 30_000,
@@ -367,27 +354,6 @@ function createProviderGateway(provider: ModelProviderConfig): IModelGateway {
   return new StubModelGateway({ defaultModel: provider.default_model });
 }
 
-export function resolveModelRoute(
-  registry: ModelCapabilityRegistry,
-  selection: ModelSelectionContext,
-  fallback: ModelRouteConfig
-): ModelRouteConfig {
-  const capability = selection.capability ?? "chat";
-  const routesForCapability = registry[capability];
-  if (!routesForCapability) return fallback;
-
-  if (selection.user_id && routesForCapability.user?.[selection.user_id]) {
-    return routesForCapability.user[selection.user_id];
-  }
-  if (selection.app_id && routesForCapability.app?.[selection.app_id]) {
-    return routesForCapability.app[selection.app_id];
-  }
-  if (selection.org_id && routesForCapability.org?.[selection.org_id]) {
-    return routesForCapability.org[selection.org_id];
-  }
-  return routesForCapability.default ?? fallback;
-}
-
 /**
  * Perform health check on a provider.
  * Returns latency and health status.
@@ -416,6 +382,19 @@ export function createProviderBackedModelGateway(
   config: ModelGatewayConfig & ModelRoutingConfig,
   selection: ModelSelectionContext
 ): IModelGateway {
+  if (config.runtime_env) {
+    assertRuntimeModelGateway(
+      {
+        env: config.runtime_env,
+        providers: config.providers.map((p) => ({ id: p.id, kind: p.kind })),
+        registry: config.registry,
+        default_capability: config.default_capability,
+        defaultModel: config.defaultModel,
+      },
+      selection
+    );
+  }
+
   const providers = new Map<string, IModelGateway>();
   const breakers = new Map<string, CircuitBreaker>();
 

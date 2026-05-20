@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** WANT-015 — global per-request deadline (2026-05-20)
+**Last task closed:** WANT-023 — production real model providers (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -96,8 +96,8 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 | WANT-004 | Orchestrator sole authority for loops/budgets/mode | done | P0 | `src/orchestrator/*` (execution-spec, apply-plan, harness-loop); query-handler applies plan; coding-agent uses orchestrator loop; tests (2026-05-20) |
 | WANT-012 | Secrets never in logs/events; consistent redaction | done | P0 | `redact-event.ts`, `emit-telemetry.ts`, audit redact-at-source, sink defensive redact + refuse; coding-agent/taxonomy emit paths; tests (2026-05-20) |
 | WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | done | P0 | `pipeline-budget.ts` cumulative checks in chat/decision/deep-research/coding-agent + harness-loop; accurate telemetry totals; tests (2026-05-20) |
-| WANT-015 | Global per-request deadline | partial | P0 | Deeper pipeline deadline audit beyond HTTP wrapper |
-| WANT-023 | Production real model providers (no stub-only) | partial | P0 | Bootstrap validates provider + key + registry (2026-05-20); dev defaults remain framed/stub |
+| WANT-015 | Global per-request deadline | done | P0 | `request_started_at_ms` anchor; query-handler retrieval+pipeline; `checkDeadlineBlocked` per hop; tests (2026-05-20) |
+| WANT-023 | Production real model providers (no stub-only) | done | P0 | `assert-production-model-gateway.ts` bootstrap + `assertRuntimeModelGateway` on query path; `model-routing.ts`; dev/staging framed_echo with bootstrap log; tests (2026-05-20) |
 | WANT-026 | Model retry policy by error class | partial | P1 | Richer provider body/error-code mapping |
 | WANT-027 | Gateway timeouts without timer leaks | partial | P1 | Deterministic error mapping product-wide |
 | WANT-029 | Tool sandbox + auditable identity | partial | P0 | Custom tools/registry beyond builtins |
@@ -153,7 +153,7 @@ Former `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`. Closed item
 | ID | Location | Description | Status | Priority | Action |
 |----|----------|-------------|--------|----------|--------|
 | STUB-001 | `src/security/secret-scope.ts` | Stub secrets: redacted placeholder only | done | P0 | PR-005: pluggable backends; stub dev-only |
-| STUB-002 | `src/gateways/model-gateway.ts` | `StubModelGateway` / `defaultModel: "stub"` for dev | partial | P0 | Prod must use `openai_compatible` |
+| STUB-002 | `src/gateways/model-gateway.ts` | `StubModelGateway` / `defaultModel: "stub"` for dev | done | P0 | Dev-only; prod bootstrap + runtime guard require `openai_compatible` (WANT-023, 2026-05-20) |
 | STUB-003 | `src/memory/default-store.ts` | Embedding `provider: "gateway"` not implemented; hash fallback | open | P0 | Model-gateway embedding path |
 | STUB-004 | `src/memory/in-memory-store.ts` | Text match placeholder, no real embedding | open | P1 | Dev/test only in prod |
 | STUB-005 | `src/gateways/tool-gateway.ts` | `StubAllowedToolGateway`; deny/stub mode default | partial | P0 | Policy-gated real execution |

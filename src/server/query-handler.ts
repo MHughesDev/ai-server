@@ -491,19 +491,23 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         retrievalContext,
         request_started_at_ms: start,
       };
-      const modelGateway = createProviderBackedModelGateway({
-        timeoutMs: config.model_gateway.timeout_ms,
-        maxRetries: config.model_gateway.max_retries,
-        defaultModel: config.model_gateway.default_model,
-        default_capability: config.model_gateway.default_capability,
-        providers: config.model_gateway.providers,
-        registry: config.model_gateway.registry,
-      }, {
-        capability: capabilityForPipeline(plan.pipeline_type),
-        org_id: ingressResult.callerContext.orgId,
-        app_id: ingressResult.callerContext.appId,
-        user_id: ingressResult.callerContext.userId,
-      });
+      const modelGateway = createProviderBackedModelGateway(
+        {
+          timeoutMs: config.model_gateway.timeout_ms,
+          maxRetries: config.model_gateway.max_retries,
+          defaultModel: config.model_gateway.default_model,
+          default_capability: config.model_gateway.default_capability,
+          providers: config.model_gateway.providers,
+          registry: config.model_gateway.registry,
+          runtime_env: config.env,
+        },
+        {
+          capability: capabilityForPipeline(plan.pipeline_type),
+          org_id: ingressResult.callerContext.orgId,
+          app_id: ingressResult.callerContext.appId,
+          user_id: ingressResult.callerContext.userId,
+        }
+      );
       const pipelineUsesMemory = pipelineUsesMemoryEngine
         ? {
             memoryStore: getDefaultStore(),

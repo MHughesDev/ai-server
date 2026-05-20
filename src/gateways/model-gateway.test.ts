@@ -1,5 +1,6 @@
 import type { IModelGateway } from "./types.js";
 import { jest } from "@jest/globals";
+import { ModelGatewayProductionError } from "../config/assert-production-model-gateway.js";
 import {
   createProviderBackedModelGateway,
   isRetryableModelProviderHttpStatus,
@@ -24,6 +25,25 @@ describe("Model gateway routing", () => {
       { provider: "fallback", model: "fallback" }
     );
     expect(route).toEqual({ provider: "p-user", model: "m-user" });
+  });
+
+  it("blocks synthetic providers when runtime_env is production (WANT-023)", () => {
+    expect(() =>
+      createProviderBackedModelGateway(
+        {
+          timeoutMs: 1_000,
+          maxRetries: 0,
+          defaultModel: "gpt-4o-mini",
+          default_capability: "chat",
+          runtime_env: "production",
+          providers: [{ id: "framed", kind: "framed_echo", default_model: "framed-default" }],
+          registry: {
+            chat: { default: { provider: "framed", model: "framed-default" } },
+          },
+        },
+        { capability: "chat" }
+      )
+    ).toThrow(ModelGatewayProductionError);
   });
 
   it("uses provider-backed gateway and selected registry model", async () => {

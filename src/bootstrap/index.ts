@@ -82,6 +82,18 @@ export function bootstrap(): Config {
   }
   assertProductionAuth(config);
   assertProductionModelGateway(config);
+  if (config.env !== "production") {
+    const syntheticProviders = config.model_gateway.providers.filter(
+      (p) => p.kind === "stub" || p.kind === "framed_echo"
+    );
+    if (syntheticProviders.length > 0) {
+      console.info(
+        "[bootstrap] model gateway: dev/staging synthetic providers",
+        syntheticProviders.map((p) => `${p.id}:${p.kind}`).join(", "),
+        "(WANT-023 — use openai_compatible in production)"
+      );
+    }
+  }
   assertProductionSecretsBackend(config);
   assertProductionMemory(config);
   assertProductionTenantBudget(config);
