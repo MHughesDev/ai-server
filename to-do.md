@@ -2,7 +2,8 @@
 
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
-**Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)
+**Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
+**Last task closed:** PR-024 / QA-001 — `npm run verify:sow` green (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -72,7 +73,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | PR-021 | Request/connection limits under load (memory exhaustion) | open | P1 | `server/index.ts`, middleware |
 | PR-022 | Graceful request draining on SIGTERM (verify SLO) | partial | P0 | `server/index.ts` (implemented; verify ops) |
 | PR-023 | Wire `plan.budgets.deadline_ms` through all pipeline hops | partial | P0 | `query-handler.ts`, `chat-pipeline.ts`, `runner.ts` |
-| PR-024 | Run `npm run verify:sow` on release branch | open | P0 | root `package.json` |
+| PR-024 | Run `npm run verify:sow` on release branch | done | P0 | Verified 2026-05-20 on `cursor/consolidate-todo-md-9c5f`: lint, typecheck, build, 574 tests pass |
 
 ### 1.4 CI/CD, canary, and sign-off (L2-08)
 
@@ -188,7 +189,7 @@ Former `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`. Closed item
 
 | ID | Task | Status | Priority | Notes |
 |----|------|--------|----------|-------|
-| QA-001 | `npm run verify:sow` green on main | open | P0 | lint → typecheck → build → test |
+| QA-001 | `npm run verify:sow` green on main | done | P0 | Same verification as PR-024 (2026-05-20) |
 | QA-002 | Staging canary: `/healthz`, `/readyz`, `/v1/version`, `/metrics` | open | P0 | |
 | QA-003 | SLO/error/cost vs staging baseline | open | P0 | |
 | QA-004 | Unit tests: `default-store`, `memory-gateway` (if still missing coverage) | partial | P1 | Agent 5 added many; re-verify |
