@@ -5,6 +5,7 @@
 
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertProductionAuth } from "../config/assert-production-auth.js";
 import { assertProductionModelGateway } from "../config/assert-production-model-gateway.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
@@ -33,37 +34,7 @@ function assertProductionReadiness(cfg: Config): void {
     return;
   }
 
-  const secret = cfg.auth.ai_jwt_secret?.trim() ?? "";
-  if (secret.length < 32 || secret === "dev-ai-jwt-secret") {
-    throw new Error(
-      "Production rollout requires AUTH_AI_JWT_SECRET with a strong 32+ char value"
-    );
-  }
-  if (!cfg.requireAuthHeader) {
-    throw new Error(
-      "Production rollout requires REQUIRE_AUTH_HEADER=true"
-    );
-  }
-  const hasDefaultIdp = cfg.auth.idp_registry.some(
-    (entry) =>
-      entry.issuer === "https://idp.local/default" ||
-      entry.jwt_secret === "dev-external-idp-secret"
-  );
-  if (hasDefaultIdp) {
-    throw new Error(
-      "Production rollout cannot use default test IdP entries"
-    );
-  }
-  const hasDefaultApp = cfg.auth.app_registry.some(
-    (entry) =>
-      entry.client_id === "app-client" ||
-      entry.client_secret === "app-secret"
-  );
-  if (hasDefaultApp) {
-    throw new Error(
-      "Production rollout cannot use default test app registry entries"
-    );
-  }
+  assertProductionAuth(cfg);
   const corsOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "").trim();
   if (!corsOrigins || corsOrigins === "*") {
     throw new Error(
@@ -95,6 +66,7 @@ export function bootstrap(): Config {
       "OPERATIONAL_BEARER_TOKEN is required in production to protect operational endpoints"
     );
   }
+  assertProductionAuth(config);
   assertProductionModelGateway(config);
   assertProductionSinkPathsWritable(config);
   if (

@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-002 — production model providers validated at bootstrap (2026-05-20)
+**Last task closed:** PR-003 — production auth config validated at bootstrap (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -49,7 +49,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 |----|------|--------|----------|------------------|
 | PR-001 | Set `OPERATIONAL_BEARER_TOKEN` for protected ops endpoints | done | P0 | Bootstrap fail-fast in production (`bootstrap/index.ts`); routes require Bearer when set; `.env.example` + `operational-auth.integration.test.ts` (2026-05-20). **Deploy:** set env in prod/K8s (`k8s/base/secret.yaml`). |
 | PR-002 | Configure real model providers (`MODEL_GATEWAY_PROVIDERS_JSON` / registry); no stub-only in production | done | P0 | `assert-production-model-gateway.ts` + bootstrap: `openai_compatible` only in prod, API key env required, registry must route to real provider; `.env.example`; tests (2026-05-20). **Deploy:** set `MODEL_GATEWAY_*` + `MODEL_PROVIDER_API_KEY` in prod. |
-| PR-003 | Set auth: `AUTH_AI_JWT_SECRET`, IdP/app registry JSON, scopes | open | P0 | `config/schema.ts`, `server/auth.ts` |
+| PR-003 | Set auth: `AUTH_AI_JWT_SECRET`, IdP/app registry JSON, scopes | done | P0 | `assert-production-auth.ts` + bootstrap: strong `AUTH_AI_JWT_SECRET`, `REQUIRE_AUTH_HEADER`, explicit `AUTH_*_REGISTRY_JSON`, no dev IdP/app defaults, scope + issuer checks; `.env.example`; tests (2026-05-20). **Deploy:** set auth env in prod. |
 | PR-004 | Set `RELEASE_ID` / `BUILD_ID` when `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | open | P0 | `bootstrap/index.ts` |
 | PR-005 | Replace stub secrets manager with Vault/KMS (or documented prod backend) | open | P0 | `security/secret-scope.ts` (stub placeholder) |
 | PR-006 | Configure persistent memory (Redis/vector/Chroma per product target); not in-memory only | partial | P0 | `memory/default-store.ts` |

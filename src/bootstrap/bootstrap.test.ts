@@ -6,6 +6,50 @@ import { bootstrap, getConfig, resetConfigForTest } from "./index.js";
 
 const originalEnv = process.env;
 
+const PROD_AUTH_IDP_JSON = JSON.stringify([
+  {
+    issuer: "https://idp.example.com",
+    audience: "ai-server-token-exchange",
+    jwt_algorithm: "HS256",
+    jwt_secret: "production-idp-secret-not-default",
+    claim_mapping: {},
+  },
+]);
+
+const PROD_AUTH_APP_JSON = JSON.stringify([
+  {
+    client_id: "client-prod",
+    client_secret: "client-secret-prod",
+    app_id: "app-prod",
+    allowed_issuers: ["https://idp.example.com"],
+    allowed_scopes: ["query:invoke"],
+  },
+]);
+
+/** Minimal production auth env (PR-003). */
+function applyProductionAuthEnv(): void {
+  process.env.REQUIRE_AUTH_HEADER = "true";
+  process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
+  process.env.AUTH_QUERY_REQUIRED_SCOPES = "query:invoke";
+  process.env.AUTH_IDP_REGISTRY_JSON = PROD_AUTH_IDP_JSON;
+  process.env.AUTH_APP_REGISTRY_JSON = PROD_AUTH_APP_JSON;
+}
+
+function applyProductionModelEnv(): void {
+  process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
+  process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
+    {
+      id: "openai",
+      kind: "openai_compatible",
+      default_model: "gpt-4o-mini",
+      api_key_env: "MODEL_PROVIDER_API_KEY",
+    },
+  ]);
+  process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
+    chat: { default: { provider: "openai", model: "gpt-4o-mini" } },
+  });
+}
+
 beforeEach(() => {
   process.env = { ...originalEnv };
   resetConfigForTest();
@@ -40,13 +84,26 @@ describe("bootstrap", () => {
   it("fails in production when model providers are only stub/framed_echo (WANT-023)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
     delete process.env.MODEL_GATEWAY_PROVIDERS_JSON;
     expect(() => bootstrap()).toThrow("openai_compatible");
+  });
+
+  it("fails in production when AUTH_IDP_REGISTRY_JSON is not set (PR-003)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
+    process.env.REQUIRE_AUTH_HEADER = "true";
+    delete process.env.AUTH_IDP_REGISTRY_JSON;
+    delete process.env.AUTH_APP_REGISTRY_JSON;
+    applyProductionModelEnv();
+    expect(() => bootstrap()).toThrow(/AUTH_IDP_REGISTRY_JSON/);
   });
 
   it("fails in production when openai_compatible provider API key env is empty (PR-002)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
     process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
       {
         id: "openai",
@@ -62,23 +119,14 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/missing API key/);
   });
 
-  it("bootstraps in production with real model provider config (PR-002)", () => {
+  it("bootstraps in production with auth and model provider config (PR-002, PR-003)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
-    process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
-    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
-      {
-        id: "openai",
-        kind: "openai_compatible",
-        default_model: "gpt-4o-mini",
-        base_url: "https://api.openai.com/v1",
-        api_key_env: "MODEL_PROVIDER_API_KEY",
-      },
-    ]);
-    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
-      chat: { default: { provider: "openai", model: "gpt-4o-mini" } },
-    });
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
     const cfg = bootstrap();
+    expect(cfg.requireAuthHeader).toBe(true);
+    expect(cfg.auth.query_required_scopes).toContain("query:invoke");
     expect(cfg.model_gateway.providers.some((p) => p.kind === "openai_compatible")).toBe(
       true
     );
@@ -89,32 +137,15 @@ describe("bootstrap", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
-    process.env.REQUIRE_AUTH_HEADER = "true";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
-    process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
-      {
-        issuer: "https://idp.example.com",
-        audience: "ai-server-token-exchange",
-        jwt_algorithm: "HS256",
-        jwt_secret: "not-default-but-short",
-        claim_mapping: {},
-      },
-    ]);
-    process.env.AUTH_APP_REGISTRY_JSON = JSON.stringify([
-      {
-        client_id: "client-prod",
-        client_secret: "client-secret-prod",
-        app_id: "app-prod",
-        allowed_issuers: ["https://idp.example.com"],
-        allowed_scopes: ["query:invoke"],
-      },
-    ]);
-    process.env.AUTH_AI_JWT_SECRET = "short-secret";
     expect(() => bootstrap()).toThrow(
-      "Production rollout requires AUTH_AI_JWT_SECRET with a strong 32+ char value"
+      /Production requires AUTH_AI_JWT_SECRET/
     );
   });
 
@@ -122,8 +153,8 @@ describe("bootstrap", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
-    process.env.REQUIRE_AUTH_HEADER = "true";
-    process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -155,28 +186,10 @@ describe("bootstrap", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
-    process.env.REQUIRE_AUTH_HEADER = "true";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
-    process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
-    process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
-      {
-        issuer: "https://idp.example.com",
-        audience: "ai-server-token-exchange",
-        jwt_algorithm: "HS256",
-        jwt_secret: "not-default-external-idp-secret",
-        claim_mapping: {},
-      },
-    ]);
-    process.env.AUTH_APP_REGISTRY_JSON = JSON.stringify([
-      {
-        client_id: "client-prod",
-        client_secret: "client-secret-prod",
-        app_id: "app-prod",
-        allowed_issuers: ["https://idp.example.com"],
-        allowed_scopes: ["query:invoke"],
-      },
-    ]);
     delete process.env.TLS_KEY_PATH;
     delete process.env.TLS_CERT_PATH;
     expect(() => bootstrap()).toThrow(
@@ -188,44 +201,14 @@ describe("bootstrap", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
-    process.env.REQUIRE_AUTH_HEADER = "true";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
-    process.env.AUTH_AI_JWT_SECRET = "0123456789abcdef0123456789abcdef";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
-    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
-      {
-        id: "openai1",
-        kind: "openai_compatible",
-        default_model: "gpt-4o-mini",
-        api_key_env: "OPENAI_API_KEY",
-      },
-    ]);
-    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
-      chat: { default: { provider: "openai1", model: "gpt-4o-mini" } },
-    });
-    process.env.OPENAI_API_KEY = "sk-test-bootstrap-only";
-    process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
-      {
-        issuer: "https://idp.example.com",
-        audience: "ai-server-token-exchange",
-        jwt_algorithm: "HS256",
-        jwt_secret: "not-default-external-idp-secret",
-        claim_mapping: {},
-      },
-    ]);
-    process.env.AUTH_APP_REGISTRY_JSON = JSON.stringify([
-      {
-        client_id: "client-prod",
-        client_secret: "client-secret-prod",
-        app_id: "app-prod",
-        allowed_issuers: ["https://idp.example.com"],
-        allowed_scopes: ["query:invoke"],
-      },
-    ]);
     expect(() => bootstrap()).toThrow(
       "Production rollout requires RELEASE_ID or BUILD_ID for traceability"
     );
@@ -234,20 +217,10 @@ describe("bootstrap", () => {
   it("fails in production when AUDIT_LOG_PATH parent directory does not exist", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
-    process.env.OPENAI_API_KEY = "sk-test-bootstrap-only";
-    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
-      {
-        id: "openai1",
-        kind: "openai_compatible",
-        default_model: "gpt-4o-mini",
-        api_key_env: "OPENAI_API_KEY",
-      },
-    ]);
-    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
-      chat: { default: { provider: "openai1", model: "gpt-4o-mini" } },
-    });
     expect(() => bootstrap()).toThrow("Production sink parent directory must exist");
   });
 });
