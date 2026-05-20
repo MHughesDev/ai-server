@@ -141,6 +141,21 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/missing API key/);
   });
 
+  it("fails in production without shared tenant budget backend (PR-007)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    process.env.MEMORY_BACKEND = "vector";
+    process.env.CHROMA_URL = "http://chroma:8000";
+    delete process.env.REDIS_URL;
+    delete process.env.TENANT_BUDGET_POSTGRES_URL;
+    delete process.env.TENANT_BUDGET_REDIS_REST_URL;
+    delete process.env.TENANT_BUDGET_REDIS_REST_TOKEN;
+    expect(() => bootstrap()).toThrow(/shared tenant budget backend/);
+  });
+
   it("fails in production when MEMORY_BACKEND is in_memory (PR-006)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";

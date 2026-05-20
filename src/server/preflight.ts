@@ -1,5 +1,6 @@
 import type { Config } from "../config/schema.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import { hasDurableTenantBudgetBackend } from "../controlplane/tenant-budget.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 
 export type PreflightStatus = "pass" | "fail" | "warn";
@@ -162,6 +163,11 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
     id: "timeouts.request_processing",
     status: parseInt(process.env.REQUEST_PROCESSING_TIMEOUT_MS ?? "120000", 10) > 0 ? "pass" : "fail",
     message: "Request processing timeout is configured",
+  });
+  add({
+    id: "budget.tenant_shared_backend",
+    status: hasDurableTenantBudgetBackend() ? "pass" : "fail",
+    message: "Tenant budget uses shared Redis or Postgres backend",
   });
   add({
     id: "memory.persistent_backend",

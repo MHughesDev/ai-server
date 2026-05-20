@@ -28,9 +28,8 @@ Translate policy maxima into effective request budgets and enforce bounded execu
 ## Current-State Notes
 - ✅ Budget computation IS implemented (`src/controlplane/resource-manager.ts`)
 - ✅ Tenant budget with multi-backend support IS implemented (`src/controlplane/tenant-budget.ts`)
-  - In-memory backend (lines 23-38)
-  - File backend (lines 40-70)
-  - Redis/Upstash backend (lines 72-108)
+  - In-memory / file (dev/single-node)
+  - **Production:** `REDIS_URL` (ioredis), `TENANT_BUDGET_POSTGRES_URL`, or Upstash REST pair — bootstrap **`assertProductionTenantBudget`** (PR-007)
 - ✅ Hourly cost cap enforcement IS implemented (`src/controlplane/tenant-budget.ts` lines 170-180)
 - ✅ Budget usage recording IS implemented (`src/controlplane/tenant-budget.ts` lines 145-165)
 - Budget fields are computed at request time and enforced during workflow execution

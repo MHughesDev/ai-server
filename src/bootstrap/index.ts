@@ -9,6 +9,7 @@ import { assertProductionAuth } from "../config/assert-production-auth.js";
 import { assertProductionModelGateway } from "../config/assert-production-model-gateway.js";
 import { assertProductionSecretsBackend } from "../config/assert-production-secrets-backend.js";
 import { assertProductionMemory } from "../config/assert-production-memory.js";
+import { assertProductionTenantBudget } from "../config/assert-production-tenant-budget.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
@@ -77,6 +78,7 @@ export function bootstrap(): Config {
   assertProductionModelGateway(config);
   assertProductionSecretsBackend(config);
   assertProductionMemory(config);
+  assertProductionTenantBudget(config);
   assertProductionSinkPathsWritable(config);
   if (
     config.env === "production" &&

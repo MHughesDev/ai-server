@@ -83,6 +83,70 @@ class FileTenantBudgetBackend implements TenantBudgetBackend {
   }
 }
 
+/** Minimal Redis client for tenant budget (ioredis or test mock). */
+export interface TenantBudgetRedisClient {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  del(key: string): Promise<void>;
+}
+
+/**
+ * Shared Redis tenant budget via REDIS_URL (ioredis).
+ * Aligns with memory/rate-limit production wiring (PR-007).
+ */
+export class IoredisTenantBudgetBackend implements TenantBudgetBackend {
+  private client: TenantBudgetRedisClient | null = null;
+  private readonly injectedTestClient: TenantBudgetRedisClient | undefined;
+  private readonly keyPrefix: string;
+
+  constructor(
+    private readonly url: string,
+    options?: { testClient?: TenantBudgetRedisClient; keyPrefix?: string }
+  ) {
+    this.injectedTestClient = options?.testClient;
+    this.keyPrefix = options?.keyPrefix ?? "tenant_budget:";
+  }
+
+  private async getClient(): Promise<TenantBudgetRedisClient> {
+    if (this.injectedTestClient) return this.injectedTestClient;
+    if (this.client) return this.client;
+    const { Redis } = (await import("ioredis")) as unknown as {
+      Redis: new (url: string, options?: Record<string, unknown>) => TenantBudgetRedisClient;
+    };
+    this.client = new Redis(this.url, { maxRetriesPerRequest: 2 });
+    return this.client;
+  }
+
+  private key(orgId: string): string {
+    return `${this.keyPrefix}${orgId}`;
+  }
+
+  async get(orgId: string): Promise<UsageEntry[]> {
+    const raw = await (await this.getClient()).get(this.key(orgId));
+    if (!raw?.trim()) return [];
+    const parsed = JSON.parse(raw) as UsageEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  async set(orgId: string, entries: UsageEntry[]): Promise<void> {
+    const client = await this.getClient();
+    if (entries.length === 0) {
+      await client.del(this.key(orgId));
+      return;
+    }
+    await client.set(this.key(orgId), JSON.stringify(entries));
+  }
+
+  async reset(): Promise<void> {
+    await Promise.resolve();
+  }
+
+  dispose(): Promise<void> {
+    this.client = null;
+    return Promise.resolve();
+  }
+}
+
 class UpstashRedisTenantBudgetBackend implements TenantBudgetBackend {
   constructor(private readonly baseUrl: string, private readonly token: string) {}
 
@@ -220,17 +284,31 @@ class PostgresTenantBudgetBackend implements TenantBudgetBackend {
 
 let backend: TenantBudgetBackend | null = null;
 
+/** True when tenant budget state is shared across instances (PR-007). */
+export function hasDurableTenantBudgetBackend(): boolean {
+  const upstashUrl = process.env.TENANT_BUDGET_REDIS_REST_URL?.trim();
+  const upstashToken = process.env.TENANT_BUDGET_REDIS_REST_TOKEN?.trim();
+  return !!(
+    process.env.TENANT_BUDGET_POSTGRES_URL?.trim() ||
+    (upstashUrl && upstashToken) ||
+    process.env.REDIS_URL?.trim()
+  );
+}
+
 function getBackend(): TenantBudgetBackend {
   if (backend) return backend;
   const filePath = process.env.TENANT_BUDGET_STORE_PATH?.trim();
-  const redisUrl = process.env.TENANT_BUDGET_REDIS_REST_URL?.trim();
-  const redisToken = process.env.TENANT_BUDGET_REDIS_REST_TOKEN?.trim();
+  const upstashUrl = process.env.TENANT_BUDGET_REDIS_REST_URL?.trim();
+  const upstashToken = process.env.TENANT_BUDGET_REDIS_REST_TOKEN?.trim();
   const postgresUrl = process.env.TENANT_BUDGET_POSTGRES_URL?.trim();
-  if (redisUrl && redisToken) {
-    backend = new UpstashRedisTenantBudgetBackend(redisUrl, redisToken);
+  const sharedRedisUrl = process.env.REDIS_URL?.trim();
+  if (upstashUrl && upstashToken) {
+    console.info("[tenant-budget] backend: upstash-redis");
+    backend = new UpstashRedisTenantBudgetBackend(upstashUrl, upstashToken);
     return backend;
   }
   if (postgresUrl) {
+    console.info("[tenant-budget] backend: postgres");
     const customTable = process.env.TENANT_BUDGET_POSTGRES_TABLE?.trim();
     backend = new PostgresTenantBudgetBackend(
       postgresUrl,
@@ -238,7 +316,18 @@ function getBackend(): TenantBudgetBackend {
     );
     return backend;
   }
-  backend = filePath ? new FileTenantBudgetBackend(filePath) : new InMemoryTenantBudgetBackend();
+  if (sharedRedisUrl) {
+    console.info("[tenant-budget] backend: redis");
+    backend = new IoredisTenantBudgetBackend(sharedRedisUrl);
+    return backend;
+  }
+  if (filePath) {
+    console.info("[tenant-budget] backend: file", { path: filePath });
+    backend = new FileTenantBudgetBackend(filePath);
+    return backend;
+  }
+  console.warn("[tenant-budget] backend: in-memory (dev only; set REDIS_URL or TENANT_BUDGET_POSTGRES_URL for production)");
+  backend = new InMemoryTenantBudgetBackend();
   return backend;
 }
 
@@ -295,6 +384,11 @@ export async function checkTenantBudget(orgId: string): Promise<{ allowed: boole
   const list = await getBackend().get(orgId);
   const total = list.reduce((s, e) => s + e.cost_usd, 0);
   return { allowed: total < cap };
+}
+
+/** Test-only: replace backend without reading env. */
+export function setTenantBudgetBackendForTest(next: TenantBudgetBackend | null): void {
+  backend = next;
 }
 
 /** Reset tenant usage and release backend resources (for tests). */

@@ -4,8 +4,12 @@
 
 import {
   checkTenantBudget,
+  hasDurableTenantBudgetBackend,
+  IoredisTenantBudgetBackend,
   recordTenantUsage,
   resetTenantBudgets,
+  setTenantBudgetBackendForTest,
+  type TenantBudgetRedisClient,
 } from "./tenant-budget.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,6 +22,9 @@ describe("tenant-budget", () => {
     delete process.env.TENANT_BUDGET_STORE_PATH;
     delete process.env.TENANT_BUDGET_POSTGRES_URL;
     delete process.env.TENANT_BUDGET_POSTGRES_TABLE;
+    delete process.env.TENANT_BUDGET_REDIS_REST_URL;
+    delete process.env.TENANT_BUDGET_REDIS_REST_TOKEN;
+    delete process.env.REDIS_URL;
   });
 
   it("allows when cap is unset (0)", async () => {
@@ -54,6 +61,33 @@ describe("tenant-budget", () => {
     await recordTenantUsage("org1", { cost_usd: 3 });
     await expect(checkTenantBudget("org1")).resolves.toEqual({ allowed: false });
     await expect(checkTenantBudget("org2")).resolves.toEqual({ allowed: true });
+  });
+
+  it("reports durable backend when REDIS_URL is set", () => {
+    process.env.REDIS_URL = "redis://127.0.0.1:6379";
+    expect(hasDurableTenantBudgetBackend()).toBe(true);
+  });
+
+  it("uses redis-backed backend with mock ioredis client", async () => {
+    const store = new Map<string, string>();
+    const mockClient: TenantBudgetRedisClient = {
+      get: (key) => Promise.resolve(store.get(key) ?? null),
+      set: (key, value) => {
+        store.set(key, value);
+        return Promise.resolve();
+      },
+      del: (key) => {
+        store.delete(key);
+        return Promise.resolve();
+      },
+    };
+    setTenantBudgetBackendForTest(
+      new IoredisTenantBudgetBackend("redis://unused", { testClient: mockClient })
+    );
+    process.env.TENANT_COST_CAP_USD_PER_HOUR = "5";
+    await recordTenantUsage("org1", { cost_usd: 6 });
+    await expect(checkTenantBudget("org1")).resolves.toEqual({ allowed: false });
+    expect(store.size).toBeGreaterThan(0);
   });
 
   it("uses file-backed backend when TENANT_BUDGET_STORE_PATH is set", async () => {
