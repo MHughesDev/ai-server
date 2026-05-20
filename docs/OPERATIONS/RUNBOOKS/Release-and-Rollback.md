@@ -17,7 +17,9 @@ Treat architecture Section 18 as the release gate baseline; use the gaps report 
 
 1. **Artifacts:** Ensure CI/CD has produced signed, traceable artifacts for the release. Version and build identity must be set (`RELEASE_ID` and/or `BUILD_ID` in deployment env).
 2. **Config:** Feature flags and rollout gate:
-   - `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` only after production readiness gate is passed.
+   - Run `GET /v1/preflight` (operational bearer) and confirm **pass** before promotion.
+   - Set **`ROLLOUT_CANARY_SIGNOFF=true`** only after canary analysis meets thresholds in **Canary analysis** below.
+   - Then set **`PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true`** (bootstrap fail-fast if signoff is missing).
    - See `docs/SPEC/20_Config_and_FeatureFlags.md` for all flags.
 3. **Health gates:** Pre-deploy run `GET /healthz` and `GET /readyz` against current staging; confirm `GET /v1/version` returns expected `version`, `release_id`, `build_id`, and `env`.
 

@@ -55,6 +55,8 @@ configMapGenerator:
     behavior: merge
     literals:
       - LOG_LEVEL=warn
+      # Enable only after canary sign-off (PR-010); bootstrap requires ROLLOUT_CANARY_SIGNOFF=true
+      - ROLLOUT_CANARY_SIGNOFF=true
       - PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true
       - MEMORY_BACKEND=vector
       - MEMORY_EMBEDDING_PROVIDER=openai

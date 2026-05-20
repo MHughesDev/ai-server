@@ -38,6 +38,7 @@ function applyProductionAuthEnv(): void {
 /** Production rollout + release traceability (PR-004). */
 function applyProductionRolloutEnv(): void {
   process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+  process.env.ROLLOUT_CANARY_SIGNOFF = "true";
   process.env.RELEASE_ID = "rel-bootstrap-test";
   process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
   process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -216,6 +217,7 @@ describe("bootstrap", () => {
   it("fails production rollout when AUTH_AI_JWT_SECRET is weak", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    process.env.ROLLOUT_CANARY_SIGNOFF = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
@@ -234,6 +236,7 @@ describe("bootstrap", () => {
   it("fails production rollout when CORS_ALLOWED_ORIGINS is not explicit", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    process.env.ROLLOUT_CANARY_SIGNOFF = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
@@ -269,6 +272,7 @@ describe("bootstrap", () => {
   it("fails production rollout when TLS paths are not configured", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    process.env.ROLLOUT_CANARY_SIGNOFF = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
@@ -281,6 +285,23 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(
       "Production rollout requires TLS_KEY_PATH and TLS_CERT_PATH"
     );
+  });
+
+  it("fails production rollout when ROLLOUT_CANARY_SIGNOFF is not set (PR-010)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
+    process.env.TLS_KEY_PATH = "/tmp/key.pem";
+    process.env.TLS_CERT_PATH = "/tmp/cert.pem";
+    process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
+    process.env.RELEASE_ID = "rel-bootstrap-test";
+    delete process.env.ROLLOUT_CANARY_SIGNOFF;
+    expect(() => bootstrap()).toThrow(/ROLLOUT_CANARY_SIGNOFF=true/);
   });
 
   it("fails production rollout when RELEASE_ID and BUILD_ID are unset", () => {

@@ -7,6 +7,8 @@ import {
   parseCanaryThresholds,
   validateReleaseConfig,
   assertProductionReleaseMetadataWhenRollout,
+  assertProductionRolloutCanarySignoff,
+  isRolloutCanarySignoffAcknowledged,
   CanaryThresholdsSchema,
   RolloutPolicySchema,
 } from "./policy.js";
@@ -177,5 +179,45 @@ describe("assertProductionReleaseMetadataWhenRollout", () => {
         release: { release_id: "rel-1" },
       })
     ).not.toThrow();
+  });
+});
+
+describe("assertProductionRolloutCanarySignoff", () => {
+  const originalSignoff = process.env.ROLLOUT_CANARY_SIGNOFF;
+
+  afterEach(() => {
+    if (originalSignoff === undefined) delete process.env.ROLLOUT_CANARY_SIGNOFF;
+    else process.env.ROLLOUT_CANARY_SIGNOFF = originalSignoff;
+  });
+
+  it("no-ops when rollout disabled", () => {
+    delete process.env.ROLLOUT_CANARY_SIGNOFF;
+    expect(() =>
+      assertProductionRolloutCanarySignoff({
+        env: "production",
+        flags: { platform_production_rollout_enabled: false },
+      })
+    ).not.toThrow();
+  });
+
+  it("throws when rollout enabled without signoff", () => {
+    delete process.env.ROLLOUT_CANARY_SIGNOFF;
+    expect(() =>
+      assertProductionRolloutCanarySignoff({
+        env: "production",
+        flags: { platform_production_rollout_enabled: true },
+      })
+    ).toThrow(/ROLLOUT_CANARY_SIGNOFF=true/);
+  });
+
+  it("allows when signoff is true", () => {
+    process.env.ROLLOUT_CANARY_SIGNOFF = "true";
+    expect(() =>
+      assertProductionRolloutCanarySignoff({
+        env: "production",
+        flags: { platform_production_rollout_enabled: true },
+      })
+    ).not.toThrow();
+    expect(isRolloutCanarySignoffAcknowledged()).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import type { Config } from "../config/schema.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { hasDurableTenantBudgetBackend } from "../controlplane/tenant-budget.js";
+import { isRolloutCanarySignoffAcknowledged } from "../rollout/policy.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 
 export type PreflightStatus = "pass" | "fail" | "warn";
@@ -116,10 +117,19 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
     status: hasModelCostTracking(config) ? "pass" : "warn",
     message: "Model provider cost tracking fields are configured",
   });
+  const rolloutEnabled = resolveFeatureFlagEnabled(
+    "platform_production_rollout_enabled",
+    config
+  );
   add({
     id: "flags.production_rollout",
-    status: resolveFeatureFlagEnabled("platform_production_rollout_enabled", config) ? "pass" : "fail",
+    status: rolloutEnabled ? "pass" : "fail",
     message: "PLATFORM_PRODUCTION_ROLLOUT_ENABLED is enabled",
+  });
+  add({
+    id: "rollout.canary_signoff",
+    status: !rolloutEnabled || isRolloutCanarySignoffAcknowledged() ? "pass" : "fail",
+    message: "ROLLOUT_CANARY_SIGNOFF=true when production rollout is enabled",
   });
   add({
     id: "flags.security_controls",

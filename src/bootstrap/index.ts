@@ -16,6 +16,7 @@ import { CONTRACT_VERSION } from "../contracts/index.js";
 import { safeLogError } from "../observability/redact.js";
 import {
   assertProductionReleaseMetadataWhenRollout,
+  assertProductionRolloutCanarySignoff,
   validateReleaseConfig,
 } from "../rollout/policy.js";
 import { createJobQueueService, type JobQueueService } from "../queue/job-queue.js";
@@ -103,6 +104,7 @@ export function bootstrap(): Config {
     console.warn("[bootstrap] release config:", releaseValidation.errors.join("; "));
   }
   assertProductionReleaseMetadataWhenRollout(config);
+  assertProductionRolloutCanarySignoff(config);
   // Gap 3A: Initialize async job queue if configured
   if (process.env.QUEUE_WORKERS_COUNT) {
     jobQueue = createJobQueueService(config, async (request) => {

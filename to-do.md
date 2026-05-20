@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-007 — shared tenant budget backend (2026-05-20)
+**Last task closed:** PR-010 — rollout after canary sign-off (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -59,7 +59,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 
 | ID | Task | Status | Priority | Evidence / files |
 |----|------|--------|----------|------------------|
-| PR-010 | Enable rollout only after canary sign-off: `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | open | P0 | `routes.ts`, `rollout/` |
+| PR-010 | Enable rollout only after canary sign-off: `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | done | P0 | `ROLLOUT_CANARY_SIGNOFF=true` required when rollout on; `assertProductionRolloutCanarySignoff`; preflight `rollout.canary_signoff`; bootstrap tests; runbook/SPEC 20/k8s prod (2026-05-20). **Deploy:** preflight pass → canary → signoff → enable rollout flag. |
 | PR-011 | Verify kill-switch end-to-end | open | P0 | `platform_production_rollout_enabled` |
 | PR-012 | Confirm audit + event sinks persistent with rotation | partial | P0 | `audit-logger.ts`, `event-sink.ts` |
 | PR-013 | Confirm PII/secrets redaction active in telemetry | partial | P0 | `observability/redact.ts` |

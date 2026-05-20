@@ -145,3 +145,29 @@ export function assertProductionReleaseMetadataWhenRollout(
     );
   }
 }
+
+/**
+ * Fail-fast when production rollout is enabled without explicit canary sign-off (PR-010).
+ * Set `ROLLOUT_CANARY_SIGNOFF=true` only after canary analysis passes per Release-and-Rollback runbook.
+ */
+export function assertProductionRolloutCanarySignoff(
+  config: Pick<Config, "env" | "flags">
+): void {
+  if (
+    config.env !== "production" ||
+    !resolveFeatureFlagEnabled("platform_production_rollout_enabled", config as Config)
+  ) {
+    return;
+  }
+  const signoff = (process.env.ROLLOUT_CANARY_SIGNOFF ?? "").trim().toLowerCase();
+  if (signoff !== "true") {
+    throw new Error(
+      "Production rollout requires ROLLOUT_CANARY_SIGNOFF=true after canary sign-off before PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true"
+    );
+  }
+}
+
+/** Whether canary sign-off env is set (for preflight / ops checks). */
+export function isRolloutCanarySignoffAcknowledged(): boolean {
+  return (process.env.ROLLOUT_CANARY_SIGNOFF ?? "").trim().toLowerCase() === "true";
+}

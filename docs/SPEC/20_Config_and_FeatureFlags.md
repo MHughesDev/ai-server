@@ -35,6 +35,8 @@ Only the following keys exist on `config.flags` (Zod `FeatureFlagsSchema`). Name
 
 **Rollout alias:** `PLATFORM_MASTER_ROLLOUT_ENABLED` is accepted as a legacy alias for the same boolean; prefer `PLATFORM_PRODUCTION_ROLLOUT_ENABLED`.
 
+**Canary sign-off (PR-010):** In production, `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` requires **`ROLLOUT_CANARY_SIGNOFF=true`** first (`assertProductionRolloutCanarySignoff` in `src/rollout/policy.ts`). Preflight exposes `rollout.canary_signoff` when rollout is enabled.
+
 **Async jobs:** There is **no** `enable_async_jobs` flag. Job endpoints are available when `QUEUE_WORKERS_COUNT` (and related queue env) cause `bootstrap` to register a `JobQueueService` (`src/bootstrap/index.ts`); otherwise routes return **503** `ASYNC_NOT_AVAILABLE`.
 
 ---
