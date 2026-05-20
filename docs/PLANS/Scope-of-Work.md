@@ -2,7 +2,7 @@
 
 **Source:** `docs/ARCHITECTURE/Architecture_document_Finalized.md`  
 **Purpose:** Map the architecture to implementation approach for each part, and define a full Scope of Work so a **coding agent** can execute it (across one or many conversations). The architecture holds full contract shapes and rules; this SOW holds **execution order**, **file paths**, **conventions**, and **verification steps**.  
-**Status:** Finalized for coding agents as an implementation baseline; production-hardening readiness is tracked in `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`.
+**Status:** Finalized for coding agents as an implementation baseline; production-hardening readiness is tracked in [`to-do.md`](../../to-do.md).
 
 ---
 
@@ -11,7 +11,7 @@
 | Field | Value |
 |-------|--------|
 | Document | Scope of Work (Architecture → Implementation) |
-| Linked | Architecture_document_Finalized.md, 00_Master-Delivery-Plan.md, L2-01 through L2-08, L2-99 |
+| Linked | Architecture_document_Finalized.md, to-do.md, L2-01 through L2-08, L2-99 |
 | Owner | Platform Lead / Tech Lead |
 | Status | Finalized |
 | Last Updated | 2026-03-03 (status language reconciled with active gap-closure SOW; implementation-complete does not imply production-ready) |
@@ -249,7 +249,7 @@ Each phase has **entry criteria**, **ordered tasks** with file paths and “done
 
 ### Resume here (current phase)
 
-**As of latest implementation-baseline update:** Segments A through **L**, **Segment M**, **Segment N (closure)**, and **Segment I** (L2-06 Memory Gateway expansion) are implementation-complete. Production hardening and operational readiness must be validated against the active gap register in `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` before claiming production-ready status.
+**As of latest implementation-baseline update:** Segments A through **L**, **Segment M**, **Segment N (closure)**, and **Segment I** (L2-06 Memory Gateway expansion) are implementation-complete. Production hardening and operational readiness must be validated against [`to-do.md`](../../to-do.md) before claiming production-ready status.
 
 **Best recommendation — continue from:**
 
@@ -474,7 +474,7 @@ If the architecture document already specifies something in detail (e.g. exact J
 ## 8) References
 
 - **Architecture:** `docs/ARCHITECTURE/Architecture_document_Finalized.md`
-- **Master plan:** `docs/PLANS/00_Master-Delivery-Plan.md`
+- **Task backlog:** [`to-do.md`](../../to-do.md) (includes former master-plan phase tasks in §10)
 - **Implementation plans:** `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` through L2-08, L2-99.
 - **Architecture milestones (§15):** Milestones 1–6 in Architecture document.
 

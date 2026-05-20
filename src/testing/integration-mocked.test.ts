@@ -1,7 +1,7 @@
 /**
  * Integration Tests with Mocked Providers – Phase 10.1
  * Tests integration with real (mocked) model and tool providers.
- * @see Production-Readiness-Complete-Checklist.md Phase 10
+ * @see to-do.md §6 (testing and quality)
  */
 
 import { jest } from "@jest/globals";

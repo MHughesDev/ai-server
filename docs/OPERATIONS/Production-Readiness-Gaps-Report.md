@@ -196,7 +196,7 @@ From **L2-04 Gate Report and Known Gaps** and related docs:
 
 ## 8. Tests and quality (Cleanup checklist)
 
-From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
+From **`to-do.md`** §6 (testing) and former cleanup checklist:
 
 - **Missing unit tests (high value):**  
   `default-store`, `memory-gateway`, `evaluation_engine`, `engines/registry`, `workflows/registry`.
@@ -441,9 +441,8 @@ From **docs/PLANS/Cleanup-and-Finalization-Checklist.md**:
 
 ## 12. References
 
-- **Gate report:** `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md`
+- **Unified task backlog:** [`to-do.md`](../../to-do.md)
 - **L2-05 / L2-06 sprint handoffs:** Audit/secrets and memory limits are archived in **`docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` §14** and **`L2-06_Memory-and-Retrieval-Implementation.md` §14**.
-- **Cleanup checklist:** `docs/PLANS/Cleanup-and-Finalization-Checklist.md`
 - **Scope of Work:** `docs/PLANS/Scope-of-Work.md`
 - **SPEC 20 (config):** `docs/SPEC/20_Config_and_FeatureFlags.md`
 - **Architecture target state:** `docs/ARCHITECTURE/Architecture_document_Finalized.md` (Section 18)

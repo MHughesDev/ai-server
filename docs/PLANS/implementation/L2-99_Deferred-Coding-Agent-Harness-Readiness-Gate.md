@@ -18,7 +18,7 @@
 - **Runbook**: `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md` for gate workflow and exception handling.
 - **SPEC**: `docs/SPEC/20_Config_and_FeatureFlags.md` for canonical feature flags.
 - **Handoff:** Checklist, governance usage, CI, and references are in **§14 Sprint handoff archive** below.
-- **Templates**: `L2-99_Evidence-Checklist.md` (evidence/owner matrix), `L2-99_Decision-Memo-Template.md` (Phase 3 memo).
+- **Templates**: `to-do.md` OPS-006 (evidence/owner matrix), `L2-99_Decision-Memo-Template.md` (Phase 3 memo).
 - **Workflow test**: `src/governance/readiness-workflow.test.ts` — evidence → validate → score (Section 7.2).
 
 ## 1) Purpose and Outcome
@@ -420,7 +420,7 @@ This project is a UI-less API server; dashboard panels are out of scope and defe
 - [x] Types: EvidenceItem, RiskEntry, ReadinessScorecard, DecisionMemo, ExceptionRecord (`src/governance/types.ts`)
 - [x] ~~Schema feature flag `governance_harness_readiness_gate_active`~~ **Not in code (2026-03-24):** That key is **not** in `FeatureFlagsSchema`. This gate is **process + evidence**; autonomous harness execution is gated by **`harness_autonomous_execution_enabled`** per **`docs/SPEC/20_Config_and_FeatureFlags.md`**.
 - [x] Runbook: `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md` (evidence failure, scorecard disputes, sign-off, exceptions)
-- [x] Evidence checklist template: `docs/PLANS/implementation/L2-99_Evidence-Checklist.md`
+- [x] Evidence checklist template: `to-do.md` OPS-006
 - [x] Decision memo template: `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md`
 - [x] Unit tests: scorecard and threshold logic, evidence validation (`src/governance/*.test.ts`)
 - [ ] Phase 0: Assign evidence owners and obtain pre-scoring approval (process)
@@ -494,6 +494,6 @@ const result = validateEvidence(evidence, { maxStaleDays: 30, requireAllDimensio
 - Governance code: `src/governance/` (types, scorecard, evidence, index)
 - Config: `src/config/schema.ts` — use **`FeatureFlagsSchema`** / SPEC 20 (**no** `governance_harness_readiness_gate_active` key)
 - Runbook: `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md`
-- Evidence checklist template: `docs/PLANS/implementation/L2-99_Evidence-Checklist.md`
+- Evidence checklist template: `to-do.md` OPS-006
 - Decision memo template: `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md`
 - SPEC: `docs/SPEC/20_Config_and_FeatureFlags.md`, `docs/SPEC/22_Runbooks_and_Operations.md`

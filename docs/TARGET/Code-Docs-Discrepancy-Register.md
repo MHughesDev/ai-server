@@ -1,7 +1,7 @@
 # Code ↔ Docs discrepancy register
 
 **Audit date:** 2026-03-24  
-**Method:** Read `src/server/routes.ts`, `src/server/index.ts`, `src/server/middleware.ts`, `src/server/query-handler.ts`, `src/ingress/validate.ts`, `openapi.yaml`, `docs/SPEC/02_API_Contracts.md`, `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`, `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` (gap register excerpt).
+**Method:** Read `src/server/routes.ts`, `src/server/index.ts`, `src/server/middleware.ts`, `src/server/query-handler.ts`, `src/ingress/validate.ts`, `openapi.yaml`, `docs/SPEC/02_API_Contracts.md`, `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`, `to-do.md` §3 (gap register).
 
 **Legend:** **P0** = materially wrong contract/security/deploy; **P1** = misleading ops/readiness; **P2** = cleanup / planning doc drift.
 
@@ -53,7 +53,7 @@
 ## Recommended next steps
 
 1. Edit `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` §9.1, §9.3 (tenant usage), §9.8, §9.10, §10 async bullet per rows above.
-2. Reconcile `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` gap register against `routes.ts` / `validate.ts` / `rate-limit.ts`.
+2. Reconcile `to-do.md` §3 (`GAP-xxx`) against `routes.ts` / `validate.ts` / `rate-limit.ts`.
 3. Run `npm run verify:sow` and add **Last verified** to `docs/CURRENT/As-Built-Snapshot.md`.
 4. Optional: script to diff `routes.ts` path literals vs `openapi.yaml` paths on each PR.
 

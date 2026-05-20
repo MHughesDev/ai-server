@@ -11,4 +11,4 @@ Suggested fields:
 - `Last verified:` ISO date + method  
 - `Linked IDs:` WANT-xxx / GAP-xxx  
 
-See `docs/TARGET/Documentation-Finalization-Plan.md` for the full agent-first documentation rules.
+See `to-do.md` §7 and `docs/START-HERE.md` for documentation parity tasks and agent bootstrap rules.

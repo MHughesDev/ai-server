@@ -103,5 +103,5 @@ This runbook governs when autonomous harness behavior can be enabled in producti
 - **Autonomous harness**: `src/pipelines/coding-agent-pipeline.ts` (branch on `harness_autonomous_execution_enabled`; loop honors `proposed_next_action` from execution engine); `src/engines/execution_engine.ts` (returns `proposed_next_action` when task has `suggested_tool_ref`). Observability: `HARNESS_ITERATION` event (see `src/observability/events.ts`).
 - **Plan**: `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` (or `docs/PLANS/`).
 - **Handoff**: `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` §14 (usage, CI, references).
-- **Templates**: `L2-99_Evidence-Checklist.md`, `L2-99_Decision-Memo-Template.md` (same folder as plan).
+- **Templates**: `to-do.md` OPS-006, `L2-99_Decision-Memo-Template.md` (implementation folder).
 - **SPECs**: 18 Observability, 19 Security and Isolation, 20 Config and Feature Flags, 21 Test and Eval Plan, 22 Runbooks and Operations.

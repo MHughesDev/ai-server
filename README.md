@@ -15,7 +15,7 @@ Production-grade, modular, multimodal AI server with strict cognition boundary a
 - [Production Readiness — Go/No-Go & agent playbook](docs/OPERATIONS/Production-Readiness-Go-No-Go-Summary.md) – scorecard, deploy checklist, **agent briefing** to get to green CI and deployment
 - [Production Deployment Guide](docs/OPERATIONS/Production-Deployment-Guide.md) – canonical deployment and launch runbook
 - [Scope of Work](docs/PLANS/Scope-of-Work.md) – implementation phases, segments, file paths, verification (§4.1, §9)
-- [Master Delivery Plan](docs/PLANS/00_Master-Delivery-Plan.md)
+- [Unified task backlog](to-do.md)
 - [L2-01 Contracts and Project Scaffold](docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md) (includes §14 sprint handoff: checklist, compatibility matrix, runbook pointers)
 
 ## Documentation Governance

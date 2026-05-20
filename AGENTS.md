@@ -2,6 +2,7 @@
 
 **Primary briefing for production readiness and deploy work:** read and follow:
 
+- [`to-do.md`](to-do.md) — **unified task backlog** (gaps, stubs, launch checklist, WANT/GAP IDs).
 - [`docs/OPERATIONS/Production-Readiness-Go-No-Go-Summary.md`](docs/OPERATIONS/Production-Readiness-Go-No-Go-Summary.md) — includes **AGENT PLAYBOOK** (phases, files to search, verification commands, constraints).
 
 **Definition of done (technical):** `npm run verify:sow` passes at repo root; align `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` with `src/server/routes.ts`; fix Docker/K8s/deploy issues per the playbook.

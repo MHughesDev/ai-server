@@ -1,7 +1,7 @@
 /**
  * Load and Chaos Tests – Phase 10.1
  * Tests failure injection, high-volume scenarios, and resilience.
- * @see Production-Readiness-Complete-Checklist.md Phase 10
+ * @see to-do.md §6 (testing and quality)
  */
 
 import { jest } from "@jest/globals";

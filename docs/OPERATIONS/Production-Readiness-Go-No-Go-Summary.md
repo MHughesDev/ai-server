@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-03-28
 
-**Documentation authority:** Target architecture — `docs/ARCHITECTURE/Architecture_document_Finalized.md`. Implementation status and gaps — `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`, `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`.
+**Documentation authority:** Target architecture — `docs/ARCHITECTURE/Architecture_document_Finalized.md`. **Open tasks** — [`to-do.md`](../../to-do.md). Implementation status narrative — `docs/OPERATIONS/Production-Readiness-Gaps-Report.md`.
 
 **Path note:** Canonical tree is **`docs/`** (lowercase). Operations docs live under `docs/OPERATIONS/`; architecture under `docs/ARCHITECTURE/`; runbooks under `docs/OPERATIONS/RUNBOOKS/`. See `docs/TARGET/docs-move-map.md` if a link breaks on case-sensitive systems.
 
@@ -70,7 +70,7 @@ Use the repo search tool or grep (examples below).
 1. Extract route list from `src/server/routes.ts` (GET/POST paths).
 2. Update `openapi.yaml` to match; remove or mark deprecated paths.
 3. Update `docs/SPEC/02_API_Contracts.md` for sync/async/jobs/admin/ops routes.
-4. Reconcile `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` and `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` **gap register rows** that contradict current code (mark fixed, remove stale, or add “verified” notes).
+4. Reconcile `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` and [`to-do.md`](../../to-do.md) **GAP-xxx** rows that contradict current code (mark fixed, remove stale, or add “verified” notes).
 
 **Phase 3 — Deployment artifacts (P0)**
 
@@ -130,7 +130,7 @@ npm run acceptance:observability   # optional
 
 5. **Route truth check** — After any HTTP changes, confirm `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` still match **`src/server/routes.ts`** (canonical path list). Update specs if routes were added, removed, or renamed.
 6. **Gaps report** — Walk `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` against current code; mark items fixed, strike stale claims, or add a “verified as of YYYY-MM-DD” note so the register does not contradict the implementation.
-7. **SOW / gap-closure doc** — Reconcile `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` with the same bar: no row should assert “missing” for shipped behavior or “complete” for unimplemented behavior without evidence.
+7. **Task backlog** — Reconcile [`to-do.md`](../../to-do.md) §3 (`GAP-xxx`) with the same bar: no row should assert “missing” for shipped behavior or “complete” for unimplemented behavior without evidence.
 8. **Deployment guide honesty** — Edit `docs/OPERATIONS/Production-Deployment-Guide.md` so procedures, queue backends, and probe/auth behavior match what `Dockerfile`, `docker-compose.yml`, `k8s/`, and `src/queue/` actually do.
 
 ### Phase 3 — Container and deploy path
@@ -159,7 +159,7 @@ npm run acceptance:observability   # optional
 24. **Alerts and on-call** — Agree who gets paged for failed deploys, error-rate spikes, or dependency outages during rollout.
 25. **Runbooks** — Refresh `docs/SPEC/22_Runbooks_and_Operations.md` and `docs/OPERATIONS/RUNBOOKS/*` for this version (rollback, incident, deploy).
 26. **Rollback drill (L2-08)** — Execute and record per `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` (or your program’s equivalent).
-27. **Evidence pack (L2-99)** — Fill `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` with owners, dates, and links to CI runs, staging proof, and config reviews.
+27. **Evidence pack (L2-99)** — Complete `to-do.md` OPS-006 (owners, dates, links to CI runs, staging proof, config reviews).
 28. **Formal GO / NO-GO** — Hold decision meeting (or async approval) and record outcome; narrow/internal releases may proceed with **written risk acceptance** instead of full GO.
 
 ### Phase 6 — Organization and environment (outside the repo)
@@ -218,7 +218,7 @@ npm run acceptance:observability   # optional
 | Terraform / IaC | **Partial** | Exists; environment-specific validation required. |
 | Runbooks | **Partial** | `docs/SPEC/22_Runbooks_and_Operations.md`, `docs/OPERATIONS/RUNBOOKS/*`; L2-08 still `in progress`. |
 | Rollout readiness | **Partial** | `platform_production_rollout_enabled`, `src/rollout/policy.ts`; drills and sign-off open. |
-| Governance / evidence | **Blocked** | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` is a template — fill owners/evidence. |
+| Governance / evidence | **Blocked** | `to-do.md` OPS-006 — fill owners/evidence. |
 | Documentation accuracy | **Partial** | SPEC 02 + OpenAPI reconciled to routes; gaps report / SOW rows may still need manual sweep. |
 | Performance / load | **Unknown** | Plans define SLOs; committed load-test artifacts and production baselines not established here. |
 
@@ -243,7 +243,7 @@ npm run acceptance:observability   # optional
 
 - [x] `openapi.yaml` matches implemented routes
 - [x] `docs/SPEC/02_API_Contracts.md` matches sync/async/job behavior in `src/server/routes.ts`
-- [ ] `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` and `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` reconciled with current code
+- [ ] `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` and `to-do.md` §3 reconciled with current code
 - [ ] No contradictory “complete” or “missing” claims for the same feature
 
 **Evidence:** Doc PR + reviewer sign-off.
@@ -309,7 +309,7 @@ npm run acceptance:observability   # optional
 
 - [ ] Runbooks current (`docs/SPEC/22_Runbooks_and_Operations.md`, `docs/OPERATIONS/RUNBOOKS/*`)
 - [ ] Rollback drill executed and recorded (per L2-08)
-- [ ] `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` filled (owners, evidence links, dates)
+- [ ] `to-do.md` OPS-006 filled (owners, evidence links, dates)
 - [ ] L2-08 production readiness review tasks complete where required
 - [ ] Formal go/no-go decision recorded
 
@@ -348,13 +348,12 @@ npm run acceptance:observability   # optional
 | Topic | Path |
 |-------|------|
 | Gaps and implementation status | `docs/OPERATIONS/Production-Readiness-Gaps-Report.md` |
-| Gap-closure SOW / backlog | `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` |
-| Master plan / phased readiness | `docs/PLANS/00_Master-Delivery-Plan.md` |
+| Unified task backlog | [`to-do.md`](../../to-do.md) |
+| Phased delivery tasks | `to-do.md` §10 |
 | Scope of work | `docs/PLANS/Scope-of-Work.md` |
-| Cleanup checklist | `docs/PLANS/Cleanup-and-Finalization-Checklist.md` |
-| L2-04 observability gate | `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` |
+| L2-04 observability gaps | `to-do.md` §6 (QA-009, QA-010) |
 | L2-08 rollout / ops | `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` |
-| L2-99 evidence template | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` |
+| L2-99 evidence tasks | `to-do.md` OPS-006 |
 | Config & flags | `docs/SPEC/20_Config_and_FeatureFlags.md` |
 | API contracts | `docs/SPEC/02_API_Contracts.md` |
 | Runbooks index | `docs/SPEC/22_Runbooks_and_Operations.md` |
@@ -370,7 +369,7 @@ npm run acceptance:observability   # optional
 1. **Older gap registers** may list items (e.g. missing `/token/exchange`, static `/readyz`) that **code has since implemented** — re-verify line-by-line against `src/server/routes.ts`.  
 2. **`docs/OPERATIONS/Production-Deployment-Guide.md`** is optimistic in places; it must stay consistent with **branch health** and **actual** queue/backend support.  
 3. **`openapi.yaml`** and **`docs/SPEC/02_API_Contracts.md`** must match the live route table.  
-4. **SOW / Scope-of-Work** “implementation-complete” language does **not** automatically mean production-ready — see `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`.
+4. **SOW / Scope-of-Work** “implementation-complete” language does **not** automatically mean production-ready — see `to-do.md` §3 (`GAP-xxx`).
 
 ---
 
@@ -417,7 +416,7 @@ These are not always blocking for a first production cut, but teams often want t
 
 - [ ] `/v1/version` or health shows expected `release_id` / `build_id`.
 - [ ] Sample authenticated `POST /v1/query` succeeds.
-- [ ] Error rate and latency within agreed bounds (see `docs/PLANS/00_Master-Delivery-Plan.md` SLO section).
+- [ ] Error rate and latency within agreed bounds (see Architecture / SPEC 01 SLO targets; track in release record).
 - [ ] On-call notified; alert routing works for a test or synthetic check.
 
 ### Extended references (infra & automation)

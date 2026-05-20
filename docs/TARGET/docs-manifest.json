@@ -1,20 +1,30 @@
 {
-  "version": 1,
+  "version": 2,
   "canonical_docs_root": "docs",
   "bootstrap_order": [
     "AGENTS.md",
+    "to-do.md",
     "docs/START-HERE.md",
-    "docs/CURRENT/As-Built-Snapshot.md",
-    "docs/TARGET/Target-State-Backlog.md"
+    "docs/CURRENT/As-Built-Snapshot.md"
   ],
   "entries": [
+    {
+      "path": "to-do.md",
+      "doc_role": "checklist",
+      "canonical_for": "unified task backlog (WANT/GAP/PR/stubs)",
+      "priority": 0,
+      "bootstrap_order": 2,
+      "last_verified": "2026-05-20",
+      "owner": "platform",
+      "tags": ["agent", "backlog", "readiness"]
+    },
     {
       "path": "docs/START-HERE.md",
       "doc_role": "checklist",
       "canonical_for": "new-conversation bootstrap order",
       "priority": 0,
-      "bootstrap_order": 2,
-      "last_verified": "2026-03-24",
+      "bootstrap_order": 3,
+      "last_verified": "2026-05-20",
       "owner": "platform",
       "tags": ["agent", "navigation"]
     },
@@ -23,20 +33,10 @@
       "doc_role": "current-state",
       "canonical_for": "dated as-built summary (when filled)",
       "priority": 0,
-      "bootstrap_order": 3,
-      "last_verified": "2026-03-24",
-      "owner": "platform",
-      "tags": ["agent", "current"]
-    },
-    {
-      "path": "docs/TARGET/Target-State-Backlog.md",
-      "doc_role": "normative-target",
-      "canonical_for": "WANT-xxx target requirements",
-      "priority": 1,
       "bootstrap_order": 4,
       "last_verified": "2026-03-24",
       "owner": "platform",
-      "tags": ["agent", "target"]
+      "tags": ["agent", "current"]
     },
     {
       "path": "docs/OPERATIONS/Production-Readiness-Go-No-Go-Summary.md",
@@ -47,6 +47,16 @@
       "last_verified": "2026-03-24",
       "owner": "platform",
       "tags": ["readiness", "agent"]
+    },
+    {
+      "path": "docs/OPERATIONS/Production-Readiness-Gaps-Report.md",
+      "doc_role": "current-state",
+      "canonical_for": "implementation status narrative and gap detail",
+      "priority": 1,
+      "bootstrap_order": 11,
+      "last_verified": "2026-03-24",
+      "owner": "platform",
+      "tags": ["readiness", "gaps"]
     },
     {
       "path": "docs/SPEC/02_API_Contracts.md",

@@ -16,4 +16,4 @@ Add `docs/OPERATIONS/Production-Readiness-Go-No-Go-Summary.md` + `docs/OPERATION
 
 ## Profile D — target vs current
 
-Add `docs/TARGET/Target-State-Backlog.md` (reference by WANT ID; avoid loading entire file if possible).
+Add `to-do.md` §2 (reference by WANT ID; avoid loading entire file if possible).

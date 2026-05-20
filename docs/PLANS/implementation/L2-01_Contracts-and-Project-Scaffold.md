@@ -45,7 +45,7 @@ Establish the contract-first baseline for the entire AI server so downstream imp
 
 ## 3) Dependencies
 ### 3.1 Upstream Dependencies
-- `docs/PLANS/00_Master-Delivery-Plan.md` approved sequencing.
+- `to-do.md` §10 — delivery phase sequencing.
 - Architecture invariants accepted by owners.
 
 ### 3.2 Downstream Consumers

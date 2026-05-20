@@ -10,7 +10,7 @@
 - Priority: `P0`
 - Created: 2026-02-18
 - Last Updated: 2026-02-18
-- Implementation: Phase 0–4 implemented; see Implementation Summary (section 14), **§15 Sprint handoff archive** below, and `L2-04_Gate-Report-and-Known-Gaps.md`.
+- Implementation: Phase 0–4 implemented; see Implementation Summary (section 14), **§15 Sprint handoff archive** below, and `to-do.md` §6 (QA-009, QA-010).
 - Review Cadence: Daily telemetry review + weekly quality gate review
 
 ## 1) Purpose and Outcome
@@ -436,7 +436,7 @@ The following was implemented for L2-04 (observability and evaluation).
 
 ### Phase 4 – Gate and handoff
 - **Observability acceptance suite** (`src/observability/observability-acceptance.test.ts`): Validates event taxonomy, redaction, trace context, metrics, **event order / span hierarchy**, eval baseline, context propagation. Run: `npm run acceptance:observability`.
-- **Gate report and known gaps** (`docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md`): Gate summary, known gaps, verification commands.
+- **Known gaps (consolidated):** `to-do.md` §6 — eval baseline expansion, alert simulation drill.
 - **Sprint handoff detail:** Full checklist, event/metric contracts, config, and CI commands for L2-05 / L2-06 are in **§15 Sprint handoff archive** below (merged from the former `L2-04_Handoff.md`).
 
 ### Handoff for L2-05 / L2-06 (quick pointers)
@@ -521,7 +521,7 @@ Events are emitted when `observability_required_events_v1` is true. Payloads are
 
 ### 8) References
 
-- Gate report and known gaps: `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md`
+- Known gaps: `to-do.md` §6
 - Event schema and redaction: `src/observability/events.ts`, `redact.ts`, `emitter.ts`
 - Trace context: `src/observability/context.ts`
 - Metrics: `src/observability/metrics.ts`

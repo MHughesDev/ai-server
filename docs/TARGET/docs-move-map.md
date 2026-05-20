@@ -38,8 +38,8 @@
 
 | Old path | New path |
 |---|---|
-| `Docs/TARGET/Target-State-Backlog.md` | `docs/TARGET/Target-State-Backlog.md` |
-| `docs/TARGET/Documentation-Finalization-Plan.md` | `docs/TARGET/Documentation-Finalization-Plan.md` (keep) |
+| `Docs/TARGET/Target-State-Backlog.md` | **Removed 2026-05-20** — merged into repo root `to-do.md` §2 |
+| `docs/TARGET/Documentation-Finalization-Plan.md` | **Removed 2026-05-20** — merged into `to-do.md` §7 |
 
 ### 2.3 Operations and runbooks
 
@@ -92,11 +92,11 @@
 
 | Old path | New path |
 |---|---|
-| `Docs/PLANS/00_Master-Delivery-Plan.md` | `docs/PLANS/00_Master-Delivery-Plan.md` |
-| `Docs/PLANS/01_Platform-Foundation-and-Contracts.md` … `99_Deferred-…` | **Removed (2026-03-29):** Draft plans `docs/PLANS/01_*.md`–`99_*.md` duplicated the L2 implementation series. Canonical mapping: **`docs/PLANS/00_Master-Delivery-Plan.md` §0.1** → `docs/PLANS/implementation/L2-*_*.md`. |
+| `Docs/PLANS/00_Master-Delivery-Plan.md` | **Removed 2026-05-20** — phase tasks in `to-do.md` §10; L2 mapping: `docs/PLANS/implementation/L2-*_*.md` |
+| `Docs/PLANS/01_Platform-Foundation-and-Contracts.md` … `99_Deferred-…` | **Removed (2026-03-29):** Draft plans duplicated L2 implementation series. |
 | `Docs/PLANS/Scope-of-Work.md` | `docs/PLANS/Scope-of-Work.md` |
-| `Docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` | `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` |
-| `Docs/PLANS/Cleanup-and-Finalization-Checklist.md` | `docs/PLANS/Cleanup-and-Finalization-Checklist.md` |
+| `Docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md` | **Removed 2026-05-20** — `to-do.md` §3 |
+| `Docs/PLANS/Cleanup-and-Finalization-Checklist.md` | **Removed 2026-05-20** — `to-do.md` §6–§7 |
 | `Docs/PLANS/PLAN_TEMPLATE.md` | `docs/PLANS/PLAN_TEMPLATE.md` |
 
 ### 2.6 Plans implementation docs
@@ -108,7 +108,7 @@
 | `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` | `docs/PLANS/implementation/L2-01_Contracts-and-Project-Scaffold.md` |
 | `docs/PLANS/implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` | `docs/PLANS/implementation/L2-02_MVP-Runtime-Single-Endpoint-Chat.md` |
 | `docs/PLANS/implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md` | `docs/PLANS/implementation/L2-03_Policy-Budgeting-and-Routing-Implementation.md` |
-| `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` | `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` |
+| `docs/PLANS/implementation/L2-04_Gate-Report-and-Known-Gaps.md` | **Removed 2026-05-20** — `to-do.md` §6 |
 | `docs/PLANS/implementation/L2-04_Observability-and-Evaluation-Implementation.md` | `docs/PLANS/implementation/L2-04_Observability-and-Evaluation-Implementation.md` |
 | `docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` | `docs/PLANS/implementation/L2-05_Security-Isolation-and-Compliance-Implementation.md` |
 | `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md` | `docs/PLANS/implementation/L2-06_Memory-and-Retrieval-Implementation.md` |
@@ -116,7 +116,7 @@
 | `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` | `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md` |
 | `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md` | `docs/PLANS/implementation/L2-99_Decision-Memo-Template.md` |
 | `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` | `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` |
-| `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` |
+| `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` | **Removed 2026-05-20** — `to-do.md` OPS-006 |
 | `docs/PLANS/implementation/L2-Chroma-Vector-Backend-Implementation.md` | `docs/PLANS/implementation/L2-Chroma-Vector-Backend-Implementation.md` |
 
 ---
@@ -131,7 +131,7 @@
 | `docs/CURRENT/Route-Inventory.md` | Route table extracted from `src/server/routes.ts` |
 | `docs/CURRENT/Config-Flags-Inventory.md` | Env + feature flag inventory from `src/config/schema.ts` |
 | `docs/CURRENT/Capability-Matrix.md` | Capability to implementation matrix |
-| `docs/CURRENT/Known-Deltas.md` | Current known gaps vs target |
+| `docs/CURRENT/Known-Deltas.md` | **Removed 2026-05-20** — use `to-do.md` |
 | `docs/API/OpenAPI-Authority.md` | Contract authority and ownership rules |
 | `docs/API/Route-to-Contract-Map.md` | Route -> OpenAPI -> SPEC traceability |
 | `docs/TARGET/docs-manifest.json` | Machine-readable navigation manifest |
