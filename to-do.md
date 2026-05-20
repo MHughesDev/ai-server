@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-001 — operational bearer token enforced + tested (2026-05-20)
+**Last task closed:** PR-002 — production model providers validated at bootstrap (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -48,7 +48,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | ID | Task | Status | Priority | Evidence / files |
 |----|------|--------|----------|------------------|
 | PR-001 | Set `OPERATIONAL_BEARER_TOKEN` for protected ops endpoints | done | P0 | Bootstrap fail-fast in production (`bootstrap/index.ts`); routes require Bearer when set; `.env.example` + `operational-auth.integration.test.ts` (2026-05-20). **Deploy:** set env in prod/K8s (`k8s/base/secret.yaml`). |
-| PR-002 | Configure real model providers (`MODEL_GATEWAY_PROVIDERS_JSON` / registry); no stub-only in production | partial | P0 | `gateways/model-gateway.ts`, `bootstrap.test.ts` |
+| PR-002 | Configure real model providers (`MODEL_GATEWAY_PROVIDERS_JSON` / registry); no stub-only in production | done | P0 | `assert-production-model-gateway.ts` + bootstrap: `openai_compatible` only in prod, API key env required, registry must route to real provider; `.env.example`; tests (2026-05-20). **Deploy:** set `MODEL_GATEWAY_*` + `MODEL_PROVIDER_API_KEY` in prod. |
 | PR-003 | Set auth: `AUTH_AI_JWT_SECRET`, IdP/app registry JSON, scopes | open | P0 | `config/schema.ts`, `server/auth.ts` |
 | PR-004 | Set `RELEASE_ID` / `BUILD_ID` when `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | open | P0 | `bootstrap/index.ts` |
 | PR-005 | Replace stub secrets manager with Vault/KMS (or documented prod backend) | open | P0 | `security/secret-scope.ts` (stub placeholder) |
@@ -97,7 +97,7 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 | WANT-012 | Secrets never in logs/events; consistent redaction | partial | P0 | Audit emitters at source; sync-sink thoroughness |
 | WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | partial | P0 | Non-workflow multi-hop paths; per-hop telemetry accuracy |
 | WANT-015 | Global per-request deadline | partial | P0 | Deeper pipeline deadline audit beyond HTTP wrapper |
-| WANT-023 | Production real model providers (no stub-only) | partial | P0 | Wire prod config; optional API-key-at-startup checks |
+| WANT-023 | Production real model providers (no stub-only) | partial | P0 | Bootstrap validates provider + key + registry (2026-05-20); dev defaults remain framed/stub |
 | WANT-026 | Model retry policy by error class | partial | P1 | Richer provider body/error-code mapping |
 | WANT-027 | Gateway timeouts without timer leaks | partial | P1 | Deterministic error mapping product-wide |
 | WANT-029 | Tool sandbox + auditable identity | partial | P0 | Custom tools/registry beyond builtins |
@@ -131,8 +131,8 @@ Former `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`. Closed item
 | GAP-AUTH-003 | Medium | Production auth boundary — any “presence only” paths | partial | Re-verify vs `docs/SPEC/04`; close remaining gaps |
 | GAP-API-001 | Medium | Async contract vs sync `POST /v1/query` | partial | Optional cross-replica idempotency; product decision on `ResponseEnvelope.mode` |
 | GAP-API-002 | Medium | All client error shapes in OpenAPI/SPEC 02 | partial | Keep OpenAPI in sync; optional full `ResponseEnvelope` on errors |
-| GAP-MODEL-001 | High | Production provider config; stub still default without config | partial | Wire prod providers; retire stub default in query path |
-| GAP-MODEL-002 | Medium | Capability + scope routing E2E | partial | Provider config in schema + integration proof |
+| GAP-MODEL-001 | High | Production provider config; stub still default without config | done | Bootstrap fail-fast + registry routing (PR-002, 2026-05-20); query path uses `createProviderBackedModelGateway` when configured |
+| GAP-MODEL-002 | Medium | Capability + scope routing E2E | partial | Provider config in schema + integration proof; optional live E2E |
 | GAP-TOOL-001 | Medium | Real tool execution in production | partial | Enable `ExecutableToolGateway` under policy |
 | GAP-TOOL-002 | Medium | Sandbox + identity (implemented) | partial | Integration tests for sandbox enforcement |
 | GAP-BUDGET-001 | Medium | Deadline/cost on non-workflow paths | partial | Audit all pipeline entrypoints |

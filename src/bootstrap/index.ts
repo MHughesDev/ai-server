@@ -5,6 +5,7 @@
 
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertProductionModelGateway } from "../config/assert-production-model-gateway.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
@@ -94,16 +95,7 @@ export function bootstrap(): Config {
       "OPERATIONAL_BEARER_TOKEN is required in production to protect operational endpoints"
     );
   }
-  if (config.env === "production") {
-    const hasRealModelProvider = config.model_gateway.providers.some(
-      (p) => p.kind === "openai_compatible"
-    );
-    if (!hasRealModelProvider) {
-      throw new Error(
-        "Production requires at least one model_gateway provider with kind openai_compatible (set MODEL_GATEWAY_PROVIDERS_JSON). Stub/framed_echo-only defaults are for dev/staging (WANT-023)."
-      );
-    }
-  }
+  assertProductionModelGateway(config);
   assertProductionSinkPathsWritable(config);
   if (
     config.env === "production" &&

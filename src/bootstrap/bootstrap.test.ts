@@ -44,6 +44,47 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow("openai_compatible");
   });
 
+  it("fails in production when openai_compatible provider API key env is empty (PR-002)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: "openai",
+        kind: "openai_compatible",
+        default_model: "gpt-4o-mini",
+        api_key_env: "MODEL_PROVIDER_API_KEY",
+      },
+    ]);
+    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
+      chat: { default: { provider: "openai", model: "gpt-4o-mini" } },
+    });
+    delete process.env.MODEL_PROVIDER_API_KEY;
+    expect(() => bootstrap()).toThrow(/missing API key/);
+  });
+
+  it("bootstraps in production with real model provider config (PR-002)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
+    process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: "openai",
+        kind: "openai_compatible",
+        default_model: "gpt-4o-mini",
+        base_url: "https://api.openai.com/v1",
+        api_key_env: "MODEL_PROVIDER_API_KEY",
+      },
+    ]);
+    process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
+      chat: { default: { provider: "openai", model: "gpt-4o-mini" } },
+    });
+    const cfg = bootstrap();
+    expect(cfg.model_gateway.providers.some((p) => p.kind === "openai_compatible")).toBe(
+      true
+    );
+    expect(cfg.model_gateway.registry.chat?.default?.provider).toBe("openai");
+  });
+
   it("fails production rollout when AUTH_AI_JWT_SECRET is weak", () => {
     process.env.NODE_ENV = "production";
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
@@ -166,6 +207,7 @@ describe("bootstrap", () => {
     process.env.MODEL_GATEWAY_REGISTRY_JSON = JSON.stringify({
       chat: { default: { provider: "openai1", model: "gpt-4o-mini" } },
     });
+    process.env.OPENAI_API_KEY = "sk-test-bootstrap-only";
     process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
       {
         issuer: "https://idp.example.com",
@@ -194,6 +236,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
+    process.env.OPENAI_API_KEY = "sk-test-bootstrap-only";
     process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
       {
         id: "openai1",
