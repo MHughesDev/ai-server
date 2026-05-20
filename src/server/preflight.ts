@@ -211,6 +211,15 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
       "Connection, concurrency queue, and body limits are explicitly configured",
   });
   add({
+    id: "shutdown.drain_timeout",
+    status: (() => {
+      const ms = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "0", 10);
+      return Number.isInteger(ms) && ms > 0 ? "pass" : "fail";
+    })(),
+    message: "SHUTDOWN_DRAIN_TIMEOUT_MS configured for SIGTERM/SIGINT draining",
+    detail: { drain_timeout_ms: process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? null },
+  });
+  add({
     id: "timeouts.request_processing",
     status: parseInt(process.env.REQUEST_PROCESSING_TIMEOUT_MS ?? "120000", 10) > 0 ? "pass" : "fail",
     message: "Request processing timeout is configured",

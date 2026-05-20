@@ -30,6 +30,11 @@ import {
 } from "./rate-limit.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 import { loadConnectionLimitConfig } from "../config/connection-limits.js";
+import {
+  beginInFlightRequest,
+  endInFlightRequest,
+  isServerDraining,
+} from "./graceful-shutdown.js";
 import { RequestQueue, sendBackpressureResponse, handleCors } from "./transport.js";
 import { type JobQueueService, IdempotencyKeyConflictError } from "../queue/job-queue.js";
 import {
@@ -121,9 +126,28 @@ export async function handleRequest(
   });
   if (corsHandled) return;
 
+  if (isServerDraining()) {
+    res.writeHead(503, {
+      "Content-Type": "application/json",
+      "Retry-After": "30",
+    });
+    res.end(JSON.stringify({ error: "Server is shutting down" }));
+    return;
+  }
+
+  if (!beginInFlightRequest()) {
+    res.writeHead(503, {
+      "Content-Type": "application/json",
+      "Retry-After": "30",
+    });
+    res.end(JSON.stringify({ error: "Server is shutting down" }));
+    return;
+  }
+
   // L2-06 Phase 7.1: Request queue / backpressure
   const queueRelease = await requestQueue.acquire();
   if (!queueRelease) {
+    endInFlightRequest();
     sendBackpressureResponse(res, 10);
     return;
   }
@@ -132,6 +156,7 @@ export async function handleRequest(
     await processRequest(req, res);
   } finally {
     queueRelease();
+    endInFlightRequest();
   }
 }
 

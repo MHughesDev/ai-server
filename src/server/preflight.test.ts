@@ -38,6 +38,7 @@ describe("production preflight", () => {
     process.env.MAX_CONCURRENT_REQUESTS = "100";
     process.env.MAX_REQUEST_QUEUE_DEPTH = "50";
     process.env.MAX_BODY_BYTES = "1000000";
+    process.env.SHUTDOWN_DRAIN_TIMEOUT_MS = "30000";
     process.env.REQUEST_PROCESSING_TIMEOUT_MS = "60000";
     process.env.MEMORY_BACKEND = "vector";
     process.env.REDIS_URL = "redis://redis:6379";

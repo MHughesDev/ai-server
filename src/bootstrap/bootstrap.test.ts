@@ -81,6 +81,11 @@ function applyProductionConnectionLimitsEnv(): void {
   process.env.MAX_BODY_BYTES = "1000000";
 }
 
+/** Production graceful shutdown drain SLO (PR-022). */
+function applyProductionGracefulShutdownEnv(): void {
+  process.env.SHUTDOWN_DRAIN_TIMEOUT_MS = "30000";
+}
+
 /** Production persistent memory (PR-006). */
 function applyProductionMemoryEnv(): void {
   process.env.MEMORY_BACKEND = "vector";
@@ -180,6 +185,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.MEMORY_BACKEND = "vector";
     process.env.CHROMA_URL = "http://chroma:8000";
     delete process.env.REDIS_URL;
@@ -240,6 +246,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.OBSERVABILITY_REDACTION_LEVEL = "none";
     expect(() => bootstrap()).toThrow(/OBSERVABILITY_REDACTION_LEVEL=minimal/);
   });
@@ -266,6 +273,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     const cfg = bootstrap();
     expect(cfg.requireAuthHeader).toBe(true);
     expect(cfg.auth.query_required_scopes).toContain("query:invoke");
@@ -287,6 +295,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -309,6 +318,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -348,6 +358,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.TLS_KEY_PATH;
@@ -355,6 +366,20 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(
       "Production rollout requires TLS_KEY_PATH and TLS_CERT_PATH"
     );
+  });
+
+  it("fails in production when SHUTDOWN_DRAIN_TIMEOUT_MS is missing (PR-022)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
+    applyProductionConnectionLimitsEnv();
+    delete process.env.SHUTDOWN_DRAIN_TIMEOUT_MS;
+    expect(() => bootstrap()).toThrow(/SHUTDOWN_DRAIN_TIMEOUT_MS/);
   });
 
   it("fails in production when connection limit env is missing (PR-021)", () => {
@@ -367,6 +392,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     delete process.env.MAX_CONNECTIONS;
     expect(() => bootstrap()).toThrow(/MAX_CONNECTIONS/);
   });
@@ -381,6 +407,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.TOOL_EXECUTION_ENABLED = "true";
     delete process.env.TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF;
     expect(() => bootstrap()).toThrow(/TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF=true/);
@@ -396,6 +423,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     applyProductionToolExecutionEnv();
     expect(() => bootstrap()).not.toThrow();
   });
@@ -410,6 +438,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -430,6 +459,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
@@ -448,6 +478,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     applyProductionRolloutEnv();
     const cfg = bootstrap();
     expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
@@ -463,6 +494,7 @@ describe("bootstrap", () => {
     applyProductionSinksEnv();
     applyProductionTelemetryRedactionEnv();
     applyProductionConnectionLimitsEnv();
+    applyProductionGracefulShutdownEnv();
     process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-bootstrap-events.ndjson";
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;

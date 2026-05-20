@@ -14,6 +14,7 @@ import { assertProductionPersistentSinks } from "../config/assert-production-per
 import { assertProductionTelemetryRedaction } from "../config/assert-production-telemetry-redaction.js";
 import { assertProductionToolExecution } from "../config/assert-production-tool-execution.js";
 import { assertProductionConnectionLimits } from "../config/assert-production-connection-limits.js";
+import { assertProductionGracefulShutdown } from "../config/assert-production-graceful-shutdown.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
@@ -88,6 +89,7 @@ export function bootstrap(): Config {
   assertProductionTelemetryRedaction(config);
   assertProductionToolExecution(config);
   assertProductionConnectionLimits();
+  assertProductionGracefulShutdown();
   assertProductionSinkPathsWritable(config);
   if (
     config.env === "production" &&

@@ -19,17 +19,16 @@ import { createConfiguredTelemetryEmitter } from "../config/telemetry-redaction.
 import {
   setObservability,
   getTraceContext,
-  getEventSink,
   safeLogError,
 } from "../observability/index.js";
 import type { IObservability } from "../observability/types.js";
-import { shutdownPersistentAuditFileSink } from "../security/audit-logger.js";
 import {
   ConnectionTracker,
   getConnectionTracker,
   resetConnectionTrackerForTest,
 } from "./connection-tracker.js";
-import { handleRequest } from "./routes.js";
+import { registerGracefulShutdownHandlers, isServerDraining } from "./graceful-shutdown.js";
+import { getJobQueueService, handleRequest } from "./routes.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
@@ -52,7 +51,7 @@ function attachConnectionGuard(server: Server, tracker: ConnectionTracker): void
 
 function requestListener(tracker: ConnectionTracker) {
   return (req: IncomingMessage, res: ServerResponse): void => {
-    if (tracker.isDraining()) {
+    if (isServerDraining() || tracker.isDraining()) {
       res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "30" });
       res.end(JSON.stringify({ error: "Server is shutting down" }));
       return;
@@ -129,83 +128,17 @@ function main(): void {
     }
   }
 
-  let shuttingDown = false;
-  const DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "30000", 10);
-
-  const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    console.info(`[server] received ${signal}, starting graceful shutdown...`);
-
-    tracker.setDraining(true);
-
-    const httpClosePromise = new Promise<void>((resolve, reject) => {
-      httpServer.close((err) => {
-        if (err) reject(err);
-        else {
-          console.info("[server] HTTP server closed, no longer accepting connections");
-          resolve();
-        }
-      });
-    });
-
-    const drainStart = Date.now();
-    const checkConnections = (): Promise<void> => {
-      return new Promise((resolve) => {
-        const check = () => {
-          const elapsed = Date.now() - drainStart;
-          const activeConnections = tracker.getStats().activeConnections;
-
-          if (activeConnections === 0 || elapsed >= DRAIN_TIMEOUT_MS) {
-            if (activeConnections > 0) {
-              console.warn(
-                `[server] drain timeout reached with ${activeConnections} active connections`
-              );
-            } else {
-              console.info("[server] all connections drained gracefully");
-            }
-            resolve();
-          } else {
-            setTimeout(check, 100);
-          }
-        };
-        check();
-      });
-    };
-
-    try {
-      await checkConnections();
-
-      try {
-        await shutdownPersistentAuditFileSink();
-      } catch (err) {
-        console.error("[server] audit file sink shutdown error", safeLogError(err));
-      }
-      try {
-        await getEventSink()?.close?.();
-      } catch (err) {
-        console.error("[server] event sink shutdown error", safeLogError(err));
-      }
-
-      if (httpsServer) {
-        const tlsServer = httpsServer;
-        await new Promise<void>((resolve, reject) => {
-          tlsServer.close((err) => (err ? reject(err) : resolve()));
-        });
-        console.info("[server] HTTPS server closed");
-      }
-
-      await httpClosePromise;
-
-      console.info("[server] graceful shutdown complete");
+  registerGracefulShutdownHandlers({
+    connectionTracker: tracker,
+    httpServer,
+    httpsServer,
+    stopWorkers: async () => {
+      await getJobQueueService()?.stop();
+    },
+    onShutdownComplete: () => {
       process.exit(0);
-    } catch (err) {
-      console.error("[server] graceful shutdown failed", safeLogError(err));
-      process.exit(1);
-    }
-  };
-  process.on("SIGINT", () => void shutdown("SIGINT"));
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+    },
+  });
 }
 
 const scriptPath = (process.argv[1] ?? "").replace(/\\/g, "/");

@@ -26,6 +26,8 @@ spec:
         prometheus.io/port: "3000"
         prometheus.io/path: "/metrics"
     spec:
+      # PR-022: must exceed SHUTDOWN_DRAIN_TIMEOUT_MS (30s) + sink flush buffer
+      terminationGracePeriodSeconds: 45
       serviceAccountName: ai-server
       securityContext:
         runAsUser: 1001

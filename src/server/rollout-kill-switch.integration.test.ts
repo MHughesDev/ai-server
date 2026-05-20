@@ -67,6 +67,7 @@ function applyProductionBootstrapEnv(): void {
   process.env.MAX_CONCURRENT_REQUESTS = "100";
   process.env.MAX_REQUEST_QUEUE_DEPTH = "50";
   process.env.MAX_BODY_BYTES = "1000000";
+  process.env.SHUTDOWN_DRAIN_TIMEOUT_MS = "30000";
 }
 
 function httpRequest(
