@@ -46,7 +46,9 @@ import type { FeatureFlags } from "../config/schema.js";
 import type { FlagScope } from "../config/feature-flags.js";
 import { getFeatureFlagService, resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import {
+  getActiveCanaryCohortId,
   isProductionRolloutTrafficBlocked,
+  loadRolloutPolicyFromEnv,
   productionRolloutDisabledResponse,
 } from "../rollout/policy.js";
 import { runProductionPreflight } from "./preflight.js";
@@ -261,6 +263,18 @@ async function processRequest(
         if (config.release?.release_id) payload.release_id = config.release.release_id;
         if (config.release?.build_id) payload.build_id = config.release.build_id;
         if (config.env) payload.env = config.env;
+        const rolloutPolicy = loadRolloutPolicyFromEnv();
+        payload.rollout = {
+          active_canary_cohort: getActiveCanaryCohortId(rolloutPolicy),
+          cohorts: rolloutPolicy.cohorts.map((c) => ({
+            id: c.id,
+            stage: c.stage,
+            traffic_percent: c.traffic_percent,
+          })),
+          canary: rolloutPolicy.canary,
+          max_rollback_mttr_ms: rolloutPolicy.max_rollback_mttr_ms,
+          rollback_allowed: rolloutPolicy.rollback_allowed,
+        };
         return payload;
       })
     );

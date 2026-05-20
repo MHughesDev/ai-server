@@ -81,3 +81,16 @@ jobs:
 
       - name: Pre-release smoke
         run: npm run smoke:pre-release
+
+      - name: Rollback drill (kill-switch MTTR)
+        env:
+          ROLLBACK_DRILL_MAX_MTTR_MS: "30000"
+          ROLLBACK_DRILL_EVIDENCE_PATH: artifacts/rollback-drill-evidence.json
+        run: npm test -- --runInBand --testPathPattern=rollback-drill.integration --testNamePattern="measures kill-switch MTTR"
+
+      - name: Upload rollback drill evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-drill-evidence
+          path: artifacts/rollback-drill-evidence.json
+          retention-days: 90

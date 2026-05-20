@@ -27,6 +27,7 @@
     "release:verify": "node scripts/release/verify-artifact-manifest.mjs",
     "release:artifacts": "npm run release:manifest && npm run release:sign && npm run release:verify",
     "smoke:pre-release": "node scripts/pre-release-smoke.mjs",
+    "drill:rollback": "npm run build && node scripts/rollback-drill.mjs",
     "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {

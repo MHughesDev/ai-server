@@ -7,6 +7,11 @@
 import { z } from "zod";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import type { Config } from "../config/schema.js";
+import {
+  CanaryCohortSchema,
+  DEFAULT_CANARY_COHORTS,
+  parseCanaryCohorts,
+} from "./cohorts.js";
 
 /** Canary success/failure thresholds (L2-08). */
 export const CanaryThresholdsSchema = z.object({
@@ -26,21 +31,96 @@ export type CanaryThresholds = z.infer<typeof CanaryThresholdsSchema>;
 export const RolloutPolicySchema = z.object({
   /** Canary cohort thresholds. */
   canary: CanaryThresholdsSchema.default({}),
+  /** Progressive rollout cohorts (internal → low_risk → broad). */
+  cohorts: z.array(CanaryCohortSchema).default(() => [...DEFAULT_CANARY_COHORTS]),
+  /** Active percent-rollout cohort id (env `ROLLOUT_ACTIVE_CANARY_COHORT`). */
+  active_canary_cohort: z.string().optional(),
+  /** Maximum acceptable kill-switch MTTR in milliseconds (drill SLO). */
+  max_rollback_mttr_ms: z.number().int().positive().default(120_000),
   /** Whether rollback is allowed (e.g. false during freeze). */
   rollback_allowed: z.boolean().default(true),
 });
 
 export type RolloutPolicy = z.infer<typeof RolloutPolicySchema>;
 
-const DEFAULT_POLICY: RolloutPolicy = {
-  canary: {
-    max_error_rate_promotion: 0.01,
-    abort_error_rate: 0.05,
-    max_p95_latency_ratio: 1.1,
-    observation_window_minutes: 15,
-  },
-  rollback_allowed: true,
+export type CanaryPromotionDecision = "promote" | "abort" | "observe";
+
+export type CanaryObservedMetrics = {
+  error_rate: number;
+  p95_latency_ms: number;
+  baseline_p95_latency_ms: number;
 };
+
+const DEFAULT_POLICY: RolloutPolicy = RolloutPolicySchema.parse({});
+
+/** Cached policy from env (PR-031). */
+let cachedRolloutPolicy: RolloutPolicy | null = null;
+
+export function getDefaultRolloutPolicy(): RolloutPolicy {
+  return { ...DEFAULT_POLICY, cohorts: [...DEFAULT_POLICY.cohorts] };
+}
+
+/** Active cohort for percent-based assignment (`ROLLOUT_ACTIVE_CANARY_COHORT`). */
+export function getActiveCanaryCohortId(policy?: RolloutPolicy): string | undefined {
+  const fromPolicy = policy?.active_canary_cohort?.trim();
+  if (fromPolicy) return fromPolicy;
+  const fromEnv = (process.env.ROLLOUT_ACTIVE_CANARY_COHORT ?? "").trim();
+  return fromEnv || undefined;
+}
+
+/**
+ * Metrics-driven canary promotion decision (L2-08).
+ */
+export function evaluateCanaryDecision(
+  observed: CanaryObservedMetrics,
+  policy: RolloutPolicy = getDefaultRolloutPolicy()
+): CanaryPromotionDecision {
+  const { canary } = policy;
+  if (observed.error_rate >= canary.abort_error_rate) return "abort";
+  const baseline = observed.baseline_p95_latency_ms;
+  if (baseline > 0) {
+    const ratio = observed.p95_latency_ms / baseline;
+    if (ratio > canary.max_p95_latency_ratio) return "abort";
+  }
+  if (
+    observed.error_rate < canary.max_error_rate_promotion &&
+    (baseline <= 0 ||
+      observed.p95_latency_ms / baseline <= canary.max_p95_latency_ratio)
+  ) {
+    return "promote";
+  }
+  return "observe";
+}
+
+/**
+ * Load rollout policy from `ROLLOUT_POLICY_JSON` when set; otherwise defaults.
+ */
+export function loadRolloutPolicyFromEnv(): RolloutPolicy {
+  if (cachedRolloutPolicy) return cachedRolloutPolicy;
+  const raw = process.env.ROLLOUT_POLICY_JSON?.trim();
+  if (!raw) {
+    cachedRolloutPolicy = applyActiveCohortEnv(getDefaultRolloutPolicy());
+    return cachedRolloutPolicy;
+  }
+  try {
+    cachedRolloutPolicy = applyActiveCohortEnv(parseRolloutPolicy(JSON.parse(raw)));
+    return cachedRolloutPolicy;
+  } catch {
+    cachedRolloutPolicy = applyActiveCohortEnv(getDefaultRolloutPolicy());
+    return cachedRolloutPolicy;
+  }
+}
+
+/** Reset cached policy (tests). */
+export function resetRolloutPolicyCacheForTest(): void {
+  cachedRolloutPolicy = null;
+}
+
+function applyActiveCohortEnv(policy: RolloutPolicy): RolloutPolicy {
+  const active = getActiveCanaryCohortId();
+  if (!active) return policy;
+  return { ...policy, active_canary_cohort: active };
+}
 
 /**
  * Parse rollout policy from a record (e.g. env or config).
@@ -48,16 +128,37 @@ const DEFAULT_POLICY: RolloutPolicy = {
  */
 export function parseRolloutPolicy(input: unknown): RolloutPolicy {
   if (input == null || typeof input !== "object") {
-    return DEFAULT_POLICY;
+    return getDefaultRolloutPolicy();
   }
   const raw = input as Record<string, unknown>;
   const canary =
     raw.canary != null && typeof raw.canary === "object"
       ? parseCanaryThresholds(raw.canary as Record<string, unknown>)
       : DEFAULT_POLICY.canary;
+  const cohorts = parseCanaryCohorts(raw.cohorts);
   const rollback_allowed =
     typeof raw.rollback_allowed === "boolean" ? raw.rollback_allowed : true;
-  return RolloutPolicySchema.parse({ canary, rollback_allowed });
+  const toMs = (v: unknown, def: number): number => {
+    if (typeof v === "number" && !Number.isNaN(v)) return Math.floor(v);
+    if (typeof v === "string") {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    return def;
+  };
+  const max_rollback_mttr_ms = toMs(
+    raw.max_rollback_mttr_ms,
+    DEFAULT_POLICY.max_rollback_mttr_ms
+  );
+  const active_canary_cohort =
+    typeof raw.active_canary_cohort === "string" ? raw.active_canary_cohort : undefined;
+  return RolloutPolicySchema.parse({
+    canary,
+    cohorts,
+    max_rollback_mttr_ms,
+    active_canary_cohort,
+    rollback_allowed,
+  });
 }
 
 /**

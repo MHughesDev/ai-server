@@ -31,6 +31,7 @@ curl http://localhost:3000/healthz
 | `release/build-artifact-manifest.mjs` | SHA-256 manifest for `dist/` |
 | `release/sign-artifact-manifest.mjs` | HMAC sign manifest (`RELEASE_SIGNING_KEY`) |
 | `release/verify-artifact-manifest.mjs` | Verify checksums + signature |
+| `rollback-drill.mjs` | Kill-switch MTTR drill + evidence JSON (PR-031) |
 
 ## Manual Setup
 

@@ -5,7 +5,10 @@ import {
   isToolExecutionEnvFlagEnabled,
   isToolExecutionSecurityReviewSignoffAcknowledged,
 } from "../config/assert-production-tool-execution.js";
-import { isRolloutCanarySignoffAcknowledged } from "../rollout/policy.js";
+import {
+  isRolloutCanarySignoffAcknowledged,
+  loadRolloutPolicyFromEnv,
+} from "../rollout/policy.js";
 import { resolveTelemetryRedactionLevel } from "../observability/redact.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 
@@ -140,6 +143,28 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
     id: "rollout.canary_signoff",
     status: !rolloutEnabled || isRolloutCanarySignoffAcknowledged() ? "pass" : "fail",
     message: "ROLLOUT_CANARY_SIGNOFF=true when production rollout is enabled",
+  });
+  const rolloutPolicy = loadRolloutPolicyFromEnv();
+  add({
+    id: "rollout.cohorts",
+    status: rolloutPolicy.cohorts.length >= 1 ? "pass" : "fail",
+    message: `Canary cohorts configured (${rolloutPolicy.cohorts.length})`,
+    detail: {
+      cohort_ids: rolloutPolicy.cohorts.map((c) => c.id),
+      active_canary_cohort: rolloutPolicy.active_canary_cohort,
+    },
+  });
+  add({
+    id: "rollout.rollback_mttr_slo",
+    status: rolloutPolicy.max_rollback_mttr_ms > 0 ? "pass" : "fail",
+    message: `Rollback MTTR SLO: ${rolloutPolicy.max_rollback_mttr_ms}ms`,
+  });
+  add({
+    id: "rollout.rollback_allowed",
+    status: rolloutPolicy.rollback_allowed ? "pass" : "fail",
+    message: rolloutPolicy.rollback_allowed
+      ? "Rollback allowed by rollout policy"
+      : "Rollback disabled in rollout policy (freeze)",
   });
   add({
     id: "flags.security_controls",

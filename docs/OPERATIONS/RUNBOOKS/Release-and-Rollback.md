@@ -37,11 +37,25 @@ Treat architecture Section 18 as the release gate baseline; use the gaps report 
 
 ---
 
+## Canary cohorts (PR-031)
+
+Progressive rollout uses **cohorts** defined in `src/rollout/cohorts.ts` and loaded via `ROLLOUT_POLICY_JSON` or defaults:
+
+| Stage | Cohort id | Typical traffic | Assignment |
+|-------|-----------|-----------------|------------|
+| Internal | `internal` | 100% of matched orgs | `org_id` in `internal`, `ops` |
+| Low risk | `low_risk` | 10% of remaining tenants | Percent bucket (`ROLLOUT_ACTIVE_CANARY_COHORT=low_risk`) |
+| Broad | `broad` | 100% | Final promotion after sign-off |
+
+- Set **`ROLLOUT_ACTIVE_CANARY_COHORT`** to the cohort receiving new-version traffic during a canary window.
+- **`GET /v1/version`** returns `rollout.cohorts` and `rollout.active_canary_cohort` for operators.
+- **`GET /v1/preflight`** includes `rollout.cohorts`, `rollout.rollback_mttr_slo`, and `rollout.rollback_allowed`.
+
 ## Canary analysis
 
 ### Success/failure thresholds (L2-08)
 
-Configured via rollout policy. **Implementation:** `src/rollout/policy.ts` — `parseRolloutPolicy()` reads canary thresholds (`max_error_rate_promotion`, `abort_error_rate`, `max_p95_latency_ratio`, `observation_window_minutes`), `rollback_allowed`. Env or config overlay as per L2-08 Phase 1. See `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md`.
+Configured via rollout policy. **Implementation:** `src/rollout/policy.ts` — `parseRolloutPolicy()` / `loadRolloutPolicyFromEnv()` read canary thresholds (`max_error_rate_promotion`, `abort_error_rate`, `max_p95_latency_ratio`, `observation_window_minutes`), cohorts, `max_rollback_mttr_ms`, and `rollback_allowed`. Use `evaluateCanaryDecision()` for promote/abort/observe from observed metrics. See `docs/PLANS/implementation/L2-08_Rollout-and-Operational-Readiness-Implementation.md`.
 
 | Criterion | Default | Meaning |
 |-----------|--------|---------|
@@ -72,10 +86,12 @@ Configured via rollout policy. **Implementation:** `src/rollout/policy.ts` — `
 3. **Verify:** `GET /healthz`, `GET /readyz`, `GET /v1/version` on reverted instances; confirm metrics and logs show recovery.
 4. **Incident protocol:** Open incident, notify on-call, and run postmortem per **Incident workflow** in `docs/SPEC/22_Runbooks_and_Operations.md`.
 
-### Recovery time
+### Recovery time (MTTR evidence)
 
-- Target: Rollback drill recovery time within the maximum recovery threshold defined for your environment (see L2-08 Phase 1 exit criteria).
-- If rollback exceeds threshold in a drill, block production rollout until remediation (procedure, automation, or tooling).
+- **SLO:** `max_rollback_mttr_ms` in rollout policy (default **120000** ms). Override via `ROLLOUT_POLICY_JSON` or `ROLLBACK_DRILL_MAX_MTTR_MS` for drills.
+- **Drill:** `npm run drill:rollback` — measures kill-switch MTTR (`PLATFORM_PRODUCTION_ROLLOUT_ENABLED=false`) and writes **`artifacts/rollback-drill-evidence.json`** (`mttr_ms`, `passed`, `steps`).
+- **CI:** GitHub Actions `release-gates` job runs the drill and uploads evidence as an artifact.
+- If rollback drill **fails** (`passed: false`), block production rollout until remediation (procedure, automation, or tooling).
 
 ---
 

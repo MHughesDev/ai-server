@@ -12,9 +12,14 @@ import {
   isProductionRolloutTrafficBlocked,
   isRolloutCanarySignoffAcknowledged,
   productionRolloutDisabledResponse,
+  evaluateCanaryDecision,
+  loadRolloutPolicyFromEnv,
+  resetRolloutPolicyCacheForTest,
+  getDefaultRolloutPolicy,
   CanaryThresholdsSchema,
   RolloutPolicySchema,
 } from "./policy.js";
+import { DEFAULT_CANARY_COHORTS } from "./cohorts.js";
 
 describe("RolloutPolicySchema", () => {
   it("accepts valid defaults", () => {
@@ -58,15 +63,16 @@ describe("CanaryThresholdsSchema", () => {
 
 describe("parseRolloutPolicy", () => {
   it("returns default policy for null/undefined", () => {
-    expect(parseRolloutPolicy(null)).toEqual({
-      canary: {
-        max_error_rate_promotion: 0.01,
-        abort_error_rate: 0.05,
-        max_p95_latency_ratio: 1.1,
-        observation_window_minutes: 15,
-      },
-      rollback_allowed: true,
+    const policy = parseRolloutPolicy(null);
+    expect(policy.canary).toEqual({
+      max_error_rate_promotion: 0.01,
+      abort_error_rate: 0.05,
+      max_p95_latency_ratio: 1.1,
+      observation_window_minutes: 15,
     });
+    expect(policy.rollback_allowed).toBe(true);
+    expect(policy.cohorts).toEqual(DEFAULT_CANARY_COHORTS);
+    expect(policy.max_rollback_mttr_ms).toBe(120_000);
     expect(parseRolloutPolicy(undefined)).toEqual(parseRolloutPolicy(null));
   });
 
@@ -89,6 +95,69 @@ describe("parseRolloutPolicy", () => {
   it("respects rollback_allowed false", () => {
     const policy = parseRolloutPolicy({ rollback_allowed: false });
     expect(policy.rollback_allowed).toBe(false);
+  });
+
+  it("parses custom cohorts and MTTR SLO", () => {
+    const policy = parseRolloutPolicy({
+      cohorts: [{ id: "pilot", stage: "internal", traffic_percent: 5 }],
+      max_rollback_mttr_ms: 60_000,
+    });
+    expect(policy.cohorts).toHaveLength(1);
+    expect(policy.cohorts[0].id).toBe("pilot");
+    expect(policy.max_rollback_mttr_ms).toBe(60_000);
+  });
+});
+
+describe("evaluateCanaryDecision", () => {
+  it("promotes when metrics are within thresholds", () => {
+    expect(
+      evaluateCanaryDecision(
+        { error_rate: 0.005, p95_latency_ms: 100, baseline_p95_latency_ms: 100 },
+        getDefaultRolloutPolicy()
+      )
+    ).toBe("promote");
+  });
+
+  it("aborts when error rate exceeds abort threshold", () => {
+    expect(
+      evaluateCanaryDecision(
+        { error_rate: 0.1, p95_latency_ms: 100, baseline_p95_latency_ms: 100 },
+        getDefaultRolloutPolicy()
+      )
+    ).toBe("abort");
+  });
+
+  it("aborts when latency ratio exceeds threshold", () => {
+    expect(
+      evaluateCanaryDecision(
+        { error_rate: 0.001, p95_latency_ms: 200, baseline_p95_latency_ms: 100 },
+        getDefaultRolloutPolicy()
+      )
+    ).toBe("abort");
+  });
+});
+
+describe("loadRolloutPolicyFromEnv", () => {
+  const originalJson = process.env.ROLLOUT_POLICY_JSON;
+
+  beforeEach(() => {
+    resetRolloutPolicyCacheForTest();
+  });
+
+  afterEach(() => {
+    resetRolloutPolicyCacheForTest();
+    if (originalJson === undefined) delete process.env.ROLLOUT_POLICY_JSON;
+    else process.env.ROLLOUT_POLICY_JSON = originalJson;
+  });
+
+  it("loads policy from ROLLOUT_POLICY_JSON", () => {
+    process.env.ROLLOUT_POLICY_JSON = JSON.stringify({
+      max_rollback_mttr_ms: 90_000,
+      canary: { observation_window_minutes: 20 },
+    });
+    const policy = loadRolloutPolicyFromEnv();
+    expect(policy.max_rollback_mttr_ms).toBe(90_000);
+    expect(policy.canary.observation_window_minutes).toBe(20);
   });
 });
 
