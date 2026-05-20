@@ -5,6 +5,10 @@
  */
 
 import { assertRuntimeModelGateway } from "../config/assert-production-model-gateway.js";
+import {
+  classifyGatewayTimeoutFailure,
+  createGatewayTimeoutError,
+} from "./gateway-timeout.js";
 import { classifyModelProviderFailure } from "./model-provider-retry.js";
 import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import type { IModelGateway, ModelCompletionRequest, ModelCompletionResult } from "./types.js";
@@ -24,6 +28,13 @@ export type {
   ModelProviderFailureClassification,
   ParsedModelProviderError,
 } from "./model-provider-retry.js";
+export {
+  createGatewayTimeoutError,
+  GatewayTimeoutError,
+  GATEWAY_TIMEOUT_SPEC,
+  isGatewayTimeoutError,
+} from "./gateway-timeout.js";
+export type { GatewayTimeoutScope, GatewayTimeoutSpec } from "./gateway-timeout.js";
 
 export interface ModelGatewayConfig {
   timeoutMs: number;
@@ -511,8 +522,6 @@ export async function runProviderHealthChecks(
   return results;
 }
 
-const GATEWAY_TIMEOUT_MESSAGE = "Model gateway timeout";
-
 function transientNodeCauseCode(code: string | undefined): boolean {
   if (!code) return false;
   return (
@@ -534,10 +543,9 @@ function classifyRetryability(error: unknown): {
   if (error instanceof ModelGatewayError) {
     return { code: error.code, retryable: error.retryable, message: error.message };
   }
+  const timeoutFailure = classifyGatewayTimeoutFailure(error);
+  if (timeoutFailure) return timeoutFailure;
   if (error instanceof Error) {
-    if (error.message === GATEWAY_TIMEOUT_MESSAGE) {
-      return { code: "MODEL_FAILURE", retryable: true, message: error.message };
-    }
     if (error.name === "TypeError" && /\bfetch\b/i.test(error.message)) {
       return { code: "MODEL_FAILURE", retryable: true, message: error.message };
     }
@@ -594,7 +602,7 @@ export function withTimeoutAndRetry(
           const result = await raceWithTimeout(
             gateway.complete(req),
             timeoutMs,
-            GATEWAY_TIMEOUT_MESSAGE
+            createGatewayTimeoutError("model")
           );
           return result;
         } catch (err) {

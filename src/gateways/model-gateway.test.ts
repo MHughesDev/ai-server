@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 import { ModelGatewayProductionError } from "../config/assert-production-model-gateway.js";
 import {
   classifyModelProviderFailure,
+  createGatewayTimeoutError,
   createProviderBackedModelGateway,
   isRetryableModelProviderHttpStatus,
   ModelGatewayError,
@@ -146,6 +147,22 @@ describe("withTimeoutAndRetry", () => {
       retryable: false,
     });
     expect(completeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps gateway timeout to MODEL_FAILURE via GatewayTimeoutError (WANT-027)", async () => {
+    const completeMock = jest
+      .fn<Promise<unknown>, [unknown]>()
+      .mockRejectedValue(createGatewayTimeoutError("model"));
+    const delegate: IModelGateway = {
+      complete: completeMock as unknown as IModelGateway["complete"],
+    };
+    const gateway = withTimeoutAndRetry(delegate, { maxRetries: 0, timeoutMs: 1_000 });
+
+    await expect(gateway.complete({ prompt: "x" })).rejects.toMatchObject<ModelGatewayError>({
+      code: "MODEL_FAILURE",
+      retryable: true,
+      message: "Model gateway timeout",
+    });
   });
 
   it("retries when the race hits the gateway timeout then delegate succeeds", async () => {

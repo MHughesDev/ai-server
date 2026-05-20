@@ -7,17 +7,19 @@
 export async function raceWithTimeout<T>(
   promise: Promise<T>,
   ms: number,
-  timeoutMessage = "Operation timed out"
+  timeoutReject: string | Error = "Operation timed out"
 ): Promise<T> {
   if (!Number.isFinite(ms) || ms <= 0) {
     return promise;
   }
+  const onTimeout = (): Error =>
+    timeoutReject instanceof Error ? timeoutReject : new Error(timeoutReject);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+        timer = setTimeout(() => reject(onTimeout()), ms);
       }),
     ]);
   } finally {

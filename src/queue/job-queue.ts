@@ -18,7 +18,9 @@ import type {
 } from "./types.js";
 import { MemoryQueueBackend } from "./memory-backend.js";
 import { idempotencyCompositeKey } from "./async-idempotency.js";
+import { createGatewayTimeoutError, isGatewayTimeoutError } from "../gateways/gateway-timeout.js";
 import { safeLogError } from "../observability/redact.js";
+import { raceWithTimeout } from "../utils/race-with-timeout.js";
 
 /** Same key + tenant scope but different request fingerprint (async path only). */
 export class IdempotencyKeyConflictError extends Error {
@@ -109,7 +111,8 @@ export class JobQueueService {
             // Process the job with timeout (clear timer on success to avoid churn)
             const result = await raceWithTimeout(
               this.queryHandler(job.request),
-              this.config.job_timeout_ms
+              this.config.job_timeout_ms,
+              createGatewayTimeoutError("job")
             );
 
             await this.backend.complete(job.id, result);
@@ -120,11 +123,16 @@ export class JobQueueService {
               void this.sendWebhook(job, result, undefined);
             }
           } catch (err) {
-            const error = {
-              code: "JOB_PROCESSING_ERROR",
-              message: err instanceof Error ? err.message : String(err),
-              detail: err instanceof Error ? { stack: err.stack } : undefined,
-            };
+            const error = isGatewayTimeoutError(err) && err.scope === "job"
+              ? {
+                  code: err.code,
+                  message: err.message,
+                }
+              : {
+                  code: "JOB_PROCESSING_ERROR",
+                  message: err instanceof Error ? err.message : String(err),
+                  detail: err instanceof Error ? { stack: err.stack } : undefined,
+                };
 
             await this.backend.fail(job.id, error);
             console.error(`[job-queue] Job ${job.id} failed:`, error.message);
@@ -312,20 +320,6 @@ export class JobQueueService {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Job timeout")), ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 // Factory function

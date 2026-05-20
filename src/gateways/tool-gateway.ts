@@ -7,6 +7,7 @@
  */
 
 import type { IToolGateway, ToolInvokeRequest, ToolInvokeResult } from "./types.js";
+import { createGatewayTimeoutError, toolInvokeResultForGatewayTimeout } from "./gateway-timeout.js";
 import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -103,13 +104,12 @@ export class AllowlistToolGateway implements IToolGateway {
         return await raceWithTimeout(
           delegate.invoke(request),
           timeoutMs,
-          "TOOL_TIMEOUT"
+          createGatewayTimeoutError("tool")
         );
       } catch (err) {
-        const message =
-          err instanceof Error && err.message === "TOOL_TIMEOUT"
-            ? "Tool execution timed out"
-            : err instanceof Error ? err.message : String(err);
+        const timeoutDeny = toolInvokeResultForGatewayTimeout(err, request.tool_id);
+        if (timeoutDeny) return timeoutDeny;
+        const message = err instanceof Error ? err.message : String(err);
         return {
           allowed: false,
           reason: "TOOL_TIMEOUT",
