@@ -22,6 +22,11 @@ import {
   HARNESS_TOOL_ITERATION_ABSOLUTE_CAP,
   isFiniteToolBudget,
 } from "../governance/budget-exceeded.js";
+import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
+import {
+  buildDeadlineExceededEnvelope,
+  PipelineDeadline,
+} from "../utils/pipeline-deadline.js";
 
 /** Default max tool rounds when plan omits `tool_budget` (matches prior router defaults). */
 const DEFAULT_MAX_HARNESS_ITERATIONS = 10;
@@ -150,7 +155,8 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         plan.harness_autonomous_execution === true && allowlist.length > 0;
 
       const toolBudget = plan.budgets?.tool_budget ?? DEFAULT_MAX_HARNESS_ITERATIONS;
-      const deadlineMs = plan.budgets?.deadline_ms;
+      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms, workflowStart);
+      const deadlineMs = deadline.planDeadlineMs;
 
       const budgets = { token_budget: maxTokens, tool_budget: toolBudget };
       const metadata = {
@@ -196,7 +202,7 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         };
         emitEngineEvent("ENGINE_START", { engine_type: "execution", invocation_id: executionInvId });
         const execStart = Date.now();
-        const result = await executionEngine.invoke(executionInv);
+        const result = await deadline.run(() => executionEngine.invoke(executionInv));
         const execDuration = Date.now() - execStart;
         emitEngineEvent("ENGINE_END", {
           engine_type: "execution",
@@ -221,14 +227,48 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         let lastOutput: TypedArtifact = textToArtifact(prompt, randomUUID());
 
         while (iter < maxIterations) {
-          if (deadlineMs != null && Date.now() - workflowStart > deadlineMs) {
-            break;
+          if (deadline.isExceeded()) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "error",
+            });
+            return buildDeadlineExceededEnvelope({
+              requestId,
+              pipelineType: plan.pipeline_type,
+              deadlineMs: deadlineMs!,
+              latencyMs: Date.now() - workflowStart,
+              toolCalls: toolCallsCount,
+              tokensIn: accumulatedExecTokens,
+              costUsdEst: accumulatedExecCost,
+            });
           }
-          const execResult = await runOneExecution(
+          let execResult;
+          try {
+            execResult = await runOneExecution(
             context,
             `t_exec_${iter}`,
             allowlist[0]
-          );
+            );
+          } catch (err) {
+            if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+              emitWorkflowEvent("WORKFLOW_END", {
+                workflow_id: workflowId,
+                duration_ms: Date.now() - workflowStart,
+                status: "error",
+              });
+              return buildDeadlineExceededEnvelope({
+                requestId,
+                pipelineType: plan.pipeline_type,
+                deadlineMs,
+                latencyMs: Date.now() - workflowStart,
+                toolCalls: toolCallsCount,
+                tokensIn: accumulatedExecTokens,
+                costUsdEst: accumulatedExecCost,
+              });
+            }
+            throw err;
+          }
           totalExecDuration += execResult.metrics?.duration_ms ?? 0;
           accumulatedExecTokens += execResult.metrics?.tokens_used ?? 0;
           accumulatedExecCost += execResult.metrics?.cost_estimate_usd ?? 0;
@@ -313,7 +353,28 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
             };
             emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
             const toolStart = Date.now();
-            const toolResult = await toolEngine.invoke(toolInv);
+            let toolResult;
+            try {
+              toolResult = await deadline.run(() => toolEngine.invoke(toolInv));
+            } catch (err) {
+              if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+                emitWorkflowEvent("WORKFLOW_END", {
+                  workflow_id: workflowId,
+                  duration_ms: Date.now() - workflowStart,
+                  status: "error",
+                });
+                return buildDeadlineExceededEnvelope({
+                  requestId,
+                  pipelineType: plan.pipeline_type,
+                  deadlineMs,
+                  latencyMs: Date.now() - workflowStart,
+                  toolCalls: toolCallsCount,
+                  tokensIn: accumulatedExecTokens,
+                  costUsdEst: accumulatedExecCost,
+                });
+              }
+              throw err;
+            }
             const toolDuration = Date.now() - toolStart;
             emitEngineEvent("ENGINE_END", {
               engine_type: "tool",
@@ -344,7 +405,24 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         toolOutput = lastOutput;
       } else {
         // Single-pass: execution → optional one tool → evaluation → synthesis
-        executionResult = await runOneExecution(inputArtifacts, "t1");
+        try {
+          executionResult = await runOneExecution(inputArtifacts, "t1");
+        } catch (err) {
+          if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "error",
+            });
+            return buildDeadlineExceededEnvelope({
+              requestId,
+              pipelineType: plan.pipeline_type,
+              deadlineMs,
+              latencyMs: Date.now() - workflowStart,
+            });
+          }
+          throw err;
+        }
         totalExecDuration = executionResult.metrics?.duration_ms ?? 0;
 
         if (executionResult.status !== "success") {
@@ -397,16 +475,35 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
           };
           emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
           const toolStart = Date.now();
-          const toolResult = await toolEngine.invoke(toolInv);
-          const toolDuration = Date.now() - toolStart;
-          emitEngineEvent("ENGINE_END", {
-            engine_type: "tool",
-            invocation_id: toolInvId,
-            duration_ms: toolDuration,
-          });
-          toolCallsCount += 1;
-          if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
-            toolOutput = toolResult.result_artifacts[0];
+          try {
+            const toolResult = await deadline.run(() => toolEngine.invoke(toolInv));
+            const toolDuration = Date.now() - toolStart;
+            emitEngineEvent("ENGINE_END", {
+              engine_type: "tool",
+              invocation_id: toolInvId,
+              duration_ms: toolDuration,
+            });
+            toolCallsCount += 1;
+            if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
+              toolOutput = toolResult.result_artifacts[0];
+            }
+          } catch (err) {
+            if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+              emitWorkflowEvent("WORKFLOW_END", {
+                workflow_id: workflowId,
+                duration_ms: Date.now() - workflowStart,
+                status: "error",
+              });
+              return buildDeadlineExceededEnvelope({
+                requestId,
+                pipelineType: plan.pipeline_type,
+                deadlineMs,
+                latencyMs: Date.now() - workflowStart,
+                tokensIn: executionResult.metrics?.tokens_used ?? 0,
+                costUsdEst: executionResult.metrics?.cost_estimate_usd ?? 0,
+              });
+            }
+            throw err;
           }
         }
       }
@@ -429,7 +526,28 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       };
       emitEngineEvent("ENGINE_START", { engine_type: "evaluation", invocation_id: evalInvId });
       const evalStart = Date.now();
-      const evaluationResult = await evaluationEngine.invoke(evalInv);
+      let evaluationResult;
+      try {
+        evaluationResult = await deadline.run(() => evaluationEngine.invoke(evalInv));
+      } catch (err) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "error",
+          });
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+            toolCalls: toolCallsCount,
+            tokensIn: accumulatedExecTokens,
+            costUsdEst: accumulatedExecCost,
+          });
+        }
+        throw err;
+      }
       const evalDuration = Date.now() - evalStart;
       emitEngineEvent("ENGINE_END", {
         engine_type: "evaluation",
@@ -460,7 +578,28 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       };
       emitEngineEvent("ENGINE_START", { engine_type: "synthesis", invocation_id: synthesisInvId });
       const synthStart = Date.now();
-      const synthesisResult = await synthesisEngine.invoke(synthesisInv);
+      let synthesisResult;
+      try {
+        synthesisResult = await deadline.run(() => synthesisEngine.invoke(synthesisInv));
+      } catch (err) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "error",
+          });
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+            toolCalls: toolCallsCount,
+            tokensIn: accumulatedExecTokens,
+            costUsdEst: accumulatedExecCost,
+          });
+        }
+        throw err;
+      }
       const synthDuration = Date.now() - synthStart;
       emitEngineEvent("ENGINE_END", {
         engine_type: "synthesis",

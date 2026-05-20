@@ -16,6 +16,11 @@ import { createSynthesisEngine } from "../engines/synthesis_engine.js";
 import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
+import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
+import {
+  buildDeadlineExceededEnvelope,
+  PipelineDeadline,
+} from "../utils/pipeline-deadline.js";
 
 function emitEngineEvent(
   eventType: "ENGINE_START" | "ENGINE_END",
@@ -86,6 +91,8 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       const traceId = ctx?.trace_id;
       const workflowId = plan.pipeline_type;
       const workflowStart = Date.now();
+      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms, workflowStart);
+      const deadlineMs = deadline.planDeadlineMs;
       const maxTokens = plan.budgets?.token_budget ?? 2048;
       const query = canonical.text || "(no input)";
       const prompt = `Summarize research on: ${query}. Provide key findings and open questions.`;
@@ -124,7 +131,20 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       };
       emitEngineEvent("ENGINE_START", { engine_type: "execution", invocation_id: execInvId });
       const execStart = Date.now();
-      const executionResult = await executionEngine.invoke(execInv);
+      let executionResult;
+      try {
+        executionResult = await deadline.run(() => executionEngine.invoke(execInv));
+      } catch (err) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+          });
+        }
+        throw err;
+      }
       const execDuration = Date.now() - execStart;
       emitEngineEvent("ENGINE_END", {
         engine_type: "execution",
@@ -182,7 +202,22 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       };
       emitEngineEvent("ENGINE_START", { engine_type: "evaluation", invocation_id: evalInvId });
       const evalStart = Date.now();
-      const evaluationResult = await evaluationEngine.invoke(evalInv);
+      let evaluationResult;
+      try {
+        evaluationResult = await deadline.run(() => evaluationEngine.invoke(evalInv));
+      } catch (err) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+            tokensIn: executionResult.metrics?.tokens_used ?? 0,
+            costUsdEst: executionResult.metrics?.cost_estimate_usd ?? 0,
+          });
+        }
+        throw err;
+      }
       const evalDuration = Date.now() - evalStart;
       emitEngineEvent("ENGINE_END", {
         engine_type: "evaluation",
@@ -213,7 +248,22 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       };
       emitEngineEvent("ENGINE_START", { engine_type: "synthesis", invocation_id: synthInvId });
       const synthStart = Date.now();
-      const synthesisResult = await synthesisEngine.invoke(synthInv);
+      let synthesisResult;
+      try {
+        synthesisResult = await deadline.run(() => synthesisEngine.invoke(synthInv));
+      } catch (err) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+            tokensIn: executionResult.metrics?.tokens_used ?? 0,
+            costUsdEst: executionResult.metrics?.cost_estimate_usd ?? 0,
+          });
+        }
+        throw err;
+      }
       const synthDuration = Date.now() - synthStart;
       emitEngineEvent("ENGINE_END", {
         engine_type: "synthesis",

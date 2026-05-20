@@ -17,10 +17,11 @@ import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
 import { DEFAULT_MAX_CONTEXT_TOKENS } from "../utils/tokens.js";
+import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import {
-  RequestDeadlineExceededError,
-  withDeadline as raceWithDeadline,
-} from "../utils/async-deadline.js";
+  buildDeadlineExceededEnvelope,
+  PipelineDeadline,
+} from "../utils/pipeline-deadline.js";
 
 function emitEngineEvent(
   eventType: "ENGINE_START" | "ENGINE_END",
@@ -90,9 +91,8 @@ export function createChatPipeline(
     async run(input: PipelineInput): Promise<ResponseEnvelope> {
       const { canonical, plan, retrievalContext: inputRetrievalContext, caller } = input;
 
-      // L2-05 Phase 1: Per-request deadline enforcement from plan.budgets.deadline_ms
-      const deadlineMs = plan.budgets?.deadline_ms;
-      const pipelineStart = Date.now();
+      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms);
+      const deadlineMs = deadline.planDeadlineMs;
       const ctx = getTraceContext();
       const requestId = canonical.request_id;
       const traceId = ctx?.trace_id;
@@ -146,7 +146,25 @@ export function createChatPipeline(
           },
           metadata: { trace_id: traceId, contract_version: "v1" },
         };
-        const memoryResult = await memoryEngine.invoke(memoryInv);
+        let memoryResult;
+        try {
+          memoryResult = await deadline.run(() => memoryEngine.invoke(memoryInv));
+        } catch (err) {
+          if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "error",
+            });
+            return buildDeadlineExceededEnvelope({
+              requestId,
+              pipelineType: plan.pipeline_type,
+              deadlineMs,
+              latencyMs: Date.now() - workflowStart,
+            });
+          }
+          throw err;
+        }
         if (memoryResult.status === "success" && memoryResult.result_artifacts[0]) {
           const art = memoryResult.result_artifacts[0];
           const inline = (art.content as { inline?: { citations?: Array<{ source: string; ref: string; span?: string }>; contextText?: string } })?.inline;
@@ -200,46 +218,22 @@ export function createChatPipeline(
         invocation_id: executionInvocationId,
       });
       const executionStart = Date.now();
-      // L2-05 Phase 1: Deadline enforcement for execution engine
       let executionResult;
       try {
-        if (deadlineMs) {
-          const remainingMs = deadlineMs - (executionStart - pipelineStart);
-          if (remainingMs <= 0) {
-            throw new RequestDeadlineExceededError(deadlineMs);
-          }
-          executionResult = await raceWithDeadline(
-            executionEngine.invoke(executionInv),
-            remainingMs
-          );
-        } else {
-          executionResult = await executionEngine.invoke(executionInv);
-        }
+        executionResult = await deadline.run(() => executionEngine.invoke(executionInv));
       } catch (err) {
-        if (err instanceof RequestDeadlineExceededError) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
           emitWorkflowEvent("WORKFLOW_END", {
             workflow_id: workflowId,
             duration_ms: Date.now() - workflowStart,
             status: "error",
           });
-          return {
-            request_id: requestId,
-            status: "error",
-            mode: "sync",
-            error: {
-              code: "DEADLINE_EXCEEDED",
-              message: `Pipeline exceeded deadline of ${deadlineMs}ms`,
-            },
-            telemetry: {
-              pipeline: plan.pipeline_type,
-              models_used: [],
-              tool_calls: 0,
-              tokens_in: 0,
-              tokens_out: 0,
-              cost_usd_est: 0,
-              latency_ms: Date.now() - workflowStart,
-            },
-          };
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+          });
         }
         throw err;
       }
@@ -311,46 +305,24 @@ export function createChatPipeline(
         invocation_id: synthesisInvocationId,
       });
       const synthesisStart = Date.now();
-      // L2-05 Phase 1: Deadline enforcement for synthesis engine
       let synthesisResult;
       try {
-        if (deadlineMs) {
-          const remainingMs = deadlineMs - (synthesisStart - pipelineStart);
-          if (remainingMs <= 0) {
-            throw new RequestDeadlineExceededError(deadlineMs);
-          }
-          synthesisResult = await raceWithDeadline(
-            synthesisEngine.invoke(synthesisInv),
-            remainingMs
-          );
-        } else {
-          synthesisResult = await synthesisEngine.invoke(synthesisInv);
-        }
+        synthesisResult = await deadline.run(() => synthesisEngine.invoke(synthesisInv));
       } catch (err) {
-        if (err instanceof RequestDeadlineExceededError) {
+        if (err instanceof RequestDeadlineExceededError && deadlineMs) {
           emitWorkflowEvent("WORKFLOW_END", {
             workflow_id: workflowId,
             duration_ms: Date.now() - workflowStart,
             status: "error",
           });
-          return {
-            request_id: requestId,
-            status: "error",
-            mode: "sync",
-            error: {
-              code: "DEADLINE_EXCEEDED",
-              message: `Pipeline exceeded deadline of ${deadlineMs}ms`,
-            },
-            telemetry: {
-              pipeline: plan.pipeline_type,
-              models_used: [],
-              tool_calls: 0,
-              tokens_in: executionResult.metrics?.tokens_used ?? 0,
-              tokens_out: 0,
-              cost_usd_est: executionResult.metrics?.cost_estimate_usd ?? 0,
-              latency_ms: Date.now() - workflowStart,
-            },
-          };
+          return buildDeadlineExceededEnvelope({
+            requestId,
+            pipelineType: plan.pipeline_type,
+            deadlineMs,
+            latencyMs: Date.now() - workflowStart,
+            tokensIn: executionResult.metrics?.tokens_used ?? 0,
+            costUsdEst: executionResult.metrics?.cost_estimate_usd ?? 0,
+          });
         }
         throw err;
       }

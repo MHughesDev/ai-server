@@ -2,7 +2,7 @@
  * Coding agent harness — tool_budget enforcement (WANT-014).
  */
 
-import { describe, it, expect, jest } from "@jest/globals";
+import { describe, it, expect, jest, beforeEach, afterEach } from "@jest/globals";
 import { createCodingAgentPipeline } from "./coding-agent-pipeline.js";
 import { validateAgentHarnessInput } from "../contracts/agent-harness-contract.js";
 import type { IModelGateway, IToolGateway } from "../gateways/types.js";
@@ -39,6 +39,44 @@ function harnessInput(toolBudget: number) {
     caller: { app_id: "a1", user_id: "u1", org_id: "o1", scopes: [] },
   });
 }
+
+describe("createCodingAgentPipeline deadline_ms (PR-023)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("returns DEADLINE_EXCEEDED when a hop exceeds plan deadline_ms", async () => {
+    const modelGateway: IModelGateway = {
+      complete() {
+        return new Promise((resolve) => {
+          setTimeout(
+            () => resolve({ text: "slow", tokens_in: 1, tokens_out: 1, model: "stub" }),
+            200
+          );
+        });
+      },
+    };
+    const pipeline = createCodingAgentPipeline({ modelGateway });
+    const input = validateAgentHarnessInput({
+      ...harnessInput(0),
+      plan: {
+        ...harnessInput(0).plan,
+        harness_autonomous_execution: false,
+        tools_enabled: [],
+        budgets: { token_budget: 2048, deadline_ms: 50 },
+      },
+    });
+    const runPromise = pipeline.run(input);
+    jest.advanceTimersByTime(60);
+    const out = await runPromise;
+    expect(out.status).toBe("error");
+    expect(out.error?.code).toBe("DEADLINE_EXCEEDED");
+  });
+});
 
 describe("createCodingAgentPipeline tool_budget (WANT-014)", () => {
   it("returns blocked BUDGET_EXCEEDED when model proposes a tool but tool_budget is 0", async () => {

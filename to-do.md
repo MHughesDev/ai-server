@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-022 — graceful SIGTERM request draining (2026-05-20)
+**Last task closed:** PR-023 — plan deadline_ms through pipeline hops (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -72,7 +72,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | PR-020 | Fix timer leaks on success paths in model/tool gateway races | done | P1 | `race-with-timeout.ts`; model/tool gateways use shared helper; fake-timer tests prove zero pending timers on success (2026-05-20). |
 | PR-021 | Request/connection limits under load (memory exhaustion) | done | P1 | `connection-limits.ts`, `connection-tracker.ts`, `RequestQueue` backpressure, `server.maxConnections`; bootstrap/preflight/k8s (2026-05-20). **Deploy:** set `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONCURRENT_REQUESTS`, `MAX_REQUEST_QUEUE_DEPTH`, `MAX_BODY_BYTES`. |
 | PR-022 | Graceful request draining on SIGTERM (verify SLO) | done | P0 | `graceful-shutdown.ts`, in-flight tracking in `routes.ts`, `waitForDrain` + integration test; k8s `terminationGracePeriodSeconds: 45`; bootstrap/preflight (2026-05-20). **Deploy:** `SHUTDOWN_DRAIN_TIMEOUT_MS=30000`, grace period ≥ 45s. |
-| PR-023 | Wire `plan.budgets.deadline_ms` through all pipeline hops | partial | P0 | `query-handler.ts`, `chat-pipeline.ts`, `runner.ts` |
+| PR-023 | Wire `plan.budgets.deadline_ms` through all pipeline hops | done | P0 | `pipeline-deadline.ts` (`PipelineDeadline`); chat/coding-agent/deep-research/decision pipelines + `workflows/runner.ts`; outer `withDeadline` in `query-handler.ts`; tests (2026-05-20). |
 | PR-024 | Run `npm run verify:sow` on release branch | done | P0 | Verified 2026-05-20 on `cursor/consolidate-todo-md-9c5f`: lint, typecheck, build, 574 tests pass |
 
 ### 1.4 CI/CD, canary, and sign-off (L2-08)

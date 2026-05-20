@@ -736,7 +736,7 @@ async function processRequest(
       sendJson(res, 503, productionRolloutDisabledResponse());
       return;
     }
-    // PRODUCTION: Add per-request timeout (e.g. from plan.budgets.deadline_ms) so slow pipelines don't hold connections indefinitely.
+    // Per-request processing cap; plan.budgets.deadline_ms is enforced in query-handler and each pipeline hop (PR-023).
     if (!isFeatureFlagEnabled("runtime_mvp_query_chat_enabled", config)) {
       sendJson(res, 404, {
         status: "error",

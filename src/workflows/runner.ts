@@ -17,6 +17,8 @@ import { inheritBudgets } from "./budget-utils.js";
 import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
+import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
+import { PipelineDeadline } from "../utils/pipeline-deadline.js";
 
 export interface WorkflowRunnerDeps {
   getEngine(ref: string): IEngine | undefined;
@@ -319,6 +321,7 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
   const workflowStart = Date.now();
   emitWorkflowEvent("WORKFLOW_START", { workflow_id: workflowId });
   const deadlineMs = minPositive(def.stop_conditions?.deadline_ms, input.plan.budgets?.deadline_ms);
+  const deadline = PipelineDeadline.fromPlan(deadlineMs, workflowStart);
   const maxIterations = def.stop_conditions?.max_iterations ?? 1;
   const maxStepExecutions = Math.max(1, maxIterations * Math.max(def.steps.length, 1));
   const costBudgetUsd = input.plan.budgets?.cost_budget_usd;
@@ -367,7 +370,7 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
       });
     }
     for (const step of sortedSteps) {
-      if (deadlineMs != null && Date.now() - workflowStart > deadlineMs) {
+      if (deadline.isExceeded()) {
         emitWorkflowEvent("WORKFLOW_END", {
           workflow_id: workflowId,
           duration_ms: Date.now() - workflowStart,
@@ -375,7 +378,7 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
         });
         return budgetExceededEnvelope(requestId, workflowId, workflowStart, {
           dimension: "deadline_ms",
-          deadline_ms: deadlineMs,
+          deadline_ms: deadlineMs!,
         });
       }
       if (executedSteps >= maxStepExecutions) {
@@ -449,7 +452,23 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
         const inv = buildEngineInvocation(step, depArtifacts, input, traceId);
         emitEngineEvent("ENGINE_START", { engine_type: step.ref, invocation_id: inv.invocation_id });
         const start = Date.now();
-        const result = await engine.invoke(inv);
+        let result;
+        try {
+          result = await deadline.run(() => engine.invoke(inv));
+        } catch (err) {
+          if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "blocked",
+            });
+            return budgetExceededEnvelope(requestId, workflowId, workflowStart, {
+              dimension: "deadline_ms",
+              deadline_ms: deadlineMs,
+            });
+          }
+          throw err;
+        }
         const durationMs = Date.now() - start;
         emitEngineEvent("ENGINE_END", {
           engine_type: step.ref,
@@ -558,7 +577,23 @@ export async function runWorkflow(params: RunWorkflowParams): Promise<ResponseEn
             },
           };
         }
-        const childEnvelope = await pipeline.run(childInput);
+        let childEnvelope;
+        try {
+          childEnvelope = await deadline.run(() => pipeline.run(childInput));
+        } catch (err) {
+          if (err instanceof RequestDeadlineExceededError && deadlineMs) {
+            emitWorkflowEvent("WORKFLOW_END", {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "blocked",
+            });
+            return budgetExceededEnvelope(requestId, workflowId, workflowStart, {
+              dimension: "deadline_ms",
+              deadline_ms: deadlineMs,
+            });
+          }
+          throw err;
+        }
         accumulatedTokens +=
           (childEnvelope.telemetry?.tokens_in ?? 0) + (childEnvelope.telemetry?.tokens_out ?? 0);
         if (
