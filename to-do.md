@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-024 / QA-001 — `npm run verify:sow` green (2026-05-20)
+**Last task closed:** PR-001 — operational bearer token enforced + tested (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -47,7 +47,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 
 | ID | Task | Status | Priority | Evidence / files |
 |----|------|--------|----------|------------------|
-| PR-001 | Set `OPERATIONAL_BEARER_TOKEN` for protected ops endpoints | open | P0 | `bootstrap/index.ts`, `routes.ts` |
+| PR-001 | Set `OPERATIONAL_BEARER_TOKEN` for protected ops endpoints | done | P0 | Bootstrap fail-fast in production (`bootstrap/index.ts`); routes require Bearer when set; `.env.example` + `operational-auth.integration.test.ts` (2026-05-20). **Deploy:** set env in prod/K8s (`k8s/base/secret.yaml`). |
 | PR-002 | Configure real model providers (`MODEL_GATEWAY_PROVIDERS_JSON` / registry); no stub-only in production | partial | P0 | `gateways/model-gateway.ts`, `bootstrap.test.ts` |
 | PR-003 | Set auth: `AUTH_AI_JWT_SECRET`, IdP/app registry JSON, scopes | open | P0 | `config/schema.ts`, `server/auth.ts` |
 | PR-004 | Set `RELEASE_ID` / `BUILD_ID` when `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | open | P0 | `bootstrap/index.ts` |

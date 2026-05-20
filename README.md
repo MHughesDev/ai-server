@@ -34,6 +34,10 @@ Do not create parallel status or checklist docs unless there is a strict audienc
 - Node.js >= 20
 - npm
 
+## Local environment
+
+Copy [`.env.example`](.env.example) to `.env` and set at least `OPERATIONAL_BEARER_TOKEN` before running in production (`NODE_ENV=production`). For an interactive setup, run `./scripts/generate-env.sh`.
+
 ## Commands (parity with CI)
 
 ```bash
