@@ -9,7 +9,8 @@ import { appendFile, access, rename, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
 import type { TelemetryEvent } from "./events.js";
-import { safeLogError } from "./redact.js";
+import { redactTelemetryEvent } from "./redact-event.js";
+import { payloadHasSensitiveKeys, safeLogError } from "./redact.js";
 
 /** Sink for telemetry events; e.g. file append or OTEL exporter. */
 export interface IEventSink {
@@ -147,7 +148,13 @@ export function createFileEventSink(
   return {
     write(event: TelemetryEvent): void {
       if (closed) return;
-      const line = `${JSON.stringify(event)}\n`;
+      const safe = redactTelemetryEvent(event);
+      if (payloadHasSensitiveKeys(safe.payload)) {
+        lastError = "refusing to queue telemetry with sensitive keys after redaction";
+        droppedEvents += 1;
+        return;
+      }
+      const line = `${JSON.stringify(safe)}\n`;
 
       if (queue.length >= maxQueueSize) {
         droppedEvents += 1;

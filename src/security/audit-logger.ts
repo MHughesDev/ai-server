@@ -11,8 +11,22 @@ import { constants } from "node:fs";
 import { createInterface } from "node:readline";
 import { finished } from "node:stream/promises";
 import { syncFileToDisk } from "../fs/sync-file-to-disk.js";
-import { safeLogError } from "../observability/redact.js";
+import {
+  redact,
+  resolveTelemetryRedactionLevel,
+  safeLogError,
+  type RedactionLevel,
+} from "../observability/redact.js";
 import type { AuditEvent } from "./types.js";
+
+/** Redact audit payload at source before hash chain and persistence (WANT-012). */
+function redactAuditEvent(event: AuditEvent): AuditEvent {
+  const level = (event.redaction_level ?? resolveTelemetryRedactionLevel()) as RedactionLevel;
+  return {
+    ...event,
+    payload: redact(event.payload, level, { payloadRoot: true }),
+  };
+}
 
 export interface AuditLogEntry extends AuditEvent {
   sequence_id: number;
@@ -316,11 +330,12 @@ function hashPayload(entry: Omit<AuditLogEntry, "event_hash">): string {
  * L2-04: Uses async lock to ensure sequence_id and hash chain consistency for concurrent callers.
  */
 export async function writeAuditEventAsync(event: AuditEvent): Promise<AuditLogEntry> {
+  const safeEvent = redactAuditEvent(event);
   await acquireAuditLock();
   try {
     sequenceId += 1;
     const entry: Omit<AuditLogEntry, "event_hash"> = {
-      ...event,
+      ...safeEvent,
       sequence_id: sequenceId,
       previous_event_hash: lastHash,
     };
@@ -353,7 +368,7 @@ export async function writeAuditEventAsync(event: AuditEvent): Promise<AuditLogE
  * For concurrent scenarios, use writeAuditEventAsync.
  */
 export function writeAuditEvent(event: AuditEvent): void {
-  pendingEvents.push(event);
+  pendingEvents.push(redactAuditEvent(event));
   if (processingQueue) return;
   processingQueue = true;
   try {

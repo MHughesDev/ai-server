@@ -39,6 +39,23 @@ describe("audit-logger", () => {
     setAuditSink(null);
   });
 
+  it("redacts sensitive keys from payload at write time (WANT-012)", () => {
+    writeAuditEvent({
+      event_type: "SECURITY_TEST",
+      request_id: "req-redact",
+      timestamp_iso: new Date().toISOString(),
+      payload: {
+        tool_id: "stub_tool",
+        api_key: "must-not-persist",
+        bearer: "tok",
+      },
+    });
+    const log = getAuditLogSnapshot();
+    expect(log[0].payload.api_key).toBeUndefined();
+    expect(log[0].payload.bearer).toBeUndefined();
+    expect(log[0].payload.tool_id).toBe("stub_tool");
+  });
+
   it("appends events with sequence_id and previous_event_hash", () => {
     writeAuditEvent({
       event_type: "TEST",

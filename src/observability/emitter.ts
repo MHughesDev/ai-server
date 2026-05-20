@@ -5,8 +5,10 @@
 
 import { createHash } from "node:crypto";
 import type { TelemetryEvent } from "./events.js";
+import type { RedactionLevel } from "./redact.js";
 import { getEventSink } from "./event-sink.js";
-import { redact, safeLogError, type RedactionLevel } from "./redact.js";
+import { safeLogError } from "./redact.js";
+import { redactTelemetryEvent } from "./redact-event.js";
 
 export interface EventEmitter {
   emit(event: TelemetryEvent): void;
@@ -44,14 +46,7 @@ export function createEmitter(options?: {
           : Math.random() < sampleRate;
         if (!keep) return;
       }
-      const level = (event.redaction_level as RedactionLevel) ?? redactionLevel;
-      const redacted: TelemetryEvent = {
-        ...event,
-        payload: event.payload
-          ? (redact(event.payload, level, { payloadRoot: true }) as TelemetryEvent["payload"])
-          : undefined,
-      };
-      const out = redact(redacted, level) as TelemetryEvent;
+      const out = redactTelemetryEvent(event, redactionLevel);
       if (capture) {
         if (capture.length >= maxCaptureSize) {
           capture.shift();

@@ -811,13 +811,15 @@ async function processRequest(
       if (abuseResult.detected) {
         console.warn(
           "[rate-limit] Abuse detected:",
-          redact(
-            {
-              org_id: ingressResult.callerContext.orgId,
-              app_id: ingressResult.callerContext.appId,
-              patterns: abuseResult.patterns,
-            },
-            "none"
+          JSON.stringify(
+            redact(
+              {
+                org_id: ingressResult.callerContext.orgId,
+                app_id: ingressResult.callerContext.appId,
+                patterns: abuseResult.patterns,
+              },
+              "minimal"
+            )
           )
         );
         // Log but don't block - can be enhanced to block if needed
