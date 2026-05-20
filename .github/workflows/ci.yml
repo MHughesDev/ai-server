@@ -106,3 +106,18 @@ jobs:
           name: incident-drill-evidence
           path: artifacts/incident-drill-evidence.json
           retention-days: 90
+
+      - name: Assemble go/no-go evidence package
+        env:
+          GO_NO_GO_VERIFY_PASSED: "true"
+          RELEASE_ID: ci-${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+          GO_NO_GO_EVIDENCE_PACKAGE_PATH: artifacts/go-no-go-evidence-package.json
+        run: npm run go-no-go:package
+
+      - name: Upload go/no-go evidence package
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-no-go-evidence-package
+          path: artifacts/go-no-go-evidence-package.json
+          retention-days: 365

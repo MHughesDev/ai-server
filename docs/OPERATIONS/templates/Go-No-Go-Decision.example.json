@@ -1,0 +1,6 @@
+{
+  "outcome": "go",
+  "rationale": "All blocking technical gates passed in CI. Rollback and incident drills recorded. Staging deploy validated. Residual risks accepted per risk register.",
+  "signedAtIso": "2026-05-20T16:00:00.000Z",
+  "signatories": ["engineering_lead", "security_risk", "operations_sre"]
+}

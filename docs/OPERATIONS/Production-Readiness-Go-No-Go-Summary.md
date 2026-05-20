@@ -311,9 +311,9 @@ npm run acceptance:observability   # optional
 - [ ] Rollback drill executed and recorded (per L2-08)
 - [ ] `to-do.md` OPS-006 filled (owners, evidence links, dates)
 - [ ] L2-08 production readiness review tasks complete where required
-- [ ] Formal go/no-go decision recorded
+- [ ] Formal go/no-go decision recorded — use **`npm run go-no-go:package`** → `artifacts/go-no-go-evidence-package.json`; signatories via `GO_NO_GO_SIGNATORIES_JSON` (see `docs/OPERATIONS/RUNBOOKS/Go-No-Go-Decision.md`)
 
-**Evidence:** Checklist PDF/links, meeting notes.
+**Evidence:** `artifacts/go-no-go-evidence-package.json`, signatory JSON, meeting notes.
 
 ---
 
@@ -361,6 +361,8 @@ npm run acceptance:observability   # optional
 | Routes (source of truth for HTTP) | `src/server/routes.ts` |
 | CI | `.github/workflows/ci.yml` |
 | Verification command | `npm run verify:sow` (see `package.json`) |
+| Go/no-go evidence package | `npm run go-no-go:package` → `artifacts/go-no-go-evidence-package.json` |
+| Signatory templates | `docs/OPERATIONS/templates/Go-No-Go-Signatories.example.json` |
 
 ---
 

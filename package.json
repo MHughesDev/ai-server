@@ -29,6 +29,8 @@
     "smoke:pre-release": "node scripts/pre-release-smoke.mjs",
     "drill:rollback": "npm run build && node scripts/rollback-drill.mjs",
     "drill:incidents": "npm run build && node scripts/incident-drills.mjs",
+    "go-no-go:package": "npm run build && node scripts/assemble-go-no-go-package.mjs",
+    "go-no-go:validate": "npm run build && node scripts/validate-go-no-go-package.mjs",
     "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {

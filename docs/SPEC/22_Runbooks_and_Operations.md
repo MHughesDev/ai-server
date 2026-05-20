@@ -23,6 +23,7 @@ Production target: these endpoints must be protected by auth/mTLS/private networ
 | Observability and Eval | `docs/OPERATIONS/RUNBOOKS/Observability-and-Eval.md` | Events, metrics, eval regression, alert tuning |
 | CI Bootstrap Troubleshooting | `docs/OPERATIONS/RUNBOOKS/CI-Bootstrap-Troubleshooting.md` | CI/build/bootstrap incident handling |
 | Incident Simulation Drills | `docs/OPERATIONS/RUNBOOKS/Incident-Simulation-Drills.md` | Provider, policy, budget drills + evidence (PR-032) |
+| Go / No-Go Decision | `docs/OPERATIONS/RUNBOOKS/Go-No-Go-Decision.md` | Signatories, evidence package, formal GO/NO-GO (PR-033) |
 
 ## On-Call and Escalation
 - Primary owner: operations/platform on-call.

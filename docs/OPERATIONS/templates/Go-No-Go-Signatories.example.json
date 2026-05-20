@@ -1,0 +1,20 @@
+[
+  {
+    "role": "engineering_lead",
+    "name": "Engineering Lead Name",
+    "signed_at_iso": "2026-05-20T15:00:00.000Z",
+    "notes": "verify:sow green on release branch; PR reviewed"
+  },
+  {
+    "role": "security_risk",
+    "name": "Security / Risk Name",
+    "signed_at_iso": "2026-05-20T15:00:00.000Z",
+    "notes": "Auth, secrets, tool posture reviewed"
+  },
+  {
+    "role": "operations_sre",
+    "name": "Operations / SRE Name",
+    "signed_at_iso": "2026-05-20T15:00:00.000Z",
+    "notes": "Rollback + incident drills passed; staging deploy OK"
+  }
+]

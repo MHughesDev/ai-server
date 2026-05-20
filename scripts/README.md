@@ -33,6 +33,8 @@ curl http://localhost:3000/healthz
 | `release/verify-artifact-manifest.mjs` | Verify checksums + signature |
 | `rollback-drill.mjs` | Kill-switch MTTR drill + evidence JSON (PR-031) |
 | `incident-drills.mjs` | Provider / policy / budget incident drills + evidence (PR-032) |
+| `assemble-go-no-go-package.mjs` | Production go/no-go evidence package (PR-033) |
+| `validate-go-no-go-package.mjs` | Validate signatories + technical gates for GO |
 
 ## Manual Setup
 
