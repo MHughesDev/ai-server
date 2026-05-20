@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** WANT-027 — gateway timeouts without timer leaks (2026-05-20)
+**Last task closed:** WANT-029 — tool sandbox + auditable identity (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -100,7 +100,7 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 | WANT-023 | Production real model providers (no stub-only) | done | P0 | `assert-production-model-gateway.ts` bootstrap + `assertRuntimeModelGateway` on query path; `model-routing.ts`; dev/staging framed_echo with bootstrap log; tests (2026-05-20) |
 | WANT-026 | Model retry policy by error class | done | P1 | `model-provider-retry.ts`: parse OpenAI-compatible JSON `type`/`code`, map to taxonomy + retryability; wired in `OpenAiCompatibleModelGateway`; tests (2026-05-20) |
 | WANT-027 | Gateway timeouts without timer leaks | done | P1 | `gateway-timeout.ts` + `raceWithTimeout(Error)`; model/tool/job scopes map to taxonomy; job-queue uses shared helper; tests (2026-05-20) |
-| WANT-029 | Tool sandbox + auditable identity | partial | P0 | Custom tools/registry beyond builtins |
+| WANT-029 | Tool sandbox + auditable identity | done | P0 | `tool-registry.ts` + `TOOL_GATEWAY_CUSTOM_TOOLS_JSON`; sandbox metadata for custom tools; caller attribution on echo; `tool_engine` TOOL_* audit; tests (2026-05-20) |
 | WANT-030 | No stub delegates for side-effecting tools | partial | P0 | Enable `ExecutableToolGateway` in prod config after review |
 | WANT-031 | Persistent memory + strict scope | partial | P0 | Chroma/Redis/vector; drop lexical-only default in prod |
 | WANT-032 | Vector/embeddings in production retrieval | partial | P0 | `provider: "gateway"` embeddings bridge (see STUB-003) |
@@ -134,7 +134,7 @@ Former `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`. Closed item
 | GAP-MODEL-001 | High | Production provider config; stub still default without config | done | Bootstrap fail-fast + registry routing (PR-002, 2026-05-20); query path uses `createProviderBackedModelGateway` when configured |
 | GAP-MODEL-002 | Medium | Capability + scope routing E2E | partial | Provider config in schema + integration proof; optional live E2E |
 | GAP-TOOL-001 | Medium | Real tool execution in production | partial | Enable `ExecutableToolGateway` under policy |
-| GAP-TOOL-002 | Medium | Sandbox + identity (implemented) | partial | Integration tests for sandbox enforcement |
+| GAP-TOOL-002 | Medium | Sandbox + identity (implemented) | done | Custom registry sandbox tests + tool_engine TOOL_ACCESS/identity (WANT-029, 2026-05-20) |
 | GAP-BUDGET-001 | Medium | Deadline/cost on non-workflow paths | done | Cumulative token/cost enforced per hop on all non-workflow pipelines (WANT-014, 2026-05-20) |
 | GAP-BUDGET-002 | Medium | All flags use dynamic resolution | partial | Bootstrap/preflight/emitter static reads if overrides required |
 | GAP-BUDGET-003 | Medium | Tenant cost durable/shared | partial | Prefer Postgres/Redis in multi-instance future |

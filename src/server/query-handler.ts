@@ -21,7 +21,11 @@ import type { WorkflowRunnerDeps } from "../workflows/runner.js";
 import { createEngineRegistry } from "../engines/registry.js";
 import { createProviderBackedModelGateway, ModelGatewayError } from "../gateways/model-gateway.js";
 import { resolveToolExecutionEnabled } from "../config/assert-production-tool-execution.js";
-import { getDefaultToolGateway, AllowlistToolGateway, ExecutableToolGateway } from "../gateways/tool-gateway.js";
+import {
+  getDefaultToolGateway,
+  AllowlistToolGateway,
+  createExecutableToolGateway,
+} from "../gateways/tool-gateway.js";
 import type { ResponseEnvelope } from "../contracts/response-envelope.js";
 import {
   runWithContextAsync,
@@ -527,7 +531,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
           ? new AllowlistToolGateway({
               allowlist: plan.tools_enabled,
               sandbox: plan.sandbox,
-              delegate: new ExecutableToolGateway(),
+              delegate: createExecutableToolGateway(),
             })
           : getDefaultToolGateway()
         : getDefaultToolGateway();
