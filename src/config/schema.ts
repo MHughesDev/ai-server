@@ -89,6 +89,19 @@ const MemoryRuntimeSchema = z
 
 export type MemoryRuntimeConfig = z.infer<typeof MemoryRuntimeSchema>;
 
+/** PR-005: Scoped secret resolution backend (stub dev-only; env/SM/Vault for production). */
+const SecretsConfigSchema = z
+  .object({
+    backend: z
+      .enum(["stub", "env", "aws_secrets_manager", "vault"])
+      .default("stub"),
+    /** Prefix for per-key env vars when using env/SM/Vault-injected secrets. */
+    env_prefix: z.string().min(1).default("SCOPED_SECRET_"),
+  })
+  .default({});
+
+export type SecretsConfig = z.infer<typeof SecretsConfigSchema>;
+
 const AuthClaimMappingSchema = z
   .object({
     org_id: z.string().min(1).default("org_id"),
@@ -246,6 +259,8 @@ export const ConfigSchema = z.object({
   requireAuthHeader: z.boolean().default(false),
   /** L2-auth: trust-token exchange + AI JWT validation settings. */
   auth: AuthConfigSchema,
+  /** L2-05 / PR-005: Scoped secrets backend for resolveSecret(). */
+  secrets: SecretsConfigSchema,
   /** L2-auth: deterministic ingress limit for /v1/query; set max_requests=0 to disable. */
   ingress_rate_limit: IngressRateLimitSchema,
   /** Optional bearer token required for operational endpoints when provided. */
@@ -453,6 +468,14 @@ export function loadConfigFromEnv(): Config {
     : 60_000;
   const modelGatewayProviders = parseJsonEnv("MODEL_GATEWAY_PROVIDERS_JSON");
   const modelGatewayRegistry = parseJsonEnv("MODEL_GATEWAY_REGISTRY_JSON");
+  const secretsBackendRaw = (process.env.SECRETS_BACKEND ?? "stub").trim().toLowerCase();
+  const secretsBackend =
+    secretsBackendRaw === "env" ||
+    secretsBackendRaw === "aws_secrets_manager" ||
+    secretsBackendRaw === "vault" ||
+    secretsBackendRaw === "stub"
+      ? secretsBackendRaw
+      : "stub";
 
   const authConfig: Record<string, unknown> = {
     ai_jwt_issuer: process.env.AUTH_AI_JWT_ISSUER ?? "ai-server",
@@ -475,6 +498,10 @@ export function loadConfigFromEnv(): Config {
     maxRequestBodyBytes: raw.maxRequestBodyBytes,
     requestReadTimeoutMs: raw.requestReadTimeoutMs,
     auth: authConfig,
+    secrets: {
+      backend: secretsBackend,
+      env_prefix: process.env.SCOPED_SECRETS_ENV_PREFIX?.trim() || "SCOPED_SECRET_",
+    },
     ingress_rate_limit: {
       max_requests: ingressRateLimitMaxRequests,
       window_ms: ingressRateLimitWindowMs,

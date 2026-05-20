@@ -4,8 +4,13 @@
  */
 
 import {
+  initializeSecretsBackend,
+  resetSecretsBackendForTest,
+} from "./secrets-backend.js";
+import {
   isSecretAllowedForCaller,
   resolveSecret,
+  SecretNotFoundError,
   SecretScopeViolationError,
 } from "./secret-scope.js";
 import type { CallerContext } from "./types.js";
@@ -16,6 +21,15 @@ const caller: CallerContext = {
   orgId: "org-A",
   scopes: ["read", "admin"],
 };
+
+beforeEach(() => {
+  resetSecretsBackendForTest();
+  initializeSecretsBackend("stub");
+});
+
+afterAll(() => {
+  resetSecretsBackendForTest();
+});
 
 describe("secret-scope", () => {
   describe("isSecretAllowedForCaller", () => {
@@ -61,6 +75,20 @@ describe("secret-scope", () => {
         expect((e as SecretScopeViolationError).ref.scope).toBe("org-B");
         expect((e as SecretScopeViolationError).caller.orgId).toBe("org-A");
       }
+    });
+
+    it("resolves from env backend when configured", async () => {
+      process.env.SCOPED_SECRETS_JSON = JSON.stringify({ api_key: "real-value" });
+      initializeSecretsBackend("env");
+      const value = await resolveSecret({ key: "api_key", scope: "org-A" }, caller);
+      expect(value).toBe("real-value");
+    });
+
+    it("throws SecretNotFoundError when env backend has no key", async () => {
+      initializeSecretsBackend("env");
+      await expect(
+        resolveSecret({ key: "missing", scope: "org-A" }, caller)
+      ).rejects.toThrow(SecretNotFoundError);
     });
   });
 });

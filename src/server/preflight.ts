@@ -126,6 +126,15 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
     message: "SECURITY_HARD_CONTROLS_ENABLED is enabled",
   });
   add({
+    id: "security.secrets_backend",
+    status:
+      config.secrets.backend !== "stub"
+        ? "pass"
+        : "fail",
+    message: "Scoped secrets use a production backend (not stub)",
+    detail: { backend: config.secrets.backend },
+  });
+  add({
     id: "flags.cost_caps",
     status: resolveFeatureFlagEnabled("enable_cost_caps", config) ? "pass" : "warn",
     message: "ENABLE_COST_CAPS is enabled",

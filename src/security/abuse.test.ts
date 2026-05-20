@@ -3,12 +3,17 @@
  * @see L2-05 Phase 3, SEC-005
  */
 
+import { initializeSecretsBackend } from "./secrets-backend.js";
 import { resolveSecret, SecretScopeViolationError } from "./secret-scope.js";
 import type { CallerContext } from "./types.js";
 import { getDefaultToolGateway } from "../gateways/tool-gateway.js";
 import { verifyAuditIntegrity, writeAuditEvent, resetAuditLog } from "./audit-logger.js";
 
 describe("security abuse / misuse", () => {
+  beforeEach(() => {
+    initializeSecretsBackend("stub");
+  });
+
   describe("scope escalation", () => {
     it("caller cannot access secret scoped to another org", async () => {
       const caller: CallerContext = {

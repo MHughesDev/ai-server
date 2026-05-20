@@ -31,6 +31,12 @@
 
 **As-built (2026-03-24):** `writeAuditEvent` / `writeAuditEventAsync` use an async lock for hash-chain assignment; the file sink uses a bounded async queue. The **in-memory** ring is capped (default 10_000 entries, oldest evicted) so long-lived processes do not grow RAM unbounded—**authoritative chain for compliance remains on disk** when a file sink is configured. `verifyAuditIntegrity()` validates the **retained in-memory window** (internal hash links), not necessarily from `"genesis"` after trimming. **`verifyAuditLogFileIntegrity(filePath)`** (async) scans one **on-disk** newline-delimited JSON file and verifies recomputed `event_hash` values and line-to-line `previous_event_hash` links; run per rotated file (`.1`, `.2`, …) or merge externally for end-to-end history.
 
+## Scoped secrets (PR-005)
+
+- `resolveSecret(ref, caller)` enforces scope, then resolves via `SECRETS_BACKEND` (`src/security/secrets-backend.ts`).
+- **Dev:** `stub` returns `[REDACTED]` (no real material).
+- **Production:** `env`, `aws_secrets_manager`, or `vault` — values injected via `SCOPED_SECRETS_JSON` and/or `SCOPED_SECRETS_ENV_PREFIX` (K8s secrets, External Secrets, AWS SM, Vault agent). Bootstrap fail-fast when `stub` or missing material.
+
 ## Current-State Notes
 - Some auth and endpoint controls remain incomplete for production.
-- Tool execution and secrets integration still include stub/deferred paths in current implementation.
+- Tool execution still includes deny-by-default stub paths; secrets backend is production-configurable (see above).

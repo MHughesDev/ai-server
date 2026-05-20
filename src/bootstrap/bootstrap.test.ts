@@ -45,6 +45,12 @@ function applyProductionRolloutEnv(): void {
   process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
 }
 
+/** Production scoped secrets backend (PR-005). */
+function applyProductionSecretsEnv(): void {
+  process.env.SECRETS_BACKEND = "env";
+  process.env.SCOPED_SECRETS_JSON = JSON.stringify({ bootstrap_test: "ok" });
+}
+
 function applyProductionModelEnv(): void {
   process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
   process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
@@ -129,11 +135,31 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/missing API key/);
   });
 
+  it("fails in production when SECRETS_BACKEND is stub (PR-005)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    process.env.SECRETS_BACKEND = "stub";
+    expect(() => bootstrap()).toThrow(/SECRETS_BACKEND=env/);
+  });
+
+  it("fails in production when env secrets backend has no material (PR-005)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    process.env.SECRETS_BACKEND = "env";
+    delete process.env.SCOPED_SECRETS_JSON;
+    expect(() => bootstrap()).toThrow(/scoped secrets material/);
+  });
+
   it("bootstraps in production with auth and model provider config (PR-002, PR-003)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     const cfg = bootstrap();
     expect(cfg.requireAuthHeader).toBe(true);
     expect(cfg.auth.query_required_scopes).toContain("query:invoke");
@@ -149,6 +175,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -165,6 +192,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -198,6 +226,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.TLS_KEY_PATH;
@@ -212,6 +241,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
@@ -225,6 +255,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     applyProductionRolloutEnv();
     const cfg = bootstrap();
     expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
@@ -235,6 +266,7 @@ describe("bootstrap", () => {
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
+    applyProductionSecretsEnv();
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
     expect(() => bootstrap()).toThrow("Production sink parent directory must exist");

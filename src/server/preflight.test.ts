@@ -76,6 +76,8 @@ describe("production preflight", () => {
         },
       },
     });
+    process.env.SECRETS_BACKEND = "env";
+    process.env.SCOPED_SECRETS_JSON = JSON.stringify({ api_key: "preflight-secret" });
 
     const config = loadConfigFromEnv();
     const report = await runProductionPreflight(config);

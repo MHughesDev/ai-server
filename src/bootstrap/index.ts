@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertProductionAuth } from "../config/assert-production-auth.js";
 import { assertProductionModelGateway } from "../config/assert-production-model-gateway.js";
+import { assertProductionSecretsBackend } from "../config/assert-production-secrets-backend.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
@@ -22,6 +23,10 @@ import {
   resetFeatureFlags,
   resolveFeatureFlagEnabled,
 } from "../config/feature-flags.js";
+import {
+  initializeSecretsBackend,
+  resetSecretsBackendForTest,
+} from "../security/secrets-backend.js";
 
 let config: Config | null = null;
 let jobQueue: JobQueueService | null = null;
@@ -60,6 +65,7 @@ function assertProductionReadiness(cfg: Config): void {
 export function bootstrap(): Config {
   if (config) return config;
   config = loadConfigFromEnv();
+  initializeSecretsBackend(config.secrets.backend);
   assertProductionReadiness(config);
   if (config.env === "production" && !config.operationalBearerToken) {
     throw new Error(
@@ -68,6 +74,7 @@ export function bootstrap(): Config {
   }
   assertProductionAuth(config);
   assertProductionModelGateway(config);
+  assertProductionSecretsBackend(config);
   assertProductionSinkPathsWritable(config);
   if (
     config.env === "production" &&
@@ -138,6 +145,7 @@ export function getConfig(): Config {
 /** Test-only: clear config cache so next bootstrap() reloads from env. Use in isolation tests (e.g. L2-06 retrieval). */
 export function resetConfigForTest(): void {
   config = null;
+  resetSecretsBackendForTest();
   if (jobQueue) {
     void jobQueue.stop();
     jobQueue = null;

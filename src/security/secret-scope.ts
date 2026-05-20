@@ -5,6 +5,7 @@
 
 import type { CallerContext, SecretRef } from "./types.js";
 import { incrementCounter, METRIC_SECRET_SCOPE_VIOLATIONS_TOTAL } from "../observability/metrics.js";
+import { getSecretsBackend } from "./secrets-backend.js";
 
 /** Scope violation for audit and deny */
 export class SecretScopeViolationError extends Error {
@@ -40,10 +41,20 @@ export function isSecretAllowedForCaller(ref: SecretRef, caller: CallerContext):
   return false;
 }
 
+/** Thrown when scope allows access but the configured backend has no value for the key. */
+export class SecretNotFoundError extends Error {
+  constructor(
+    message: string,
+    public readonly ref: SecretRef
+  ) {
+    super(message);
+    this.name = "SecretNotFoundError";
+  }
+}
+
 /**
  * Resolve a secret by ref for the given caller. Returns value only if scope allows.
- * Stub implementation: returns a redacted placeholder when allowed; throws on violation.
- * Production would integrate with a secrets manager.
+ * Backend is selected via SECRETS_BACKEND (stub dev-only; env/SM/Vault for production).
  */
 export async function resolveSecret(
   ref: SecretRef,
@@ -57,5 +68,9 @@ export async function resolveSecret(
       caller
     );
   }
-  return await Promise.resolve("[REDACTED]");
+  const value = await getSecretsBackend().resolve(ref.key);
+  if (value === null) {
+    throw new SecretNotFoundError(`Secret not found for key '${ref.key}'`, ref);
+  }
+  return value;
 }
