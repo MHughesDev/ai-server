@@ -21,6 +21,12 @@
     "start:dev": "tsx src/server/index.ts",
     "serve": "node dist/server/index.js",
     "serve:dev": "tsx src/server/index.ts",
+    "validate:manifests": "node scripts/validate-k8s-manifests.mjs && node scripts/validate-openapi-routes.mjs",
+    "release:manifest": "node scripts/release/build-artifact-manifest.mjs",
+    "release:sign": "node scripts/release/sign-artifact-manifest.mjs",
+    "release:verify": "node scripts/release/verify-artifact-manifest.mjs",
+    "release:artifacts": "npm run release:manifest && npm run release:sign && npm run release:verify",
+    "smoke:pre-release": "node scripts/pre-release-smoke.mjs",
     "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {

@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-023 — plan deadline_ms through pipeline hops (2026-05-20)
+**Last task closed:** PR-030 — CI/CD signed artifacts, manifest validation, pre-release smoke (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -79,7 +79,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 
 | ID | Task | Status | Priority | Evidence / files |
 |----|------|--------|----------|------------------|
-| PR-030 | CI/CD: signed artifacts, manifest validation, pre-release smoke | open | P0 | `.github/` / GitLab CI |
+| PR-030 | CI/CD: signed artifacts, manifest validation, pre-release smoke | done | P0 | `.github/workflows/ci.yml` `release-gates` job; `scripts/release/*`, `validate-*`, `pre-release-smoke.mjs`; `npm run validate:manifests`, `release:artifacts`, `smoke:pre-release`; `src/release/release-pipeline.test.ts` (2026-05-20) |
 | PR-031 | Canary cohorts + rollback drills with MTTR evidence | open | P0 | `rollout/policy.ts`, runbooks |
 | PR-032 | Incident simulation drills (provider, policy, budget) | open | P0 | `docs/OPERATIONS/RUNBOOKS/` |
 | PR-033 | Formal go/no-go with signatories + evidence package | open | P0 | Go-No-Go summary |

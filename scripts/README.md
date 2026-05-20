@@ -25,6 +25,12 @@ curl http://localhost:3000/healthz
 | `stop.sh` | Gracefully stop all services |
 | `logs.sh` | View aggregated logs from all services |
 | `backup.sh` | Backup audit logs and state |
+| `validate-k8s-manifests.mjs` | Structural checks for `k8s/` manifests (CI) |
+| `validate-openapi-routes.mjs` | `openapi.yaml` ↔ `routes.ts` parity (CI) |
+| `pre-release-smoke.mjs` | Start server, probe `/healthz`, `/readyz`, `/v1/version` |
+| `release/build-artifact-manifest.mjs` | SHA-256 manifest for `dist/` |
+| `release/sign-artifact-manifest.mjs` | HMAC sign manifest (`RELEASE_SIGNING_KEY`) |
+| `release/verify-artifact-manifest.mjs` | Verify checksums + signature |
 
 ## Manual Setup
 
