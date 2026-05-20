@@ -200,12 +200,15 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
   add({
     id: "limits.connection_controls",
     status:
-      !!process.env.MAX_CONNECTIONS &&
-      !!process.env.MAX_CONCURRENT_REQUESTS &&
-      !!process.env.MAX_BODY_BYTES
+      !!process.env.MAX_CONNECTIONS?.trim() &&
+      !!process.env.MAX_CONNECTIONS_PER_IP?.trim() &&
+      !!process.env.MAX_CONCURRENT_REQUESTS?.trim() &&
+      !!process.env.MAX_REQUEST_QUEUE_DEPTH?.trim() &&
+      !!process.env.MAX_BODY_BYTES?.trim()
         ? "pass"
-        : "warn",
-    message: "Connection and body resource limits are explicitly configured",
+        : "fail",
+    message:
+      "Connection, concurrency queue, and body limits are explicitly configured",
   });
   add({
     id: "timeouts.request_processing",

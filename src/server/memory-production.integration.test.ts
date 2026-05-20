@@ -66,6 +66,14 @@ function applyProductionEnv(): void {
   process.env.REDIS_URL = "redis://127.0.0.1:6379";
   process.env.AUDIT_LOG_PATH = "/tmp/ai-server-memory-audit.jsonl";
   process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-memory-events.ndjson";
+  process.env.OBSERVABILITY_REDACTION_LEVEL = "minimal";
+  process.env.OBSERVABILITY_REQUIRED_EVENTS_V1 = "true";
+  process.env.SECURITY_HARD_CONTROLS_ENABLED = "true";
+  process.env.MAX_CONNECTIONS = "1000";
+  process.env.MAX_CONNECTIONS_PER_IP = "100";
+  process.env.MAX_CONCURRENT_REQUESTS = "100";
+  process.env.MAX_REQUEST_QUEUE_DEPTH = "50";
+  process.env.MAX_BODY_BYTES = "1000000";
 }
 
 describe("production memory integration", () => {

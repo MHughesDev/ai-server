@@ -4,9 +4,16 @@
  */
 
 import { readFileSync } from "node:fs";
-import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import type { Socket } from "node:net";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
+import { loadConnectionLimitConfig } from "../config/connection-limits.js";
 import { wirePersistentSinksFromConfig } from "../config/persistent-sinks.js";
 import { createConfiguredTelemetryEmitter } from "../config/telemetry-redaction.js";
 import {
@@ -17,118 +24,70 @@ import {
 } from "../observability/index.js";
 import type { IObservability } from "../observability/types.js";
 import { shutdownPersistentAuditFileSink } from "../security/audit-logger.js";
+import {
+  ConnectionTracker,
+  getConnectionTracker,
+  resetConnectionTrackerForTest,
+} from "./connection-tracker.js";
 import { handleRequest } from "./routes.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
-/** Connection limits configuration (L2-05 Phase 1: Core Infrastructure Fixes) */
-const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS ?? "1000", 10);
-const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP ?? "100", 10);
-const REQUEST_QUEUE_MAX_DEPTH = parseInt(process.env.REQUEST_QUEUE_MAX_DEPTH ?? "100", 10);
-
-import type { Socket } from "node:net";
-
-/** Connection tracking for resource protection */
-interface ConnectionState {
-  connections: Set<Socket>;
-  connectionsByIp: Map<string, Set<Socket>>;
-  requestQueue: Array<{ req: IncomingMessage; res: ServerResponse }>;
-  draining: boolean;
+function applyServerResourceLimits(server: Server, limits = loadConnectionLimitConfig()): void {
+  server.maxConnections = limits.maxConnections;
+  server.headersTimeout = limits.serverHeadersTimeoutMs;
+  server.requestTimeout = limits.serverRequestTimeoutMs;
+  server.keepAliveTimeout = parseInt(process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS ?? "5000", 10);
 }
 
-const connectionState: ConnectionState = {
-  connections: new Set(),
-  connectionsByIp: new Map(),
-  requestQueue: [],
-  draining: false,
-};
+function attachConnectionGuard(server: Server, tracker: ConnectionTracker): void {
+  server.on("connection", (socket: Socket) => {
+    const clientIp = socket.remoteAddress ?? "unknown";
+    if (!tracker.tryAccept(socket, clientIp)) {
+      socket.destroy();
+      console.warn(`[server] Connection limit exceeded for IP: ${clientIp}`);
+    }
+  });
+}
 
-function trackConnection(socket: Socket, clientIp: string): boolean {
-  if (connectionState.connections.size >= MAX_CONNECTIONS) {
-    return false;
-  }
+function requestListener(tracker: ConnectionTracker) {
+  return (req: IncomingMessage, res: ServerResponse): void => {
+    if (tracker.isDraining()) {
+      res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "30" });
+      res.end(JSON.stringify({ error: "Server is shutting down" }));
+      return;
+    }
 
-  const ipConnections = connectionState.connectionsByIp.get(clientIp);
-  if (ipConnections && ipConnections.size >= MAX_CONNECTIONS_PER_IP) {
-    return false;
-  }
-
-  connectionState.connections.add(socket);
-
-  if (!ipConnections) {
-    connectionState.connectionsByIp.set(clientIp, new Set([socket]));
-  } else {
-    ipConnections.add(socket);
-  }
-
-  socket.once("close", () => {
-    connectionState.connections.delete(socket);
-    const ipConns = connectionState.connectionsByIp.get(clientIp);
-    if (ipConns) {
-      ipConns.delete(socket);
-      if (ipConns.size === 0) {
-        connectionState.connectionsByIp.delete(clientIp);
+    handleRequest(req, res).catch((err) => {
+      console.error("[server] unhandled", safeLogError(err));
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Internal server error" }));
       }
-    }
-  });
-
-  return true;
+    });
+  };
 }
 
-function requestListener(req: IncomingMessage, res: ServerResponse): void {
-  // Check if server is draining (graceful shutdown)
-  if (connectionState.draining) {
-    res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "30" });
-    res.end(JSON.stringify({ error: "Server is shutting down" }));
-    return;
-  }
-
-  // Check request queue depth
-  if (connectionState.requestQueue.length >= REQUEST_QUEUE_MAX_DEPTH) {
-    res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "10" });
-    res.end(JSON.stringify({ error: "Server overloaded, try again later" }));
-    return;
-  }
-
-  handleRequest(req, res).catch((err) => {
-    console.error("[server] unhandled", safeLogError(err));
-    if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Internal server error" }));
-    }
-  });
-}
-
-export function createAppServer() {
-  const server = createHttpServer(requestListener);
-
-  // Track connections on server
-  server.on("connection", (socket: Socket) => {
-    const clientIp = socket.remoteAddress ?? "unknown";
-    if (!trackConnection(socket, clientIp)) {
-      // Connection limit exceeded - destroy the socket
-      socket.destroy();
-      console.warn(`[server] Connection limit exceeded for IP: ${clientIp}`);
-    }
-  });
-
+export function createAppServer(tracker: ConnectionTracker = getConnectionTracker()): Server {
+  const limits = loadConnectionLimitConfig();
+  const server = createHttpServer(requestListener(tracker));
+  applyServerResourceLimits(server, limits);
+  attachConnectionGuard(server, tracker);
   return server;
 }
 
-export function createHttpsAppServer(options: { key: Buffer; cert: Buffer }) {
-  const server = createHttpsServer(options, requestListener);
-
-  // Track connections on server
-  server.on("connection", (socket: Socket) => {
-    const clientIp = socket.remoteAddress ?? "unknown";
-    if (!trackConnection(socket, clientIp)) {
-      socket.destroy();
-      console.warn(`[server] Connection limit exceeded for IP: ${clientIp}`);
-    }
-  });
-
+export function createHttpsAppServer(
+  options: { key: Buffer; cert: Buffer },
+  tracker: ConnectionTracker = getConnectionTracker()
+): Server {
+  const limits = loadConnectionLimitConfig();
+  const server = createHttpsServer(options, requestListener(tracker));
+  applyServerResourceLimits(server, limits);
+  attachConnectionGuard(server, tracker);
   return server;
 }
+
+export { resetConnectionTrackerForTest };
 
 function main(): void {
   bootstrap();
@@ -147,7 +106,8 @@ function main(): void {
     setObservability(obs);
   }
 
-  const httpServer = createAppServer();
+  const tracker = getConnectionTracker();
+  const httpServer = createAppServer(tracker);
   httpServer.listen(PORT, () => {
     console.info(`Server listening on port ${PORT} (HTTP)`);
   });
@@ -157,10 +117,9 @@ function main(): void {
   let httpsServer: ReturnType<typeof createHttpsAppServer> | null = null;
   if (keyPath && certPath) {
     try {
-      // PRODUCTION: Consider async load or validate paths exist first; readFileSync blocks event loop.
       const key = readFileSync(keyPath);
       const cert = readFileSync(certPath);
-      httpsServer = createHttpsAppServer({ key, cert });
+      httpsServer = createHttpsAppServer({ key, cert }, tracker);
       const httpsPort = config.httpsPort;
       httpsServer.listen(httpsPort, () => {
         console.info(`HTTPS server listening on port ${httpsPort}`);
@@ -170,7 +129,6 @@ function main(): void {
     }
   }
 
-  // Graceful shutdown with connection draining (L2-05 Phase 1)
   let shuttingDown = false;
   const DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "30000", 10);
 
@@ -179,7 +137,7 @@ function main(): void {
     shuttingDown = true;
     console.info(`[server] received ${signal}, starting graceful shutdown...`);
 
-    connectionState.draining = true;
+    tracker.setDraining(true);
 
     const httpClosePromise = new Promise<void>((resolve, reject) => {
       httpServer.close((err) => {
@@ -196,11 +154,13 @@ function main(): void {
       return new Promise((resolve) => {
         const check = () => {
           const elapsed = Date.now() - drainStart;
-          const activeConnections = connectionState.connections.size;
+          const activeConnections = tracker.getStats().activeConnections;
 
           if (activeConnections === 0 || elapsed >= DRAIN_TIMEOUT_MS) {
             if (activeConnections > 0) {
-              console.warn(`[server] drain timeout reached with ${activeConnections} active connections`);
+              console.warn(
+                `[server] drain timeout reached with ${activeConnections} active connections`
+              );
             } else {
               console.info("[server] all connections drained gracefully");
             }

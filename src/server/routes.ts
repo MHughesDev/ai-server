@@ -29,6 +29,7 @@ import {
   detectAbuse,
 } from "./rate-limit.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
+import { loadConnectionLimitConfig } from "../config/connection-limits.js";
 import { RequestQueue, sendBackpressureResponse, handleCors } from "./transport.js";
 import { type JobQueueService, IdempotencyKeyConflictError } from "../queue/job-queue.js";
 import {
@@ -46,10 +47,11 @@ import {
 import { runProductionPreflight } from "./preflight.js";
 import { redact } from "../observability/redact.js";
 
-// Global request queue for backpressure (Phase 7.1)
+// Global request queue for backpressure (PR-021)
+const connectionLimits = loadConnectionLimitConfig();
 const requestQueue = new RequestQueue({
-  maxConcurrent: parseInt(process.env.MAX_CONCURRENT_REQUESTS ?? "100", 10),
-  maxQueueDepth: parseInt(process.env.MAX_REQUEST_QUEUE_DEPTH ?? "50", 10),
+  maxConcurrent: connectionLimits.maxConcurrentRequests,
+  maxQueueDepth: connectionLimits.maxRequestQueueDepth,
 });
 
 // Gap 3A: Async job queue service (initialized by bootstrap)
