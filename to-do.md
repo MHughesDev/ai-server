@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-034 — L2-99 harness readiness decision recorded (2026-05-20)
+**Last task closed:** WANT-004 — orchestrator sole authority for loops/budgets/mode (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -93,7 +93,7 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 
 | ID | Want (short) | Status | Priority | Remaining work |
 |----|--------------|--------|----------|----------------|
-| WANT-004 | Orchestrator sole authority for loops/budgets/mode | partial | P0 | Centralize pipeline-local iteration; full budget+mode in orchestrator |
+| WANT-004 | Orchestrator sole authority for loops/budgets/mode | done | P0 | `src/orchestrator/*` (execution-spec, apply-plan, harness-loop); query-handler applies plan; coding-agent uses orchestrator loop; tests (2026-05-20) |
 | WANT-012 | Secrets never in logs/events; consistent redaction | partial | P0 | Audit emitters at source; sync-sink thoroughness |
 | WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | partial | P0 | Non-workflow multi-hop paths; per-hop telemetry accuracy |
 | WANT-015 | Global per-request deadline | partial | P0 | Deeper pipeline deadline audit beyond HTTP wrapper |

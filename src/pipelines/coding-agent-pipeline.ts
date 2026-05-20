@@ -1,6 +1,6 @@
 /**
  * Coding Agent pipeline – execution ↔ tool ↔ evaluation → synthesis.
- * When harness_autonomous_execution_enabled (L2-99), runs autonomous loop: (execution ↔ tool)* → evaluation → synthesis.
+ * When plan.harness_autonomous_execution (L2-99 / WANT-004), runs orchestrator harness loop then evaluation → synthesis.
  * @see SOW M3 F.5–F.6; L2-99 Harness Readiness Gate; workflows/definitions coding_agent
  */
 
@@ -17,23 +17,16 @@ import { getDefaultToolGateway } from "../gateways/tool-gateway.js";
 import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
-import {
-  buildBudgetExceededEnvelope,
-  HARNESS_TOOL_ITERATION_ABSOLUTE_CAP,
-  isFiniteToolBudget,
-} from "../governance/budget-exceeded.js";
 import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import {
   buildDeadlineExceededEnvelope,
   PipelineDeadline,
 } from "../utils/pipeline-deadline.js";
-
-/** Default max tool rounds when plan omits `tool_budget` (matches prior router defaults). */
-const DEFAULT_MAX_HARNESS_ITERATIONS = 10;
-
-function hasToolBudgetRemaining(toolCallsCount: number, toolBudget: number): boolean {
-  return toolBudget > 0 && toolCallsCount < toolBudget;
-}
+import {
+  hasToolBudgetRemaining,
+  resolveOrchestratorExecutionSpec,
+  runExecutionToolHarnessLoop,
+} from "../orchestrator/index.js";
 
 function emitEngineEvent(
   eventType: "ENGINE_START" | "ENGINE_END",
@@ -131,7 +124,8 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
 
       emitWorkflowEvent("WORKFLOW_START", { workflow_id: workflowId });
 
-      const maxTokens = plan.budgets?.token_budget ?? 1024;
+      /** WANT-004: mode and budgets resolved by orchestrator from plan — no feature-flag or local mode logic. */
+      const execSpec = resolveOrchestratorExecutionSpec(plan);
       const basePrompt = canonical.text || "(no input)";
       const prompt =
         retrievalContext?.contextText && retrievalContext.contextText.length > 0
@@ -150,15 +144,15 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         roles: input.caller.scopes ?? [],
       };
 
-      /** Autonomous harness: orchestration decided in router → `PipelinePlan.harness_autonomous_execution` (WANT-004). */
-      const autonomousMode =
-        plan.harness_autonomous_execution === true && allowlist.length > 0;
-
-      const toolBudget = plan.budgets?.tool_budget ?? DEFAULT_MAX_HARNESS_ITERATIONS;
-      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms, workflowStart);
+      const autonomousMode = execSpec.harness_autonomous_execution;
+      const toolBudget = execSpec.budgets.tool_budget;
+      const deadline = PipelineDeadline.fromPlan(execSpec.budgets.deadline_ms, workflowStart);
       const deadlineMs = deadline.planDeadlineMs;
 
-      const budgets = { token_budget: maxTokens, tool_budget: toolBudget };
+      const budgets = {
+        token_budget: execSpec.budgets.token_budget,
+        tool_budget: toolBudget,
+      };
       const metadata = {
         trace_id: traceId,
         contract_version: "v1",
@@ -215,194 +209,64 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       };
 
       if (autonomousMode) {
-        // L2-99: Autonomous harness loop — (execution ↔ tool)* until budget/deadline/no proposal.
-        let context: TypedArtifact[] = [...inputArtifacts];
-        // One extra execution round may be needed after the last allowed tool so we can block with
-        // BUDGET_EXCEEDED when the model still proposes a tool (parity with `workflows/runner.ts`).
-        const maxIterations = Math.min(
-          Math.max(toolBudget + 1, 1),
-          HARNESS_TOOL_ITERATION_ABSOLUTE_CAP
-        );
-        let iter = 0;
-        let lastOutput: TypedArtifact = textToArtifact(prompt, randomUUID());
-
-        while (iter < maxIterations) {
-          if (deadline.isExceeded()) {
-            emitWorkflowEvent("WORKFLOW_END", {
-              workflow_id: workflowId,
-              duration_ms: Date.now() - workflowStart,
-              status: "error",
-            });
-            return buildDeadlineExceededEnvelope({
-              requestId,
-              pipelineType: plan.pipeline_type,
-              deadlineMs: deadlineMs!,
-              latencyMs: Date.now() - workflowStart,
-              toolCalls: toolCallsCount,
-              tokensIn: accumulatedExecTokens,
-              costUsdEst: accumulatedExecCost,
-            });
-          }
-          let execResult;
-          try {
-            execResult = await runOneExecution(
-            context,
-            `t_exec_${iter}`,
-            allowlist[0]
-            );
-          } catch (err) {
-            if (err instanceof RequestDeadlineExceededError && deadlineMs) {
-              emitWorkflowEvent("WORKFLOW_END", {
-                workflow_id: workflowId,
-                duration_ms: Date.now() - workflowStart,
-                status: "error",
-              });
-              return buildDeadlineExceededEnvelope({
-                requestId,
-                pipelineType: plan.pipeline_type,
-                deadlineMs,
-                latencyMs: Date.now() - workflowStart,
-                toolCalls: toolCallsCount,
-                tokensIn: accumulatedExecTokens,
-                costUsdEst: accumulatedExecCost,
-              });
-            }
-            throw err;
-          }
-          totalExecDuration += execResult.metrics?.duration_ms ?? 0;
-          accumulatedExecTokens += execResult.metrics?.tokens_used ?? 0;
-          accumulatedExecCost += execResult.metrics?.cost_estimate_usd ?? 0;
-          lastOutput = execResult.result_artifacts[0] ?? lastOutput;
-
-          if (execResult.status !== "success") {
-            emitWorkflowEvent("WORKFLOW_END", {
-              workflow_id: workflowId,
-              duration_ms: Date.now() - workflowStart,
-              status: "error",
-            });
-            return {
-              request_id: requestId,
-              status: "error",
-              mode: "sync",
-              error: {
-                code: execResult.error?.code ?? "INTERNAL_ERROR",
-                message: execResult.error?.message ?? "Execution engine failed",
-                detail: execResult.error?.detail,
-              },
-              telemetry: {
-                pipeline: plan.pipeline_type,
-                models_used: [],
-                tool_calls: toolCallsCount,
-                tokens_in: execResult.metrics?.tokens_used ?? 0,
-                tokens_out: 0,
-                cost_usd_est: execResult.metrics?.cost_estimate_usd ?? 0,
-                latency_ms: Date.now() - workflowStart,
-              },
-            };
-          }
-
-          const proposed = execResult.proposed_next_action;
-          const wantsTool =
-            proposed?.type === "call_tool" &&
-            typeof proposed.ref === "string" &&
-            allowlist.includes(proposed.ref);
-
-          if (wantsTool && isFiniteToolBudget(toolBudget) && !hasToolBudgetRemaining(toolCallsCount, toolBudget)) {
-            emitWorkflowEvent("WORKFLOW_END", {
-              workflow_id: workflowId,
-              duration_ms: Date.now() - workflowStart,
-              status: "blocked",
-            });
-            return buildBudgetExceededEnvelope(
-              requestId,
-              workflowId,
-              workflowStart,
-              {
-                dimension: "tool_budget",
-                tool_budget: toolBudget,
-                tool_calls: toolCallsCount,
-              },
-              toolCallsCount
-            );
-          }
-
-          const shouldCallTool = wantsTool && hasToolBudgetRemaining(toolCallsCount, toolBudget);
-
-          if (shouldCallTool && proposed.ref) {
-            const toolId = proposed.ref;
-            const toolInvId = randomUUID();
-            const toolInv: EngineInvocation = {
-              invocation_id: toolInvId,
-              engine_type: "tool",
-              task: {
-                task_id: `t_tool_${iter}`,
-                task_type: "invoke_tool",
-                category: "action",
-                objective: {
-                  formal_spec: {
-                    tool_id: toolId,
-                    parameters: proposed.arguments ?? { prompt: basePrompt },
+        const harnessOutcome = await runExecutionToolHarnessLoop({
+          spec: execSpec,
+          workflowId,
+          requestId,
+          workflowStart,
+          deadline,
+          allowlist,
+          initialContext: inputArtifacts,
+          basePrompt,
+          callbacks: {
+            onHarnessIteration: emitHarnessIteration,
+            onWorkflowEnd: (payload) => emitWorkflowEvent("WORKFLOW_END", payload),
+            runExecution: async ({ iteration, context, suggestedToolRef }) =>
+              runOneExecution(context, `t_exec_${iteration}`, suggestedToolRef),
+            runTool: async ({ iteration, toolId, lastOutput, arguments: toolArgs }) => {
+              const toolInvId = randomUUID();
+              const toolInv: EngineInvocation = {
+                invocation_id: toolInvId,
+                engine_type: "tool",
+                task: {
+                  task_id: `t_tool_${iteration}`,
+                  task_type: "invoke_tool",
+                  category: "action",
+                  objective: {
+                    formal_spec: {
+                      tool_id: toolId,
+                      parameters: toolArgs ?? { prompt: basePrompt },
+                    },
                   },
+                  input_artifacts: [lastOutput],
                 },
-                input_artifacts: [lastOutput],
-              },
-              context_artifacts: [lastOutput],
-              actor_context: actorContext,
-              budgets,
-              metadata,
-            };
-            emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
-            const toolStart = Date.now();
-            let toolResult;
-            try {
-              toolResult = await deadline.run(() => toolEngine.invoke(toolInv));
-            } catch (err) {
-              if (err instanceof RequestDeadlineExceededError && deadlineMs) {
-                emitWorkflowEvent("WORKFLOW_END", {
-                  workflow_id: workflowId,
-                  duration_ms: Date.now() - workflowStart,
-                  status: "error",
-                });
-                return buildDeadlineExceededEnvelope({
-                  requestId,
-                  pipelineType: plan.pipeline_type,
-                  deadlineMs,
-                  latencyMs: Date.now() - workflowStart,
-                  toolCalls: toolCallsCount,
-                  tokensIn: accumulatedExecTokens,
-                  costUsdEst: accumulatedExecCost,
-                });
-              }
-              throw err;
-            }
-            const toolDuration = Date.now() - toolStart;
-            emitEngineEvent("ENGINE_END", {
-              engine_type: "tool",
-              invocation_id: toolInvId,
-              duration_ms: toolDuration,
-            });
-            toolCallsCount++;
-            if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
-              const toolArtifact = toolResult.result_artifacts[0];
-              context = [...context, lastOutput, toolArtifact];
-              lastOutput = toolArtifact;
-            } else {
-              context = [...context, lastOutput];
-            }
-            emitHarnessIteration({
-              workflow_id: workflowId,
-              iteration: iter,
-              tool_calls_so_far: toolCallsCount,
-              proposed_next_action: proposed.type,
-            });
-          } else {
-            break;
-          }
-          iter++;
-        }
+                context_artifacts: [lastOutput],
+                actor_context: actorContext,
+                budgets,
+                metadata,
+              };
+              emitEngineEvent("ENGINE_START", { engine_type: "tool", invocation_id: toolInvId });
+              const toolStart = Date.now();
+              const toolResult = await deadline.run(() => toolEngine.invoke(toolInv));
+              emitEngineEvent("ENGINE_END", {
+                engine_type: "tool",
+                invocation_id: toolInvId,
+                duration_ms: Date.now() - toolStart,
+              });
+              return toolResult;
+            },
+          },
+        });
 
-        executionOutput = lastOutput;
-        toolOutput = lastOutput;
+        if (harnessOutcome.status !== "ok") {
+          return harnessOutcome.envelope;
+        }
+        toolCallsCount = harnessOutcome.toolCallsCount;
+        accumulatedExecTokens = harnessOutcome.accumulatedExecTokens;
+        accumulatedExecCost = harnessOutcome.accumulatedExecCost;
+        totalExecDuration = harnessOutcome.totalExecDuration;
+        executionOutput = harnessOutcome.lastOutput;
+        toolOutput = harnessOutcome.lastOutput;
       } else {
         // Single-pass: execution → optional one tool → evaluation → synthesis
         try {

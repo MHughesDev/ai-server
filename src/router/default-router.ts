@@ -130,21 +130,14 @@ export const defaultRouter: IRouter = {
                         : "reactive",
       execution_mode: "sync_stream",
       ...(harnessAutonomousExecution ? { harness_autonomous_execution: true } : {}),
-      budgets: (() => {
-        const base = input.policy.max_budgets
-          ? {
-              token_budget: input.policy.max_budgets.token_budget ?? 4096,
-              tool_budget: input.policy.max_budgets.tool_budget ?? 10,
-              deadline_ms: input.policy.max_budgets.deadline_ms ?? 30_000,
-              cost_budget_usd: input.policy.max_budgets.cost_budget_usd ?? 0.5,
-            }
-          : { token_budget: 4096, tool_budget: 10, deadline_ms: 30_000, cost_budget_usd: 0.5 };
-        if (!harnessAutonomousExecution) return base;
-        // L2-99: Autonomous (execution ↔ tool)* grows prompts and sums gateway-reported tokens across rounds;
-        // the query-handler post-check vs token_budget must not block a successful harness run.
-        const scaled = Math.min(2_000_000, Math.max(base.token_budget * 48, 200_000));
-        return { ...base, token_budget: scaled };
-      })(),
+      budgets: input.policy.max_budgets
+        ? {
+            token_budget: input.policy.max_budgets.token_budget ?? 4096,
+            tool_budget: input.policy.max_budgets.tool_budget ?? 10,
+            deadline_ms: input.policy.max_budgets.deadline_ms ?? 30_000,
+            cost_budget_usd: input.policy.max_budgets.cost_budget_usd ?? 0.5,
+          }
+        : { token_budget: 4096, tool_budget: 10, deadline_ms: 30_000, cost_budget_usd: 0.5 },
       verification_level: "basic",
       tools_enabled: toolsEnabled,
       /**

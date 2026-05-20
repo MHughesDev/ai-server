@@ -54,6 +54,7 @@ import {
   RequestDeadlineExceededError,
   withDeadline,
 } from "../utils/async-deadline.js";
+import { applyOrchestratorToPipelinePlan } from "../orchestrator/index.js";
 
 function emit(event: TelemetryEvent): void {
   const obs = getObservability();
@@ -332,7 +333,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         return gate.response;
       }
       const { canonical, intent, result, redactionLevel } = gate.data;
-      const plan = result.pipelinePlan;
+      const plan = applyOrchestratorToPipelinePlan(result.pipelinePlan);
       if (!costCapsEnabled && plan.budgets?.cost_budget_usd !== undefined) {
         plan.budgets = { ...plan.budgets, cost_budget_usd: undefined };
       }
