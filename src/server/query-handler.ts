@@ -50,10 +50,11 @@ import { redact, type RedactionLevel } from "../observability/redact.js";
 import { recordTenantUsage } from "../controlplane/tenant-budget.js";
 import { getDefaultStore } from "../memory/default-store.js";
 import { runRetrieval } from "../memory/retrieval-service.js";
+import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import {
-  RequestDeadlineExceededError,
-  withDeadline,
-} from "../utils/async-deadline.js";
+  checkDeadlineBlocked,
+  PipelineDeadline,
+} from "../utils/pipeline-deadline.js";
 import { applyOrchestratorToPipelinePlan } from "../orchestrator/index.js";
 
 function emit(event: TelemetryEvent): void {
@@ -373,6 +374,10 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         );
       }
 
+      /** WANT-015: one deadline clock from request ingress through retrieval and pipeline. */
+      const requestDeadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms, start);
+      const deadlineCheckBase = { requestId, pipelineType: plan.pipeline_type };
+
       // L2-06: Run scoped retrieval when plan has memory.retrieval; for reactive_chat the pipeline uses Memory Engine instead.
       let retrievalContext: { contextText: string; citations: Array<{ source: string; ref: string; span?: string }> } | undefined;
       const pipelineUsesMemoryEngine = plan.pipeline_type === "reactive_chat";
@@ -381,25 +386,36 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         memoryScope !== "none" &&
         !pipelineUsesMemoryEngine
       ) {
+        const preRetrievalBlocked = checkDeadlineBlocked(requestDeadline, deadlineCheckBase);
+        if (preRetrievalBlocked) {
+          return preRetrievalBlocked;
+        }
         const store = getDefaultStore();
         const caller = {
           user_id: ingressResult.callerContext.userId,
           app_id: ingressResult.callerContext.appId,
           org_id: ingressResult.callerContext.orgId,
         };
+        const remainingMs = requestDeadline.remainingMs();
+        const retrievalTimeoutMs =
+          remainingMs != null
+            ? Math.min(config.memory.retrieval_timeout_ms, Math.max(1, remainingMs))
+            : config.memory.retrieval_timeout_ms;
         try {
-          const retrievalResult = await runRetrieval(store, {
+          const retrievalResult = await requestDeadline.run(() =>
+            runRetrieval(store, {
             query_text: canonical.text ?? "",
             scope: memoryScope,
             caller,
-            top_k: plan.memory.top_k ?? 5,
-            retrieval_timeout_ms: config.memory.retrieval_timeout_ms,
+            top_k: plan.memory?.top_k ?? 5,
+            retrieval_timeout_ms: retrievalTimeoutMs,
             max_context_chars: config.memory.max_context_chars,
             max_context_tokens:
               plan.budgets?.token_budget != null
                 ? Math.max(64, Math.min(config.memory.max_context_tokens, Math.floor(plan.budgets.token_budget * 0.5)))
                 : config.memory.max_context_tokens,
-          });
+          })
+          );
           if (retrievalResult.result.degraded) {
             incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "degraded" });
             if (observabilityEnabled) {
@@ -433,6 +449,9 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
             /* MEMORY_QUERY emitted inside runRetrieval (taxonomy-events) for hit/miss/degraded */
           }
         } catch (err) {
+          if (err instanceof RequestDeadlineExceededError && requestDeadline.planDeadlineMs) {
+            return checkDeadlineBlocked(requestDeadline, deadlineCheckBase)!;
+          }
           incrementCounter(METRIC_RETRIEVAL_FALLBACK_TOTAL, 1, { status: "error" });
           if (observabilityEnabled) {
             emit(
@@ -452,6 +471,11 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
         }
       }
 
+      const prePipelineBlocked = checkDeadlineBlocked(requestDeadline, deadlineCheckBase);
+      if (prePipelineBlocked) {
+        return prePipelineBlocked;
+      }
+
       const harnessInput = {
         canonical,
         intent,
@@ -465,6 +489,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
           scopes: ingressResult.callerContext.scopes,
         },
         retrievalContext,
+        request_started_at_ms: start,
       };
       const modelGateway = createProviderBackedModelGateway({
         timeoutMs: config.model_gateway.timeout_ms,
@@ -552,7 +577,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
               : plan.pipeline_type === "decision"
                 ? createDecisionPipeline({ modelGateway })
                 : createChatPipeline(modelGateway, pipelineUsesMemory);
-      const response = await withDeadline(pipeline.run(harnessInput), plan.budgets?.deadline_ms);
+      const response = await pipeline.run(harnessInput);
 
       const latencyMs = Date.now() - start;
       incrementCounter(METRIC_REQUESTS_TOTAL, 1, { route: plan.pipeline_type, status: "ok" });

@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** WANT-014 — runtime budget enforcement on multi-hop pipelines (2026-05-20)
+**Last task closed:** WANT-015 — global per-request deadline (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -95,7 +95,7 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 |----|--------------|--------|----------|----------------|
 | WANT-004 | Orchestrator sole authority for loops/budgets/mode | done | P0 | `src/orchestrator/*` (execution-spec, apply-plan, harness-loop); query-handler applies plan; coding-agent uses orchestrator loop; tests (2026-05-20) |
 | WANT-012 | Secrets never in logs/events; consistent redaction | done | P0 | `redact-event.ts`, `emit-telemetry.ts`, audit redact-at-source, sink defensive redact + refuse; coding-agent/taxonomy emit paths; tests (2026-05-20) |
-| WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | partial | P0 | Non-workflow multi-hop paths; per-hop telemetry accuracy |
+| WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | done | P0 | `pipeline-budget.ts` cumulative checks in chat/decision/deep-research/coding-agent + harness-loop; accurate telemetry totals; tests (2026-05-20) |
 | WANT-015 | Global per-request deadline | partial | P0 | Deeper pipeline deadline audit beyond HTTP wrapper |
 | WANT-023 | Production real model providers (no stub-only) | partial | P0 | Bootstrap validates provider + key + registry (2026-05-20); dev defaults remain framed/stub |
 | WANT-026 | Model retry policy by error class | partial | P1 | Richer provider body/error-code mapping |

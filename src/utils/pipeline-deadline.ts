@@ -21,6 +21,10 @@ export class PipelineDeadline {
     return this.totalDeadlineMs;
   }
 
+  get requestStartedAtMs(): number {
+    return this.startedAtMs;
+  }
+
   remainingMs(now = Date.now()): number | undefined {
     if (!this.totalDeadlineMs || this.totalDeadlineMs <= 0) return undefined;
     return this.totalDeadlineMs - (now - this.startedAtMs);
@@ -47,6 +51,43 @@ export class PipelineDeadline {
     }
     return withDeadline(work(), remaining);
   }
+}
+
+/** Single clock for plan deadline: prefer query-handler anchor, else pipeline-local start (WANT-015). */
+export function resolvePipelineDeadline(
+  deadlineMs: number | undefined,
+  requestStartedAtMs: number | undefined,
+  pipelineLocalStartMs: number
+): PipelineDeadline {
+  return PipelineDeadline.fromPlan(deadlineMs, requestStartedAtMs ?? pipelineLocalStartMs);
+}
+
+export interface DeadlineCheckContext {
+  requestId: string;
+  pipelineType: string;
+  tokensIn?: number;
+  costUsdEst?: number;
+  toolCalls?: number;
+}
+
+/** Hard-stop before a pipeline hop when the global request budget is exhausted (WANT-015). */
+export function checkDeadlineBlocked(
+  deadline: PipelineDeadline,
+  ctx: DeadlineCheckContext
+): ResponseEnvelope | null {
+  if (!deadline.isExceeded()) return null;
+  const deadlineMs = deadline.planDeadlineMs;
+  if (!deadlineMs) return null;
+  const latencyMs = Date.now() - deadline.requestStartedAtMs;
+  return buildDeadlineExceededEnvelope({
+    requestId: ctx.requestId,
+    pipelineType: ctx.pipelineType,
+    deadlineMs,
+    latencyMs,
+    tokensIn: ctx.tokensIn,
+    costUsdEst: ctx.costUsdEst,
+    toolCalls: ctx.toolCalls,
+  });
 }
 
 export function buildDeadlineExceededEnvelope(params: {

@@ -25,7 +25,8 @@ import { randomUUID } from "node:crypto";
 import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import {
   buildDeadlineExceededEnvelope,
-  PipelineDeadline,
+  checkDeadlineBlocked,
+  resolvePipelineDeadline,
 } from "../utils/pipeline-deadline.js";
 import { createPipelineBudgetAccumulator } from "../governance/pipeline-budget.js";
 import {
@@ -96,7 +97,11 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
 
       const autonomousMode = execSpec.harness_autonomous_execution;
       const toolBudget = execSpec.budgets.tool_budget;
-      const deadline = PipelineDeadline.fromPlan(execSpec.budgets.deadline_ms, workflowStart);
+      const deadline = resolvePipelineDeadline(
+        execSpec.budgets.deadline_ms,
+        input.request_started_at_ms,
+        workflowStart
+      );
       const deadlineMs = deadline.planDeadlineMs;
 
       const budgets = {
@@ -398,6 +403,26 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
             throw err;
           }
         }
+      }
+
+      const preEvalDeadline = checkDeadlineBlocked(deadline, {
+        requestId,
+        pipelineType: plan.pipeline_type,
+        toolCalls: toolCallsCount,
+        tokensIn: pipelineBudget.accumulatedTokens,
+        costUsdEst: pipelineBudget.accumulatedCostUsd,
+      });
+      if (preEvalDeadline) {
+        emitWorkflowLifecycleEvent(
+          "WORKFLOW_END",
+          {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "error",
+          },
+          telemetryRedaction
+        );
+        return preEvalDeadline;
       }
 
       // Step 3: Evaluation

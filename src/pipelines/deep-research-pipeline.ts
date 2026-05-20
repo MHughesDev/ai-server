@@ -20,7 +20,8 @@ import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import { createPipelineBudgetAccumulator } from "../governance/pipeline-budget.js";
 import {
   buildDeadlineExceededEnvelope,
-  PipelineDeadline,
+  checkDeadlineBlocked,
+  resolvePipelineDeadline,
 } from "../utils/pipeline-deadline.js";
 
 function emitEngineEvent(
@@ -92,7 +93,11 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       const traceId = ctx?.trace_id;
       const workflowId = plan.pipeline_type;
       const workflowStart = Date.now();
-      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms, workflowStart);
+      const deadline = resolvePipelineDeadline(
+        plan.budgets?.deadline_ms,
+        input.request_started_at_ms,
+        workflowStart
+      );
       const deadlineMs = deadline.planDeadlineMs;
       const maxTokens = plan.budgets?.token_budget ?? 2048;
       const query = canonical.text || "(no input)";
@@ -119,6 +124,22 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
         workflowStart,
         toolCalls: 0,
       };
+      const deadlineCtx = () => ({
+        requestId,
+        pipelineType: plan.pipeline_type,
+        tokensIn: budget.accumulatedTokens,
+        costUsdEst: budget.accumulatedCostUsd,
+      });
+
+      const preExecDeadline = checkDeadlineBlocked(deadline, deadlineCtx());
+      if (preExecDeadline) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return preExecDeadline;
+      }
 
       // Step 1: Execution (gather/summarize)
       const execInvId = randomUUID();
@@ -202,6 +223,16 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
       const execOutput = executionResult.result_artifacts[0] ?? textToArtifact(prompt, randomUUID());
       const execText = String((execOutput.content as { inline?: string })?.inline ?? "");
 
+      const preEvalDeadline = checkDeadlineBlocked(deadline, deadlineCtx());
+      if (preEvalDeadline) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return preEvalDeadline;
+      }
+
       // Step 2: Evaluation (coverage/consistency)
       const evalInvId = randomUUID();
       const evalInv: EngineInvocation = {
@@ -259,6 +290,16 @@ export function createDeepResearchPipeline(options: CreateDeepResearchPipelineOp
         evaluationResult.status === "success" && evaluationResult.result_artifacts[0]
           ? evaluationResult.result_artifacts[0]
           : execOutput;
+
+      const preSynthDeadline = checkDeadlineBlocked(deadline, deadlineCtx());
+      if (preSynthDeadline) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return preSynthDeadline;
+      }
 
       // Step 3: Synthesis (report)
       const synthInvId = randomUUID();

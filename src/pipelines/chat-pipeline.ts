@@ -21,7 +21,8 @@ import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
 import { createPipelineBudgetAccumulator } from "../governance/pipeline-budget.js";
 import {
   buildDeadlineExceededEnvelope,
-  PipelineDeadline,
+  checkDeadlineBlocked,
+  resolvePipelineDeadline,
 } from "../utils/pipeline-deadline.js";
 
 function emitEngineEvent(
@@ -92,13 +93,18 @@ export function createChatPipeline(
     async run(input: PipelineInput): Promise<ResponseEnvelope> {
       const { canonical, plan, retrievalContext: inputRetrievalContext, caller } = input;
 
-      const deadline = PipelineDeadline.fromPlan(plan.budgets?.deadline_ms);
-      const deadlineMs = deadline.planDeadlineMs;
       const ctx = getTraceContext();
       const requestId = canonical.request_id;
       const traceId = ctx?.trace_id;
       const workflowId = plan.pipeline_type;
       const workflowStart = Date.now();
+      const deadline = resolvePipelineDeadline(
+        plan.budgets?.deadline_ms,
+        input.request_started_at_ms,
+        workflowStart
+      );
+      const deadlineMs = deadline.planDeadlineMs;
+      const deadlineCtx = { requestId, pipelineType: plan.pipeline_type };
       const budget = createPipelineBudgetAccumulator(plan.budgets);
       const budgetCtx = {
         requestId,
@@ -124,6 +130,15 @@ export function createChatPipeline(
             ? Math.max(64, Math.min(cfgCap, Math.floor(plan.budgets.token_budget * 0.5)))
             : cfgCap;
         const memoryEngine = createMemoryEngine(memoryStore);
+        const preMemoryBlocked = checkDeadlineBlocked(deadline, deadlineCtx);
+        if (preMemoryBlocked) {
+          emitWorkflowEvent("WORKFLOW_END", {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "error",
+          });
+          return preMemoryBlocked;
+        }
         const memoryInv: EngineInvocation = {
           invocation_id: randomUUID(),
           engine_type: "memory",
@@ -209,6 +224,15 @@ export function createChatPipeline(
         );
       }
 
+      const preExecBlocked = checkDeadlineBlocked(deadline, deadlineCtx);
+      if (preExecBlocked) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return preExecBlocked;
+      }
       const executionInvocationId = randomUUID();
       const executionInv: EngineInvocation = {
         invocation_id: executionInvocationId,
@@ -307,6 +331,15 @@ export function createChatPipeline(
           ? executionOutputArtifact
           : textToArtifact(prompt, randomUUID());
 
+      const preSynthBlocked = checkDeadlineBlocked(deadline, deadlineCtx);
+      if (preSynthBlocked) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "error",
+        });
+        return preSynthBlocked;
+      }
       const synthesisInvocationId = randomUUID();
       const synthesisInv: EngineInvocation = {
         invocation_id: synthesisInvocationId,

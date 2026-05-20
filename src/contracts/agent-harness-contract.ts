@@ -62,6 +62,11 @@ export const AgentHarnessInputSchema = z.object({
   caller: HarnessCallerContextSchema,
   /** Set when retrieval ran and returned context (L2-06). */
   retrievalContext: RetrievalContextSchema.optional(),
+  /**
+   * Epoch ms when `plan.budgets.deadline_ms` budget started (WANT-015).
+   * Query handler sets this at request ingress so pipelines share one global clock.
+   */
+  request_started_at_ms: z.number().optional(),
 });
 
 export type AgentHarnessInput = z.infer<typeof AgentHarnessInputSchema>;
