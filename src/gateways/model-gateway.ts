@@ -4,6 +4,7 @@
  * @see docs/SPEC/15_ModelGateway_Spec.md, L2-02 Phase 2
  */
 
+import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import type { IModelGateway, ModelCompletionRequest, ModelCompletionResult } from "./types.js";
 import { getErrorMeta, isErrorCode } from "../contracts/errors.js";
 import type { ErrorCode } from "../contracts/errors.js";
@@ -608,12 +609,12 @@ export function withTimeoutAndRetry(
     async complete(req: ModelCompletionRequest): Promise<ModelCompletionResult> {
       let lastErr: unknown;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error(GATEWAY_TIMEOUT_MESSAGE)), timeoutMs);
-          });
-          const result = await Promise.race([gateway.complete(req), timeoutPromise]);
+          const result = await raceWithTimeout(
+            gateway.complete(req),
+            timeoutMs,
+            GATEWAY_TIMEOUT_MESSAGE
+          );
           return result;
         } catch (err) {
           lastErr = err;
@@ -624,8 +625,6 @@ export function withTimeoutAndRetry(
             classified.code,
             classified.retryable
           );
-        } finally {
-          if (timer) clearTimeout(timer);
         }
       }
       const classified = classifyRetryability(lastErr);

@@ -3,6 +3,8 @@
  * @see L2-05 Phase 2, SEC-004, SOW M3 F.3–F.4
  */
 
+import { describe, it, expect } from "@jest/globals";
+import { jest } from "@jest/globals";
 import {
   DenyOnlyToolGateway,
   AllowlistToolGateway,
@@ -95,6 +97,22 @@ describe("AllowlistToolGateway", () => {
     const result = await gateway.invoke({ tool_id: "slow_tool" });
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe("TOOL_TIMEOUT");
+  });
+
+  it("clears sandbox timeout timer when delegate resolves first (PR-020)", async () => {
+    jest.useFakeTimers();
+    try {
+      const gateway = new AllowlistToolGateway({
+        allowlist: ["fast_tool"],
+        sandbox: { timeout_ms: 5_000 },
+        delegate: new StubAllowedToolGateway({ output: "ok" }),
+      });
+      const result = await gateway.invoke({ tool_id: "fast_tool" });
+      expect(result.allowed).toBe(true);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("denies tool when sandbox blocks required network access", async () => {

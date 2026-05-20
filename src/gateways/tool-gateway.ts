@@ -7,6 +7,7 @@
  */
 
 import type { IToolGateway, ToolInvokeRequest, ToolInvokeResult } from "./types.js";
+import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -98,13 +99,12 @@ export class AllowlistToolGateway implements IToolGateway {
       };
     }
     if (timeoutMs != null && timeoutMs > 0) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("TOOL_TIMEOUT")), timeoutMs);
-      });
       try {
-        const result = await Promise.race([delegate.invoke(request), timeoutPromise]);
-        return result;
+        return await raceWithTimeout(
+          delegate.invoke(request),
+          timeoutMs,
+          "TOOL_TIMEOUT"
+        );
       } catch (err) {
         const message =
           err instanceof Error && err.message === "TOOL_TIMEOUT"
@@ -116,8 +116,6 @@ export class AllowlistToolGateway implements IToolGateway {
           message,
           tool_id: request.tool_id,
         };
-      } finally {
-        if (timer) clearTimeout(timer);
       }
     }
     return delegate.invoke(request);

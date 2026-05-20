@@ -161,4 +161,24 @@ describe("withTimeoutAndRetry", () => {
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
   });
+
+  it("leaves no pending timers on success path (PR-020)", async () => {
+    jest.useFakeTimers();
+    try {
+      const delegate: IModelGateway = {
+        complete: jest.fn().mockResolvedValue({
+          text: "ok",
+          tokens_in: 1,
+          tokens_out: 1,
+          model: "m1",
+        }),
+      };
+      const gateway = withTimeoutAndRetry(delegate, { maxRetries: 0, timeoutMs: 1_000 });
+      const result = await gateway.complete({ prompt: "x" });
+      expect(result.text).toBe("ok");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
