@@ -171,3 +171,28 @@ export function assertProductionRolloutCanarySignoff(
 export function isRolloutCanarySignoffAcknowledged(): boolean {
   return (process.env.ROLLOUT_CANARY_SIGNOFF ?? "").trim().toLowerCase() === "true";
 }
+
+/** Error body returned when production traffic is blocked by the rollout kill-switch. */
+export const PRODUCTION_ROLLOUT_DISABLED_ERROR = {
+  code: "POLICY_BLOCKED",
+  message: "Platform rollout is currently disabled",
+} as const;
+
+/**
+ * Production kill-switch: block ingress when `platform_production_rollout_enabled` is false (PR-011).
+ */
+export function isProductionRolloutTrafficBlocked(config: Config): boolean {
+  if (config.env !== "production") return false;
+  return !resolveFeatureFlagEnabled("platform_production_rollout_enabled", config);
+}
+
+/** JSON error envelope for routes when rollout kill-switch is active. */
+export function productionRolloutDisabledResponse(): {
+  status: "error";
+  error: typeof PRODUCTION_ROLLOUT_DISABLED_ERROR;
+} {
+  return {
+    status: "error",
+    error: { ...PRODUCTION_ROLLOUT_DISABLED_ERROR },
+  };
+}

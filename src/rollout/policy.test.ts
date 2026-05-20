@@ -2,13 +2,16 @@
  * Rollout policy parser and release config validation tests (L2-08).
  */
 
+import { loadConfigFromEnv } from "../config/schema.js";
 import {
   parseRolloutPolicy,
   parseCanaryThresholds,
   validateReleaseConfig,
   assertProductionReleaseMetadataWhenRollout,
   assertProductionRolloutCanarySignoff,
+  isProductionRolloutTrafficBlocked,
   isRolloutCanarySignoffAcknowledged,
+  productionRolloutDisabledResponse,
   CanaryThresholdsSchema,
   RolloutPolicySchema,
 } from "./policy.js";
@@ -179,6 +182,38 @@ describe("assertProductionReleaseMetadataWhenRollout", () => {
         release: { release_id: "rel-1" },
       })
     ).not.toThrow();
+  });
+});
+
+describe("production rollout kill-switch helpers", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it("blocks only in production when flag is off", () => {
+    process.env.NODE_ENV = "production";
+    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "false";
+    expect(isProductionRolloutTrafficBlocked(loadConfigFromEnv())).toBe(true);
+
+    process.env.NODE_ENV = "development";
+    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "false";
+    expect(isProductionRolloutTrafficBlocked(loadConfigFromEnv())).toBe(false);
+
+    process.env.NODE_ENV = "production";
+    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+    expect(isProductionRolloutTrafficBlocked(loadConfigFromEnv())).toBe(false);
+  });
+
+  it("returns stable POLICY_BLOCKED envelope", () => {
+    const body = productionRolloutDisabledResponse();
+    expect(body.error.code).toBe("POLICY_BLOCKED");
+    expect(body.status).toBe("error");
   });
 });
 

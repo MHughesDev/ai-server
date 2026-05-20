@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-010 — rollout after canary sign-off (2026-05-20)
+**Last task closed:** PR-011 — rollout kill-switch E2E (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -60,7 +60,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | ID | Task | Status | Priority | Evidence / files |
 |----|------|--------|----------|------------------|
 | PR-010 | Enable rollout only after canary sign-off: `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | done | P0 | `ROLLOUT_CANARY_SIGNOFF=true` required when rollout on; `assertProductionRolloutCanarySignoff`; preflight `rollout.canary_signoff`; bootstrap tests; runbook/SPEC 20/k8s prod (2026-05-20). **Deploy:** preflight pass → canary → signoff → enable rollout flag. |
-| PR-011 | Verify kill-switch end-to-end | open | P0 | `platform_production_rollout_enabled` |
+| PR-011 | Verify kill-switch end-to-end | done | P0 | `isProductionRolloutTrafficBlocked` + `rollout-kill-switch.integration.test.ts`: 503 POLICY_BLOCKED on `/token/exchange`, `/v1/query`, `/v1/query/async` in prod when off; dev not blocked; recovery on re-enable (2026-05-20). |
 | PR-012 | Confirm audit + event sinks persistent with rotation | partial | P0 | `audit-logger.ts`, `event-sink.ts` |
 | PR-013 | Confirm PII/secrets redaction active in telemetry | partial | P0 | `observability/redact.ts` |
 | PR-014 | Security review before enabling executable tools in production | open | P0 | `tool-gateway.ts` |

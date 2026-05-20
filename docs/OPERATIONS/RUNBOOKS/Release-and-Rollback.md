@@ -67,7 +67,7 @@ Configured via rollout policy. **Implementation:** `src/rollout/policy.ts` — `
 
 ### Rollback steps
 
-1. **Kill switch / gate:** Set `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=false` (or equivalent) to stop new production traffic if the rollout gate is used to control traffic.
+1. **Kill switch / gate:** Set `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=false` and restart instances (or redeploy config). Verified behavior: **`POST /token/exchange`**, **`POST /v1/query`**, and **`POST /v1/query/async`** return **503** `POLICY_BLOCKED` in production (`src/server/rollout-kill-switch.integration.test.ts`).
 2. **Revert to last known good release:** Deploy the previous stable artifact (same process as release; use last signed release_id/build_id).
 3. **Verify:** `GET /healthz`, `GET /readyz`, `GET /v1/version` on reverted instances; confirm metrics and logs show recovery.
 4. **Incident protocol:** Open incident, notify on-call, and run postmortem per **Incident workflow** in `docs/SPEC/22_Runbooks_and_Operations.md`.

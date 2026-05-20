@@ -39,6 +39,10 @@ import type { JobStatus } from "../queue/types.js";
 import type { FeatureFlags } from "../config/schema.js";
 import type { FlagScope } from "../config/feature-flags.js";
 import { getFeatureFlagService, resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import {
+  isProductionRolloutTrafficBlocked,
+  productionRolloutDisabledResponse,
+} from "../rollout/policy.js";
 import { runProductionPreflight } from "./preflight.js";
 import { redact } from "../observability/redact.js";
 
@@ -252,12 +256,8 @@ async function processRequest(
   }
 
   if (method === "POST" && path === "/token/exchange") {
-    const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
-    if (config.env === "production" && !rolloutEnabled) {
-      sendJson(res, 503, {
-        status: "error",
-        error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
-      });
+    if (isProductionRolloutTrafficBlocked(config)) {
+      sendJson(res, 503, productionRolloutDisabledResponse());
       return;
     }
     try {
@@ -317,12 +317,8 @@ async function processRequest(
 
   // Gap 3A: Async job submission endpoint
   if (method === "POST" && path === "/v1/query/async") {
-    const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
-    if (config.env === "production" && !rolloutEnabled) {
-      sendJson(res, 503, {
-        status: "error",
-        error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
-      });
+    if (isProductionRolloutTrafficBlocked(config)) {
+      sendJson(res, 503, productionRolloutDisabledResponse());
       return;
     }
     if (!jobQueueService) {
@@ -709,12 +705,8 @@ async function processRequest(
   }
 
   if (method === "POST" && path === "/v1/query") {
-    const rolloutEnabled = isFeatureFlagEnabled("platform_production_rollout_enabled", config);
-    if (config.env === "production" && !rolloutEnabled) {
-      sendJson(res, 503, {
-        status: "error",
-        error: { code: "POLICY_BLOCKED", message: "Platform rollout is currently disabled" },
-      });
+    if (isProductionRolloutTrafficBlocked(config)) {
+      sendJson(res, 503, productionRolloutDisabledResponse());
       return;
     }
     // PRODUCTION: Add per-request timeout (e.g. from plan.budgets.deadline_ms) so slow pipelines don't hold connections indefinitely.
