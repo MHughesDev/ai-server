@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-033 — Formal go/no-go with signatories + evidence package (2026-05-20)
+**Last task closed:** PR-034 — L2-99 harness readiness decision recorded (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -83,7 +83,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | PR-031 | Canary cohorts + rollback drills with MTTR evidence | done | P0 | `src/rollout/cohorts.ts`, `policy.ts` (`evaluateCanaryDecision`, `loadRolloutPolicyFromEnv`), `rollback-drill.ts`, `rollback-drill.integration.test.ts`, `npm run drill:rollback`, CI evidence artifact; runbook updated (2026-05-20) |
 | PR-032 | Incident simulation drills (provider, policy, budget) | done | P0 | `src/operations/incident-drills*.ts`, `npm run drill:incidents`, `Incident-Simulation-Drills.md`, CI evidence artifact (2026-05-20) |
 | PR-033 | Formal go/no-go with signatories + evidence package | done | P0 | `src/governance/go-no-go.ts`, `npm run go-no-go:package`, `Go-No-Go-Decision.md`, templates, CI artifact (2026-05-20) |
-| PR-034 | L2-99 harness readiness decision recorded | open | P1 | `L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` |
+| PR-034 | L2-99 harness readiness decision recorded | done | P1 | `src/governance/harness-readiness.ts`, `npm run harness-readiness:record`, `L2-99_Evidence-Checklist.md`, CI artifact `harness-readiness-decision.json` (2026-05-20) |
 
 ---
 
@@ -238,7 +238,7 @@ From `scripts/README.md` and deployment guide.
 | OPS-003 | Backup script → S3/object storage | open | P1 |
 | OPS-004 | Configure canary/rollback/health alerts (Grafana/Prometheus) | open | P1 |
 | OPS-005 | Protect `/metrics`, `/healthz`, `/readyz` at network edge if no bearer | open | P0 |
-| OPS-006 | L2-99 evidence dimensions: security, policy, observability, reliability, ops, governance | open | P1 | Fill owners + links in governance evidence |
+| OPS-006 | L2-99 evidence dimensions: security, policy, observability, reliability, ops, governance | done | P1 | `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` + `DEFAULT_HARNESS_EVIDENCE` in `harness-readiness.ts` (2026-05-20) |
 | OPS-007 | Post-launch week 1–2 monitoring plan | open | P1 |
 
 ---
@@ -264,7 +264,7 @@ Former `docs/PLANS/00_Master-Delivery-Plan.md` — unchecked phase tasks:
 |---------|-------------|--------|----------|
 | P0-01 | Publish plan order, owners, inter-plan dependencies | open | P2 |
 | P0-02 | Cross-plan gate criteria and acceptance matrix | open | P2 |
-| P0-03 | Approve deferred harness gate criteria | partial | P1 |
+| P0-03 | Approve deferred harness gate criteria | done | P1 | Frozen in `src/governance/scorecard.ts` `DEFAULT_THRESHOLDS` + L2-99 evidence checklist (2026-05-20) |
 | P1-03 | Publish MVP readiness report | open | P2 |
 | P2-02 | Validate security controls; audit artifacts | open | P0 |
 | P2-03 | Enable quality gates for regressions | partial | P1 |
@@ -273,7 +273,7 @@ Former `docs/PLANS/00_Master-Delivery-Plan.md` — unchecked phase tasks:
 | P3-03 | Production capacity thresholds | open | P1 |
 | P4-01 | Rollback drill + incident drill | done | P0 | PR-031 rollback + PR-032 incident drills in CI (2026-05-20) |
 | P4-02 | Post-launch metrics review | open | P1 |
-| P4-03 | Go/No-Go for Plan 99 harness kickoff | open | P1 |
+| P4-03 | Go/No-Go for Plan 99 harness kickoff | done | P1 | PR-034 harness readiness decision record + templates (2026-05-20) |
 | MDP-001–004 | Portfolio hygiene tasks | open | P2 |
 
 **L2 implementation plans** (`docs/PLANS/implementation/L2-*.md`) remain the how-to source for each layer; track completion here via PR/GAP/WANT IDs.

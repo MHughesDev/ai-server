@@ -31,6 +31,7 @@
     "drill:incidents": "npm run build && node scripts/incident-drills.mjs",
     "go-no-go:package": "npm run build && node scripts/assemble-go-no-go-package.mjs",
     "go-no-go:validate": "npm run build && node scripts/validate-go-no-go-package.mjs",
+    "harness-readiness:record": "npm run build && node scripts/record-harness-readiness-decision.mjs",
     "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {

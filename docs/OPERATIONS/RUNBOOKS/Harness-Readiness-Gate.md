@@ -21,6 +21,19 @@ This runbook governs when autonomous harness behavior can be enabled in producti
 4. **Phase 3**: Formal go/no-go session; signed decision memo.
 5. **Phase 4**: Post-decision action plan (pilot or remediation).
 
+### Record decision (PR-034 — automated)
+
+```bash
+# After L2-08 artifacts exist (CI release-gates produces these):
+npm run harness-readiness:record
+```
+
+Writes **`artifacts/harness-readiness-decision.json`** with scorecard, evidence validation, signatories, `harness_enablement_approved`, and pilot constraints.
+
+**Signatories (GO):** `program_lead`, `security_lead` — templates in `docs/OPERATIONS/templates/Harness-Readiness-*.example.json`.
+
+**Evidence checklist:** `docs/PLANS/implementation/L2-99_Evidence-Checklist.md` (OPS-006 owner matrix).
+
 ---
 
 ## Feature flags
@@ -103,5 +116,6 @@ This runbook governs when autonomous harness behavior can be enabled in producti
 - **Autonomous harness**: `src/pipelines/coding-agent-pipeline.ts` (branch on `harness_autonomous_execution_enabled`; loop honors `proposed_next_action` from execution engine); `src/engines/execution_engine.ts` (returns `proposed_next_action` when task has `suggested_tool_ref`). Observability: `HARNESS_ITERATION` event (see `src/observability/events.ts`).
 - **Plan**: `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` (or `docs/PLANS/`).
 - **Handoff**: `docs/PLANS/implementation/L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` §14 (usage, CI, references).
-- **Templates**: `to-do.md` OPS-006, `L2-99_Decision-Memo-Template.md` (implementation folder).
+- **Templates**: `docs/OPERATIONS/templates/Harness-Readiness-Signatories.example.json`, `Harness-Readiness-Decision.example.json`; `L2-99_Decision-Memo-Template.md`; `L2-99_Evidence-Checklist.md`.
+- **Decision record**: `src/governance/harness-readiness.ts` — `npm run harness-readiness:record`.
 - **SPECs**: 18 Observability, 19 Security and Isolation, 20 Config and Feature Flags, 21 Test and Eval Plan, 22 Runbooks and Operations.

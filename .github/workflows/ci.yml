@@ -121,3 +121,17 @@ jobs:
           name: go-no-go-evidence-package
           path: artifacts/go-no-go-evidence-package.json
           retention-days: 365
+
+      - name: Record L2-99 harness readiness decision
+        env:
+          HARNESS_READINESS_DECISION_PATH: artifacts/harness-readiness-decision.json
+          RELEASE_ID: ci-${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+        run: npm run harness-readiness:record
+
+      - name: Upload harness readiness decision
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-readiness-decision
+          path: artifacts/harness-readiness-decision.json
+          retention-days: 365

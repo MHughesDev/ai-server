@@ -18,8 +18,10 @@
 - **Runbook**: `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md` for gate workflow and exception handling.
 - **SPEC**: `docs/SPEC/20_Config_and_FeatureFlags.md` for canonical feature flags.
 - **Handoff:** Checklist, governance usage, CI, and references are in **§14 Sprint handoff archive** below.
-- **Templates**: `to-do.md` OPS-006 (evidence/owner matrix), `L2-99_Decision-Memo-Template.md` (Phase 3 memo).
+- **Templates**: `L2-99_Evidence-Checklist.md` (OPS-006 owner matrix), `L2-99_Decision-Memo-Template.md`, `docs/OPERATIONS/templates/Harness-Readiness-*.example.json`.
+- **Decision record (PR-034)**: `src/governance/harness-readiness.ts` — `npm run harness-readiness:record` → `artifacts/harness-readiness-decision.json`.
 - **Workflow test**: `src/governance/readiness-workflow.test.ts` — evidence → validate → score (Section 7.2).
+- **Harness tests**: `src/governance/harness-readiness.test.ts`.
 
 ## 1) Purpose and Outcome
 ### 1.1 Purpose

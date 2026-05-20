@@ -35,6 +35,7 @@ curl http://localhost:3000/healthz
 | `incident-drills.mjs` | Provider / policy / budget incident drills + evidence (PR-032) |
 | `assemble-go-no-go-package.mjs` | Production go/no-go evidence package (PR-033) |
 | `validate-go-no-go-package.mjs` | Validate signatories + technical gates for GO |
+| `record-harness-readiness-decision.mjs` | L2-99 harness readiness decision JSON (PR-034) |
 
 ## Manual Setup
 

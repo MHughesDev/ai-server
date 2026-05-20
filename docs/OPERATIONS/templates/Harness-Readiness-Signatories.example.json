@@ -1,0 +1,14 @@
+[
+  {
+    "role": "program_lead",
+    "name": "Program Lead Name",
+    "signed_at_iso": "2026-05-20T16:00:00.000Z",
+    "notes": "L2-08 complete; evidence checklist reviewed"
+  },
+  {
+    "role": "security_lead",
+    "name": "Security Lead Name",
+    "signed_at_iso": "2026-05-20T16:00:00.000Z",
+    "notes": "Tool sandbox and auth posture acceptable for constrained pilot"
+  }
+]

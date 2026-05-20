@@ -1,0 +1,6 @@
+{
+  "outcome": "go",
+  "rationale": "Weighted scorecard and evidence completeness meet L2-99 thresholds. L2-01 through L2-08 artifacts linked. Autonomous harness code path tested; enable constrained pilot with allowlisted tools and HARNESS_ITERATION observability.",
+  "signedAtIso": "2026-05-20T17:00:00.000Z",
+  "signatories": ["program_lead", "security_lead"]
+}

@@ -45,3 +45,16 @@ export {
   type ProductionGoNoGoEvidencePackage,
   type GoNoGoTechnicalGate,
 } from "./go-no-go.js";
+
+export {
+  HARNESS_READINESS_SIGNATORY_ROLES,
+  DEFAULT_HARNESS_EVIDENCE,
+  assembleHarnessReadinessDecision,
+  validateHarnessSignatoriesForGo,
+  validateHarnessReadinessDecision,
+  writeHarnessReadinessDecision,
+  resolveHarnessEvidence,
+  parseHarnessSignatoriesFromEnv,
+  parseHarnessDecisionFromEnv,
+  type HarnessReadinessDecisionRecord,
+} from "./harness-readiness.js";
