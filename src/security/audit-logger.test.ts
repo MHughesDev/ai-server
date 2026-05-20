@@ -3,7 +3,7 @@
  * @see L2-05 Phase 1, SEC-002
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -146,6 +146,38 @@ describe("audit-logger", () => {
     expect(sinkEntries).toHaveLength(1);
     expect(sinkEntries[0].event_type).toBe("TEST_SINK");
     expect(sinkEntries[0].event_hash).toBeDefined();
+  });
+
+  it("rotates audit file when max size exceeded (PR-012)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-rotate-"));
+    const filePath = join(dir, "audit.jsonl");
+    try {
+      setAuditSink(
+        createFileAuditSink(filePath, {
+          maxFileSizeBytes: 400,
+          maxRotatedFiles: 2,
+          maxQueueSize: 100,
+        })
+      );
+      const payload = { blob: "x".repeat(300) };
+      for (let i = 0; i < 4; i++) {
+        await writeAuditEventAsync({
+          event_type: `ROTATE_${i}`,
+          request_id: `req-${i}`,
+          timestamp_iso: new Date().toISOString(),
+          payload,
+        });
+      }
+      for (let i = 0; i < 100; i++) {
+        const status = getAuditSinkStatus();
+        if (status && status.queueDepth === 0 && !status.isDraining) break;
+        await sleep(10);
+      }
+      expect(existsSync(`${filePath}.1`)).toBe(true);
+    } finally {
+      setAuditSink(null);
+      rmSync(dir, { recursive: true });
+    }
   });
 
   it("createFileAuditSink appends JSON lines to file", async () => {

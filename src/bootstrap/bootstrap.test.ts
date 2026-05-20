@@ -52,6 +52,12 @@ function applyProductionSecretsEnv(): void {
   process.env.SCOPED_SECRETS_JSON = JSON.stringify({ bootstrap_test: "ok" });
 }
 
+/** Production persistent audit + event sinks (PR-012). */
+function applyProductionSinksEnv(): void {
+  process.env.AUDIT_LOG_PATH = "/tmp/ai-server-bootstrap-audit.jsonl";
+  process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-bootstrap-events.ndjson";
+}
+
 /** Production persistent memory (PR-006). */
 function applyProductionMemoryEnv(): void {
   process.env.MEMORY_BACKEND = "vector";
@@ -148,6 +154,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionSinksEnv();
     process.env.MEMORY_BACKEND = "vector";
     process.env.CHROMA_URL = "http://chroma:8000";
     delete process.env.REDIS_URL;
@@ -198,6 +205,18 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/scoped secrets material/);
   });
 
+  it("fails in production when persistent sink paths are unset (PR-012)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    delete process.env.AUDIT_LOG_PATH;
+    delete process.env.OBSERVABILITY_EVENT_SINK_PATH;
+    expect(() => bootstrap()).toThrow(/AUDIT_LOG_PATH/);
+  });
+
   it("bootstraps in production with auth and model provider config (PR-002, PR-003)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
@@ -205,6 +224,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     const cfg = bootstrap();
     expect(cfg.requireAuthHeader).toBe(true);
     expect(cfg.auth.query_required_scopes).toContain("query:invoke");
@@ -223,6 +243,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -242,6 +263,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -278,6 +300,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.TLS_KEY_PATH;
@@ -294,6 +317,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -311,6 +335,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
@@ -326,6 +351,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
     applyProductionRolloutEnv();
     const cfg = bootstrap();
     expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
@@ -338,6 +364,8 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
+    applyProductionSinksEnv();
+    process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-bootstrap-events.ndjson";
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
     expect(() => bootstrap()).toThrow("Production sink parent directory must exist");

@@ -64,6 +64,8 @@ function applyProductionEnv(): void {
   process.env.SCOPED_SECRETS_JSON = JSON.stringify({ k: "v" });
   process.env.MEMORY_BACKEND = "vector";
   process.env.REDIS_URL = "redis://127.0.0.1:6379";
+  process.env.AUDIT_LOG_PATH = "/tmp/ai-server-memory-audit.jsonl";
+  process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-memory-events.ndjson";
 }
 
 describe("production memory integration", () => {

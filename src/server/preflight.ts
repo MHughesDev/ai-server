@@ -95,8 +95,13 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
   });
   add({
     id: "ops.audit_log_path",
-    status: config.auditLogPath ? "pass" : "warn",
-    message: "Audit log path uses persistent storage",
+    status: config.auditLogPath?.trim() ? "pass" : "fail",
+    message: "AUDIT_LOG_PATH configured for persistent audit storage",
+  });
+  add({
+    id: "ops.event_sink_path",
+    status: config.observabilityEventSinkPath?.trim() ? "pass" : "fail",
+    message: "OBSERVABILITY_EVENT_SINK_PATH configured for persistent telemetry",
   });
   add({
     id: "providers.production",

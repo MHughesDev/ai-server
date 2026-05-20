@@ -80,6 +80,8 @@ describe("production preflight", () => {
     process.env.SECRETS_BACKEND = "env";
     process.env.SCOPED_SECRETS_JSON = JSON.stringify({ api_key: "preflight-secret" });
     process.env.ROLLOUT_CANARY_SIGNOFF = "true";
+    process.env.AUDIT_LOG_PATH = "/var/log/ai-server/audit.jsonl";
+    process.env.OBSERVABILITY_EVENT_SINK_PATH = "/var/log/ai-server/events.ndjson";
 
     const config = loadConfigFromEnv();
     const report = await runProductionPreflight(config);

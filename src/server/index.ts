@@ -8,21 +8,16 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { createServer as createHttpsServer } from "node:https";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import { wirePersistentSinksFromConfig } from "../config/persistent-sinks.js";
 import {
   setObservability,
   createEmitter,
   getTraceContext,
-  setEventSink,
   getEventSink,
-  createFileEventSink,
   safeLogError,
 } from "../observability/index.js";
 import type { IObservability } from "../observability/types.js";
-import {
-  setAuditSink,
-  createFileAuditSink,
-  shutdownPersistentAuditFileSink,
-} from "../security/audit-logger.js";
+import { shutdownPersistentAuditFileSink } from "../security/audit-logger.js";
 import { handleRequest } from "./routes.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -143,22 +138,7 @@ function main(): void {
     throw new Error(`Invalid PORT: ${process.env.PORT ?? "(unset)"}`);
   }
 
-  const auditLogPath = config.auditLogPath;
-  if (auditLogPath) {
-    setAuditSink(
-      createFileAuditSink(auditLogPath, {
-        fsyncAfterEachWrite: process.env.AUDIT_LOG_FSYNC === "true",
-      })
-    );
-  }
-  const eventSinkPath = config.observabilityEventSinkPath;
-  if (eventSinkPath) {
-    setEventSink(
-      createFileEventSink(eventSinkPath, {
-        fsyncAfterEachWrite: process.env.OBSERVABILITY_EVENT_SINK_FSYNC === "true",
-      })
-    );
-  }
+  wirePersistentSinksFromConfig(config);
   if (resolveFeatureFlagEnabled("observability_required_events_v1", config)) {
     const emitter = createEmitter({
       redactionLevel: "minimal",

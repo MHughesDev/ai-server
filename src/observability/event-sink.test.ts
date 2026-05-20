@@ -40,6 +40,34 @@ describe("event sink", () => {
     expect(getEventSink()).toBe(sink);
   });
 
+  it("rotates event file when max size exceeded (PR-012)", async () => {
+    const path = tempPath();
+    const rotated = `${path}.1`;
+    try {
+      const sink = createFileEventSink(path, {
+        maxFileSizeBytes: 200,
+        maxRotatedFiles: 2,
+        maxQueueSize: 50,
+      });
+      for (let i = 0; i < 6; i++) {
+        sink.write({
+          event_type: "POLICY_DECISION",
+          request_id: `r-${i}`,
+          payload: { data: "y".repeat(120) },
+        });
+      }
+      await waitFor(() => existsSync(rotated));
+      await waitFor(() => {
+        const status = sink.getStatus?.();
+        return !!status && status.queueDepth === 0 && !status.isDraining;
+      });
+      expect(existsSync(rotated)).toBe(true);
+    } finally {
+      if (existsSync(rotated)) unlinkSync(rotated);
+      if (existsSync(path)) unlinkSync(path);
+    }
+  });
+
   it("createFileEventSink appends one JSON line per event (NDJSON)", async () => {
     const path = tempPath();
     try {
