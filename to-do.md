@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** WANT-023 — production real model providers (2026-05-20)
+**Last task closed:** WANT-026 — model retry policy by error class (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -98,7 +98,7 @@ Normative source was `docs/TARGET/Target-State-Backlog.md`. **Product decisions 
 | WANT-014 | Runtime budget enforcement (token/tool/deadline/cost) | done | P0 | `pipeline-budget.ts` cumulative checks in chat/decision/deep-research/coding-agent + harness-loop; accurate telemetry totals; tests (2026-05-20) |
 | WANT-015 | Global per-request deadline | done | P0 | `request_started_at_ms` anchor; query-handler retrieval+pipeline; `checkDeadlineBlocked` per hop; tests (2026-05-20) |
 | WANT-023 | Production real model providers (no stub-only) | done | P0 | `assert-production-model-gateway.ts` bootstrap + `assertRuntimeModelGateway` on query path; `model-routing.ts`; dev/staging framed_echo with bootstrap log; tests (2026-05-20) |
-| WANT-026 | Model retry policy by error class | partial | P1 | Richer provider body/error-code mapping |
+| WANT-026 | Model retry policy by error class | done | P1 | `model-provider-retry.ts`: parse OpenAI-compatible JSON `type`/`code`, map to taxonomy + retryability; wired in `OpenAiCompatibleModelGateway`; tests (2026-05-20) |
 | WANT-027 | Gateway timeouts without timer leaks | partial | P1 | Deterministic error mapping product-wide |
 | WANT-029 | Tool sandbox + auditable identity | partial | P0 | Custom tools/registry beyond builtins |
 | WANT-030 | No stub delegates for side-effecting tools | partial | P0 | Enable `ExecutableToolGateway` in prod config after review |

@@ -5,6 +5,7 @@
  */
 
 import { assertRuntimeModelGateway } from "../config/assert-production-model-gateway.js";
+import { classifyModelProviderFailure } from "./model-provider-retry.js";
 import { raceWithTimeout } from "../utils/race-with-timeout.js";
 import type { IModelGateway, ModelCompletionRequest, ModelCompletionResult } from "./types.js";
 import { getErrorMeta, isErrorCode } from "../contracts/errors.js";
@@ -14,6 +15,15 @@ import { resolveModelRoute } from "./model-routing.js";
 
 export type { ModelRouteConfig, ModelCapabilityRegistry, ModelSelectionContext } from "./model-routing.js";
 export { resolveModelRoute } from "./model-routing.js";
+export {
+  classifyModelProviderFailure,
+  isRetryableModelProviderHttpStatus,
+  parseModelProviderErrorBody,
+} from "./model-provider-retry.js";
+export type {
+  ModelProviderFailureClassification,
+  ParsedModelProviderError,
+} from "./model-provider-retry.js";
 
 export interface ModelGatewayConfig {
   timeoutMs: number;
@@ -309,10 +319,12 @@ class OpenAiCompatibleModelGateway implements IModelGateway {
     if (!resp.ok) {
       const status = resp.status;
       const bodyText = await resp.text();
+      const failure = classifyModelProviderFailure(status, bodyText);
+      const detail = bodyText.slice(0, 400);
       throw new ModelGatewayError(
-        `Model provider '${this.providerId}' HTTP ${status}: ${bodyText.slice(0, 400)}`,
-        "MODEL_FAILURE",
-        isRetryableModelProviderHttpStatus(status)
+        `Model provider '${this.providerId}' HTTP ${status} (${failure.code}, retryable=${failure.retryable}): ${detail}`,
+        failure.code,
+        failure.retryable
       );
     }
     const body = (await resp.json()) as {
@@ -500,16 +512,6 @@ export async function runProviderHealthChecks(
 }
 
 const GATEWAY_TIMEOUT_MESSAGE = "Model gateway timeout";
-
-/**
- * HTTP statuses from an OpenAI-compatible provider where a retry may succeed.
- * 4xx client mistakes (except 408/429) and 409 conflicts are not retried.
- */
-export function isRetryableModelProviderHttpStatus(status: number): boolean {
-  if (status === 408 || status === 429) return true;
-  if (status >= 500 && status < 600) return true;
-  return false;
-}
 
 function transientNodeCauseCode(code: string | undefined): boolean {
   if (!code) return false;

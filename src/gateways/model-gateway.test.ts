@@ -2,6 +2,7 @@ import type { IModelGateway } from "./types.js";
 import { jest } from "@jest/globals";
 import { ModelGatewayProductionError } from "../config/assert-production-model-gateway.js";
 import {
+  classifyModelProviderFailure,
   createProviderBackedModelGateway,
   isRetryableModelProviderHttpStatus,
   ModelGatewayError,
@@ -107,6 +108,28 @@ describe("withTimeoutAndRetry", () => {
     const result = await gateway.complete({ prompt: "x" });
     expect(result.text).toBe("ok");
     expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry provider invalid_api_key classified as AUTH_INVALID (WANT-026)", async () => {
+    const failure = classifyModelProviderFailure(
+      401,
+      JSON.stringify({ error: { type: "invalid_request_error", code: "invalid_api_key" } })
+    );
+    const completeMock = jest
+      .fn<Promise<unknown>, [unknown]>()
+      .mockRejectedValue(
+        new ModelGatewayError("bad key", failure.code, failure.retryable)
+      );
+    const delegate: IModelGateway = {
+      complete: completeMock as unknown as IModelGateway["complete"],
+    };
+    const gateway = withTimeoutAndRetry(delegate, { maxRetries: 3, timeoutMs: 1_000 });
+
+    await expect(gateway.complete({ prompt: "x" })).rejects.toMatchObject<ModelGatewayError>({
+      code: "AUTH_INVALID",
+      retryable: false,
+    });
+    expect(completeMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry non-retryable failures", async () => {
