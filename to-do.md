@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-031 — Canary cohorts + rollback drills with MTTR evidence (2026-05-20)
+**Last task closed:** PR-032 — Incident simulation drills (provider, policy, budget) (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -81,7 +81,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 |----|------|--------|----------|------------------|
 | PR-030 | CI/CD: signed artifacts, manifest validation, pre-release smoke | done | P0 | `.github/workflows/ci.yml` `release-gates` job; `scripts/release/*`, `validate-*`, `pre-release-smoke.mjs`; `npm run validate:manifests`, `release:artifacts`, `smoke:pre-release`; `src/release/release-pipeline.test.ts` (2026-05-20) |
 | PR-031 | Canary cohorts + rollback drills with MTTR evidence | done | P0 | `src/rollout/cohorts.ts`, `policy.ts` (`evaluateCanaryDecision`, `loadRolloutPolicyFromEnv`), `rollback-drill.ts`, `rollback-drill.integration.test.ts`, `npm run drill:rollback`, CI evidence artifact; runbook updated (2026-05-20) |
-| PR-032 | Incident simulation drills (provider, policy, budget) | open | P0 | `docs/OPERATIONS/RUNBOOKS/` |
+| PR-032 | Incident simulation drills (provider, policy, budget) | done | P0 | `src/operations/incident-drills*.ts`, `npm run drill:incidents`, `Incident-Simulation-Drills.md`, CI evidence artifact (2026-05-20) |
 | PR-033 | Formal go/no-go with signatories + evidence package | open | P0 | Go-No-Go summary |
 | PR-034 | L2-99 harness readiness decision recorded | open | P1 | `L2-99_Deferred-Coding-Agent-Harness-Readiness-Gate.md` |
 
@@ -271,7 +271,7 @@ Former `docs/PLANS/00_Master-Delivery-Plan.md` — unchecked phase tasks:
 | P3-01 | Performance/load tests; publish bottlenecks | open | P1 |
 | P3-02 | Top latency/cost optimizations | open | P1 |
 | P3-03 | Production capacity thresholds | open | P1 |
-| P4-01 | Rollback drill + incident drill | open | P0 |
+| P4-01 | Rollback drill + incident drill | done | P0 | PR-031 rollback + PR-032 incident drills in CI (2026-05-20) |
 | P4-02 | Post-launch metrics review | open | P1 |
 | P4-03 | Go/No-Go for Plan 99 harness kickoff | open | P1 |
 | MDP-001–004 | Portfolio hygiene tasks | open | P2 |

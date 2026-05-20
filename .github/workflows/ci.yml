@@ -94,3 +94,15 @@ jobs:
           name: rollback-drill-evidence
           path: artifacts/rollback-drill-evidence.json
           retention-days: 90
+
+      - name: Incident simulation drills (provider, policy, budget)
+        env:
+          INCIDENT_DRILL_EVIDENCE_PATH: artifacts/incident-drill-evidence.json
+        run: npm test -- --runInBand --testPathPattern=incident-drills.integration
+
+      - name: Upload incident drill evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-drill-evidence
+          path: artifacts/incident-drill-evidence.json
+          retention-days: 90

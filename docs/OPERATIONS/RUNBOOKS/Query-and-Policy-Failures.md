@@ -80,7 +80,14 @@ For rollback of a bad release or traffic kill-switch, use **Release-and-Rollback
 
 ---
 
+## Incident simulation drills (PR-032)
+
+Automated drills for the three scenarios above: **`npm run drill:incidents`** → `artifacts/incident-drill-evidence.json`. See **`Incident-Simulation-Drills.md`**.
+
+---
+
 ## References
 - `docs/PLANS/Scope-of-Work.md` §7, §4.1 Segment L (L.2b).
+- `docs/OPERATIONS/RUNBOOKS/Incident-Simulation-Drills.md`
 - `docs/OPERATIONS/RUNBOOKS/Release-and-Rollback.md`
 - `docs/SPEC/22_Runbooks_and_Operations.md`

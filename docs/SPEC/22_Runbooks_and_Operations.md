@@ -22,6 +22,7 @@ Production target: these endpoints must be protected by auth/mTLS/private networ
 | Harness Readiness Gate | `docs/OPERATIONS/RUNBOOKS/Harness-Readiness-Gate.md` | L2-99 governance gate and autonomous harness enablement |
 | Observability and Eval | `docs/OPERATIONS/RUNBOOKS/Observability-and-Eval.md` | Events, metrics, eval regression, alert tuning |
 | CI Bootstrap Troubleshooting | `docs/OPERATIONS/RUNBOOKS/CI-Bootstrap-Troubleshooting.md` | CI/build/bootstrap incident handling |
+| Incident Simulation Drills | `docs/OPERATIONS/RUNBOOKS/Incident-Simulation-Drills.md` | Provider, policy, budget drills + evidence (PR-032) |
 
 ## On-Call and Escalation
 - Primary owner: operations/platform on-call.
