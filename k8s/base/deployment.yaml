@@ -50,6 +50,12 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: RELEASE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app.kubernetes.io/version']
+            - name: BUILD_ID
+              value: "set-at-deploy-time"
             - name: REDIS_URL
               value: "redis://redis.ai-server.svc.cluster.local:6379"
           resources:

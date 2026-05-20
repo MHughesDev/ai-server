@@ -5,6 +5,8 @@
  */
 
 import { z } from "zod";
+import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
+import type { Config } from "../config/schema.js";
 
 /** Canary success/failure thresholds (L2-08). */
 export const CanaryThresholdsSchema = z.object({
@@ -126,12 +128,13 @@ export function validateReleaseConfig(config: {
  * Fail-fast when production rollout is enabled but neither `RELEASE_ID` nor `BUILD_ID` is set.
  * Soft check for production without rollout remains `validateReleaseConfig` + warn in bootstrap.
  */
-export function assertProductionReleaseMetadataWhenRollout(config: {
-  env: string;
-  flags: { platform_production_rollout_enabled: boolean };
-  release?: { release_id?: string; build_id?: string } | null;
-}): void {
-  if (config.env !== "production" || !config.flags.platform_production_rollout_enabled) {
+export function assertProductionReleaseMetadataWhenRollout(
+  config: Pick<Config, "env" | "flags" | "release">
+): void {
+  if (
+    config.env !== "production" ||
+    !resolveFeatureFlagEnabled("platform_production_rollout_enabled", config as Config)
+  ) {
     return;
   }
   const rid = config.release?.release_id?.trim();

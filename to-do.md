@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-003 — production auth config validated at bootstrap (2026-05-20)
+**Last task closed:** PR-004 — release metadata when rollout enabled (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 

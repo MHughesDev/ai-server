@@ -35,6 +35,16 @@ function applyProductionAuthEnv(): void {
   process.env.AUTH_APP_REGISTRY_JSON = PROD_AUTH_APP_JSON;
 }
 
+/** Production rollout + release traceability (PR-004). */
+function applyProductionRolloutEnv(): void {
+  process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
+  process.env.RELEASE_ID = "rel-bootstrap-test";
+  process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
+  process.env.TLS_KEY_PATH = "/tmp/key.pem";
+  process.env.TLS_CERT_PATH = "/tmp/cert.pem";
+  process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
+}
+
 function applyProductionModelEnv(): void {
   process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
   process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
@@ -199,19 +209,25 @@ describe("bootstrap", () => {
 
   it("fails production rollout when RELEASE_ID and BUILD_ID are unset", () => {
     process.env.NODE_ENV = "production";
-    process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
     applyProductionAuthEnv();
     applyProductionModelEnv();
-    process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
-    process.env.TLS_KEY_PATH = "/tmp/key.pem";
-    process.env.TLS_CERT_PATH = "/tmp/cert.pem";
-    process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
+    applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
     expect(() => bootstrap()).toThrow(
       "Production rollout requires RELEASE_ID or BUILD_ID for traceability"
     );
+  });
+
+  it("bootstraps in production with rollout and RELEASE_ID (PR-004)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionRolloutEnv();
+    const cfg = bootstrap();
+    expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
   });
 
   it("fails in production when AUDIT_LOG_PATH parent directory does not exist", () => {
