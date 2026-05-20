@@ -16,7 +16,8 @@ export function buildBudgetExceededEnvelope(
   pipelineId: string,
   workflowStart: number,
   detail: Record<string, unknown>,
-  toolCalls = 0
+  toolCalls = 0,
+  telemetryTotals?: { tokens_in?: number; cost_usd_est?: number }
 ): ResponseEnvelope {
   return {
     request_id: requestId,
@@ -31,9 +32,9 @@ export function buildBudgetExceededEnvelope(
       pipeline: pipelineId,
       models_used: [],
       tool_calls: toolCalls,
-      tokens_in: 0,
+      tokens_in: telemetryTotals?.tokens_in ?? 0,
       tokens_out: 0,
-      cost_usd_est: 0,
+      cost_usd_est: telemetryTotals?.cost_usd_est ?? 0,
       latency_ms: Date.now() - workflowStart,
     },
   };

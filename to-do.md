@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** WANT-012 — secrets never in logs/events; consistent redaction (2026-05-20)
+**Last task closed:** WANT-014 — runtime budget enforcement on multi-hop pipelines (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -135,7 +135,7 @@ Former `docs/PLANS/SOW-Documentation-Implementation-Gap-Closure.md`. Closed item
 | GAP-MODEL-002 | Medium | Capability + scope routing E2E | partial | Provider config in schema + integration proof; optional live E2E |
 | GAP-TOOL-001 | Medium | Real tool execution in production | partial | Enable `ExecutableToolGateway` under policy |
 | GAP-TOOL-002 | Medium | Sandbox + identity (implemented) | partial | Integration tests for sandbox enforcement |
-| GAP-BUDGET-001 | Medium | Deadline/cost on non-workflow paths | partial | Audit all pipeline entrypoints |
+| GAP-BUDGET-001 | Medium | Deadline/cost on non-workflow paths | done | Cumulative token/cost enforced per hop on all non-workflow pipelines (WANT-014, 2026-05-20) |
 | GAP-BUDGET-002 | Medium | All flags use dynamic resolution | partial | Bootstrap/preflight/emitter static reads if overrides required |
 | GAP-BUDGET-003 | Medium | Tenant cost durable/shared | partial | Prefer Postgres/Redis in multi-instance future |
 | GAP-MEM-001 | Medium | Retrieval timeout/context caps vs SPEC | partial | Token caps vs SPEC 17 |

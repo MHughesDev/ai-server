@@ -14,6 +14,7 @@ import {
   buildDeadlineExceededEnvelope,
   type PipelineDeadline,
 } from "../utils/pipeline-deadline.js";
+import { checkCumulativeBudgetState } from "../governance/pipeline-budget.js";
 import type { OrchestratorExecutionSpec } from "./execution-spec.js";
 import { hasToolBudgetRemaining } from "./execution-spec.js";
 
@@ -145,6 +146,18 @@ export async function runExecutionToolHarnessLoop(
     totalExecDuration += execResult.metrics?.duration_ms ?? 0;
     accumulatedExecTokens += execResult.metrics?.tokens_used ?? 0;
     accumulatedExecCost += execResult.metrics?.cost_estimate_usd ?? 0;
+    const tokenOrCostBlocked = checkCumulativeBudgetState(
+      { accumulatedTokens: accumulatedExecTokens, accumulatedCostUsd: accumulatedExecCost },
+      {
+        token_budget: spec.budgets.token_budget,
+        cost_budget_usd: spec.budgets.cost_budget_usd,
+      },
+      { requestId, pipelineId: workflowId, workflowStart, toolCalls: toolCallsCount }
+    );
+    if (tokenOrCostBlocked) {
+      endWorkflow("blocked");
+      return { status: "blocked", envelope: tokenOrCostBlocked };
+    }
     lastOutput = execResult.result_artifacts[0] ?? lastOutput;
 
     if (execResult.status !== "success") {
@@ -228,6 +241,20 @@ export async function runExecutionToolHarnessLoop(
         throw err;
       }
       toolCallsCount++;
+      accumulatedExecTokens += toolResult.metrics?.tokens_used ?? 0;
+      accumulatedExecCost += toolResult.metrics?.cost_estimate_usd ?? 0;
+      const toolHopBlocked = checkCumulativeBudgetState(
+        { accumulatedTokens: accumulatedExecTokens, accumulatedCostUsd: accumulatedExecCost },
+        {
+          token_budget: spec.budgets.token_budget,
+          cost_budget_usd: spec.budgets.cost_budget_usd,
+        },
+        { requestId, pipelineId: workflowId, workflowStart, toolCalls: toolCallsCount }
+      );
+      if (toolHopBlocked) {
+        endWorkflow("blocked");
+        return { status: "blocked", envelope: toolHopBlocked };
+      }
       if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
         const toolArtifact = toolResult.result_artifacts[0];
         context = [...context, lastOutput, toolArtifact];

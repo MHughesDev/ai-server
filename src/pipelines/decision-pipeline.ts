@@ -17,6 +17,7 @@ import { getTraceContext } from "../observability/context.js";
 import { getObservability } from "../observability/index.js";
 import { randomUUID } from "node:crypto";
 import { RequestDeadlineExceededError } from "../utils/async-deadline.js";
+import { createPipelineBudgetAccumulator } from "../governance/pipeline-budget.js";
 import {
   buildDeadlineExceededEnvelope,
   PipelineDeadline,
@@ -111,6 +112,13 @@ export function createDecisionPipeline(options: CreateDecisionPipelineOptions): 
       };
       const budgets = { token_budget: maxTokens };
       const metadata = { trace_id: traceId, contract_version: "v1" };
+      const budget = createPipelineBudgetAccumulator(plan.budgets);
+      const budgetCtx = {
+        requestId,
+        pipelineId: plan.pipeline_type,
+        workflowStart,
+        toolCalls: 0,
+      };
 
       // Step 1: Execution (generate options)
       const execInvId = randomUUID();
@@ -153,6 +161,16 @@ export function createDecisionPipeline(options: CreateDecisionPipelineOptions): 
         cost_estimate_usd: executionResult.metrics?.cost_estimate_usd,
         tokens_used: executionResult.metrics?.tokens_used,
       });
+      budget.record(executionResult.metrics);
+      const execBlocked = budget.checkBlocked(budgetCtx);
+      if (execBlocked) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "blocked",
+        });
+        return execBlocked;
+      }
 
       if (executionResult.status !== "success") {
         emitWorkflowEvent("WORKFLOW_END", {
@@ -223,7 +241,19 @@ export function createDecisionPipeline(options: CreateDecisionPipelineOptions): 
         engine_type: "evaluation",
         invocation_id: evalInvId,
         duration_ms: evalDuration,
+        cost_estimate_usd: evaluationResult.metrics?.cost_estimate_usd,
+        tokens_used: evaluationResult.metrics?.tokens_used,
       });
+      budget.record(evaluationResult.metrics);
+      const evalBlocked = budget.checkBlocked(budgetCtx);
+      if (evalBlocked) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "blocked",
+        });
+        return evalBlocked;
+      }
 
       const evalOutput =
         evaluationResult.status === "success" && evaluationResult.result_artifacts[0]
@@ -272,6 +302,16 @@ export function createDecisionPipeline(options: CreateDecisionPipelineOptions): 
         cost_estimate_usd: synthesisResult.metrics?.cost_estimate_usd,
         tokens_used: synthesisResult.metrics?.tokens_used,
       });
+      budget.record(synthesisResult.metrics);
+      const synthBlocked = budget.checkBlocked(budgetCtx);
+      if (synthBlocked) {
+        emitWorkflowEvent("WORKFLOW_END", {
+          workflow_id: workflowId,
+          duration_ms: Date.now() - workflowStart,
+          status: "blocked",
+        });
+        return synthBlocked;
+      }
 
       const memoText =
         synthesisResult.status === "success" && synthesisResult.result_artifacts[0] != null
@@ -295,10 +335,7 @@ export function createDecisionPipeline(options: CreateDecisionPipelineOptions): 
       };
       const memoArtifactId = randomUUID();
 
-      const execMetrics = executionResult.metrics ?? {};
-      const synthMetrics = synthesisResult.metrics ?? {};
-      const tokensIn = (execMetrics.tokens_used ?? 0) + (synthMetrics.tokens_used ?? 0);
-      const costUsd = (execMetrics.cost_estimate_usd ?? 0) + (synthMetrics.cost_estimate_usd ?? 0);
+      const { tokens_in: tokensIn, cost_usd_est: costUsd } = budget.totals();
 
       emitWorkflowEvent("WORKFLOW_END", {
         workflow_id: workflowId,

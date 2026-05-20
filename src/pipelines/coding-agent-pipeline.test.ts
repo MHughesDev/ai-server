@@ -122,4 +122,33 @@ describe("createCodingAgentPipeline tool_budget (WANT-014)", () => {
     expect(out.error?.code).toBe("BUDGET_EXCEEDED");
     expect(out.error?.detail).toMatchObject({ dimension: "tool_budget", tool_budget: 14 });
   });
+
+  it("returns blocked BUDGET_EXCEEDED when cumulative tokens exceed budget in single-pass mode", async () => {
+    let hop = 0;
+    const modelGateway: IModelGateway = {
+      complete() {
+        hop += 1;
+        return Promise.resolve({
+          text: "step",
+          tokens_in: 1,
+          tokens_out: hop === 1 ? 120 : 50,
+          model: "stub",
+        });
+      },
+    };
+    const pipeline = createCodingAgentPipeline({ modelGateway });
+    const input = validateAgentHarnessInput({
+      ...harnessInput(1),
+      plan: {
+        ...harnessInput(1).plan,
+        harness_autonomous_execution: false,
+        tools_enabled: [],
+        budgets: { tool_budget: 0, token_budget: 150 },
+      },
+    });
+    const out = await pipeline.run(input);
+    expect(out.status).toBe("blocked");
+    expect(out.error?.code).toBe("BUDGET_EXCEEDED");
+    expect(out.error?.detail).toMatchObject({ dimension: "token_budget", token_budget: 150 });
+  });
 });

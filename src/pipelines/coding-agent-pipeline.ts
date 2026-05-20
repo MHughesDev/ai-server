@@ -27,6 +27,7 @@ import {
   buildDeadlineExceededEnvelope,
   PipelineDeadline,
 } from "../utils/pipeline-deadline.js";
+import { createPipelineBudgetAccumulator } from "../governance/pipeline-budget.js";
 import {
   hasToolBudgetRemaining,
   resolveOrchestratorExecutionSpec,
@@ -115,6 +116,16 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
       let totalExecDuration = 0;
       let accumulatedExecTokens = 0;
       let accumulatedExecCost = 0;
+      const pipelineBudget = createPipelineBudgetAccumulator({
+        token_budget: execSpec.budgets.token_budget,
+        cost_budget_usd: execSpec.budgets.cost_budget_usd,
+      });
+      const budgetCheckCtx = () => ({
+        requestId,
+        pipelineId: plan.pipeline_type,
+        workflowStart,
+        toolCalls: toolCallsCount,
+      });
 
       const runOneExecution = async (
         contextArtifacts: TypedArtifact[],
@@ -231,6 +242,8 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         toolCallsCount = harnessOutcome.toolCallsCount;
         accumulatedExecTokens = harnessOutcome.accumulatedExecTokens;
         accumulatedExecCost = harnessOutcome.accumulatedExecCost;
+        pipelineBudget.accumulatedTokens = accumulatedExecTokens;
+        pipelineBudget.accumulatedCostUsd = accumulatedExecCost;
         totalExecDuration = harnessOutcome.totalExecDuration;
         executionOutput = harnessOutcome.lastOutput;
         toolOutput = harnessOutcome.lastOutput;
@@ -259,6 +272,20 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
           throw err;
         }
         totalExecDuration = executionResult.metrics?.duration_ms ?? 0;
+        pipelineBudget.record(executionResult.metrics);
+        const execBudgetBlocked = pipelineBudget.checkBlocked(budgetCheckCtx());
+        if (execBudgetBlocked) {
+          emitWorkflowLifecycleEvent(
+            "WORKFLOW_END",
+            {
+              workflow_id: workflowId,
+              duration_ms: Date.now() - workflowStart,
+              status: "blocked",
+            },
+            telemetryRedaction
+          );
+          return execBudgetBlocked;
+        }
 
         if (executionResult.status !== "success") {
           emitWorkflowLifecycleEvent(
@@ -331,6 +358,20 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
               telemetryRedaction
             );
             toolCallsCount += 1;
+            pipelineBudget.record(toolResult.metrics);
+            const toolBudgetBlocked = pipelineBudget.checkBlocked(budgetCheckCtx());
+            if (toolBudgetBlocked) {
+              emitWorkflowLifecycleEvent(
+                "WORKFLOW_END",
+                {
+                  workflow_id: workflowId,
+                  duration_ms: Date.now() - workflowStart,
+                  status: "blocked",
+                },
+                telemetryRedaction
+              );
+              return toolBudgetBlocked;
+            }
             if (toolResult.status === "success" && toolResult.result_artifacts[0]) {
               toolOutput = toolResult.result_artifacts[0];
             }
@@ -350,8 +391,8 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
                 pipelineType: plan.pipeline_type,
                 deadlineMs,
                 latencyMs: Date.now() - workflowStart,
-                tokensIn: executionResult.metrics?.tokens_used ?? 0,
-                costUsdEst: executionResult.metrics?.cost_estimate_usd ?? 0,
+                tokensIn: pipelineBudget.accumulatedTokens,
+                costUsdEst: pipelineBudget.accumulatedCostUsd,
               });
             }
             throw err;
@@ -414,9 +455,25 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
           engine_type: "evaluation",
           invocation_id: evalInvId,
           duration_ms: evalDuration,
+          cost_estimate_usd: evaluationResult.metrics?.cost_estimate_usd,
+          tokens_used: evaluationResult.metrics?.tokens_used,
         },
         telemetryRedaction
       );
+      pipelineBudget.record(evaluationResult.metrics);
+      const evalBudgetBlocked = pipelineBudget.checkBlocked(budgetCheckCtx());
+      if (evalBudgetBlocked) {
+        emitWorkflowLifecycleEvent(
+          "WORKFLOW_END",
+          {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "blocked",
+          },
+          telemetryRedaction
+        );
+        return evalBudgetBlocked;
+      }
 
       const synthesisInput =
         evaluationResult.status === "success" && evaluationResult.result_artifacts[0]
@@ -483,6 +540,20 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         },
         telemetryRedaction
       );
+      pipelineBudget.record(synthesisResult.metrics);
+      const synthBudgetBlocked = pipelineBudget.checkBlocked(budgetCheckCtx());
+      if (synthBudgetBlocked) {
+        emitWorkflowLifecycleEvent(
+          "WORKFLOW_END",
+          {
+            workflow_id: workflowId,
+            duration_ms: Date.now() - workflowStart,
+            status: "blocked",
+          },
+          telemetryRedaction
+        );
+        return synthBudgetBlocked;
+      }
 
       const citations = retrievalContext?.citations?.length
         ? retrievalContext.citations.map((c) => ({
@@ -505,15 +576,7 @@ export function createCodingAgentPipeline(options: CreateCodingAgentPipelineOpti
         artifact_kind: a.artifact_kind,
       }));
 
-      const synthMetrics = synthesisResult.metrics ?? {};
-      const execTokens = autonomousMode
-        ? accumulatedExecTokens
-        : (executionResult?.metrics?.tokens_used ?? 0);
-      const execCost = autonomousMode
-        ? accumulatedExecCost
-        : (executionResult?.metrics?.cost_estimate_usd ?? 0);
-      const tokensIn = execTokens + (synthMetrics.tokens_used ?? 0);
-      const costUsd = execCost + (synthMetrics.cost_estimate_usd ?? 0);
+      const { tokens_in: tokensIn, cost_usd_est: costUsd } = pipelineBudget.totals();
 
       emitWorkflowLifecycleEvent(
         "WORKFLOW_END",
