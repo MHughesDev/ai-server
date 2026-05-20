@@ -76,8 +76,14 @@ Only the following keys exist on `config.flags` (Zod `FeatureFlagsSchema`). Name
 - **Production without rollout:** if both are missing, `validateReleaseConfig` returns invalid and bootstrap logs a **warning** (server still starts).
 - **Production with `platform_production_rollout_enabled`:** bootstrap **`assertProductionReleaseMetadataWhenRollout`** — startup **throws** unless at least one of `RELEASE_ID` or `BUILD_ID` is non-empty (`src/rollout/policy.ts`, `src/bootstrap/index.ts`).
 
+## Memory persistence (PR-006)
+
+- `MEMORY_BACKEND`: `in_memory` (dev) or `vector` (production retrieval path).
+- **Production:** bootstrap requires `MEMORY_BACKEND=vector` plus `REDIS_URL` or `CHROMA_URL` (`assert-production-memory.ts`). Vector store selects Redis when `REDIS_URL` is set (`default-store.ts`).
+- `MEMORY_VECTOR_STORE_PATH`: file-backed vector for dev/single-node only.
+
 ## Retention and Limits
-- Memory retention: `MEMORY_RETENTION_TTL_SECONDS`, `MEMORY_RETENTION_MAX_CHUNKS_PER_SCOPE` → `config.memoryRetention` → in-memory store (`default-store.ts`).
+- Memory retention: `MEMORY_RETENTION_TTL_SECONDS`, `MEMORY_RETENTION_MAX_CHUNKS_PER_SCOPE` → `config.memoryRetention` → applied on in-memory and vector paths (`default-store.ts`).
 - Multimodal attachment bounds: `MAX_ATTACHMENT_COUNT`, `MAX_ATTACHMENT_BYTES`.
 - Rate limit ingress: `INGRESS_RATE_LIMIT_MAX_REQUESTS`, `INGRESS_RATE_LIMIT_WINDOW_MS`.
 

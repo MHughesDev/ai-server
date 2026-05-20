@@ -51,6 +51,12 @@ function applyProductionSecretsEnv(): void {
   process.env.SCOPED_SECRETS_JSON = JSON.stringify({ bootstrap_test: "ok" });
 }
 
+/** Production persistent memory (PR-006). */
+function applyProductionMemoryEnv(): void {
+  process.env.MEMORY_BACKEND = "vector";
+  process.env.REDIS_URL = "redis://127.0.0.1:6379";
+}
+
 function applyProductionModelEnv(): void {
   process.env.MODEL_PROVIDER_API_KEY = "sk-test-bootstrap-only";
   process.env.MODEL_GATEWAY_PROVIDERS_JSON = JSON.stringify([
@@ -135,6 +141,28 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/missing API key/);
   });
 
+  it("fails in production when MEMORY_BACKEND is in_memory (PR-006)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    process.env.MEMORY_BACKEND = "in_memory";
+    expect(() => bootstrap()).toThrow(/MEMORY_BACKEND=vector/);
+  });
+
+  it("fails in production when vector memory has no REDIS_URL or CHROMA_URL (PR-006)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    process.env.MEMORY_BACKEND = "vector";
+    delete process.env.REDIS_URL;
+    delete process.env.CHROMA_URL;
+    expect(() => bootstrap()).toThrow(/REDIS_URL or CHROMA_URL/);
+  });
+
   it("fails in production when SECRETS_BACKEND is stub (PR-005)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
@@ -160,6 +188,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     const cfg = bootstrap();
     expect(cfg.requireAuthHeader).toBe(true);
     expect(cfg.auth.query_required_scopes).toContain("query:invoke");
@@ -176,6 +205,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -193,6 +223,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -227,6 +258,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.TLS_KEY_PATH;
@@ -242,6 +274,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
@@ -256,6 +289,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     applyProductionRolloutEnv();
     const cfg = bootstrap();
     expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
@@ -267,6 +301,7 @@ describe("bootstrap", () => {
     applyProductionAuthEnv();
     applyProductionModelEnv();
     applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;
     expect(() => bootstrap()).toThrow("Production sink parent directory must exist");

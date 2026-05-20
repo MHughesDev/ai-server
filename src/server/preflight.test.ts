@@ -38,6 +38,7 @@ describe("production preflight", () => {
     process.env.MAX_BODY_BYTES = "1000000";
     process.env.REQUEST_PROCESSING_TIMEOUT_MS = "60000";
     process.env.MEMORY_BACKEND = "vector";
+    process.env.REDIS_URL = "redis://redis:6379";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     process.env.AUTH_IDP_REGISTRY_JSON = JSON.stringify([
       {

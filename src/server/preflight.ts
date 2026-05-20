@@ -166,10 +166,16 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
   add({
     id: "memory.persistent_backend",
     status:
-      config.memory.backend === "vector" || !!process.env.REDIS_URL || !!process.env.MEMORY_VECTOR_STORE_PATH
+      config.memory.backend === "vector" &&
+      (!!process.env.REDIS_URL?.trim() || !!process.env.CHROMA_URL?.trim())
         ? "pass"
-        : "warn",
-    message: "Persistent/vector memory backend configured",
+        : "fail",
+    message: "MEMORY_BACKEND=vector with REDIS_URL or CHROMA_URL for persistent memory",
+    detail: {
+      backend: config.memory.backend,
+      redis: !!process.env.REDIS_URL?.trim(),
+      chroma: !!process.env.CHROMA_URL?.trim(),
+    },
   });
 
   const dependencies = await checkOperationalDependenciesAsync(config);

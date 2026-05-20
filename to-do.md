@@ -3,7 +3,7 @@
 **Purpose:** Single task register for production readiness, target-state gaps, code stubs, documentation parity, and operations. Replaces scattered checklists and gap/backlog markdown files (see [Consolidated sources](#consolidated-sources)).
 
 **Last aggregated:** 2026-05-20 (repo scan + prior readiness docs)  
-**Last task closed:** PR-005 — production secrets backend (2026-05-20)
+**Last task closed:** PR-006 — persistent production memory (2026-05-20)
 
 **Definition of done (technical):** `npm run verify:sow` passes; `openapi.yaml` and `docs/SPEC/02_API_Contracts.md` match `src/server/routes.ts`.
 
@@ -52,7 +52,7 @@ From former `Production-Readiness-Complete-Checklist.md` Phase 1–2 and gaps re
 | PR-003 | Set auth: `AUTH_AI_JWT_SECRET`, IdP/app registry JSON, scopes | done | P0 | `assert-production-auth.ts` + bootstrap: strong `AUTH_AI_JWT_SECRET`, `REQUIRE_AUTH_HEADER`, explicit `AUTH_*_REGISTRY_JSON`, no dev IdP/app defaults, scope + issuer checks; `.env.example`; tests (2026-05-20). **Deploy:** set auth env in prod. |
 | PR-004 | Set `RELEASE_ID` / `BUILD_ID` when `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` | done | P0 | `assertProductionReleaseMetadataWhenRollout` uses `resolveFeatureFlagEnabled`; bootstrap fail-fast; `/v1/version` exposes ids; `.env.example`, k8s env; tests (2026-05-20). **Deploy:** set `RELEASE_ID` and/or `BUILD_ID` when enabling rollout. |
 | PR-005 | Replace stub secrets manager with Vault/KMS (or documented prod backend) | done | P0 | `secrets-backend.ts` + `assert-production-secrets-backend.ts`: `env`/`aws_secrets_manager`/`vault` backends, `SCOPED_SECRETS_JSON` or prefixed env; bootstrap fail-fast; preflight; tests (2026-05-20). **Deploy:** set `SECRETS_BACKEND` and inject scoped secrets. |
-| PR-006 | Configure persistent memory (Redis/vector/Chroma per product target); not in-memory only | partial | P0 | `memory/default-store.ts` |
+| PR-006 | Configure persistent memory (Redis/vector/Chroma per product target); not in-memory only | done | P0 | `assert-production-memory.ts` + bootstrap: `MEMORY_BACKEND=vector` + `REDIS_URL` or `CHROMA_URL`; preflight; k8s; `default-store` blocks in-memory vector fallback in prod; tests (2026-05-20). **Deploy:** set `MEMORY_BACKEND=vector` and `REDIS_URL`. |
 | PR-007 | Tenant budget: shared durable backend (Postgres/Redis), not process-local only | partial | P0 | `controlplane/tenant-budget.ts` |
 
 ### 1.2 Security & rollout controls

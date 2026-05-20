@@ -108,7 +108,7 @@ function createVectorStore(
   let vectorBackend;
 
   if (redisUrl) {
-    // Production: Redis vector backend with connection pooling
+    console.info("[memory] vector backend: redis", { keyPrefix: process.env.REDIS_KEY_PREFIX ?? "ai:vec:" });
     vectorBackend = new RedisVectorBackend({
       url: redisUrl,
       poolSize: parseInt(process.env.REDIS_POOL_SIZE ?? "10", 10),
@@ -119,10 +119,21 @@ function createVectorStore(
       maxRetryDelayMs: RetryConfigs.vectorStore.maxDelayMs,
     });
   } else if (vectorStorePath) {
-    // Development: File-backed vector store
+    console.info("[memory] vector backend: file", { path: vectorStorePath });
     vectorBackend = new FileVectorBackend(vectorStorePath);
   } else {
-    // Fallback: In-memory vector store
+    let isProduction = false;
+    try {
+      isProduction = getConfig().env === "production";
+    } catch {
+      // bootstrap not called yet (tests/dev)
+    }
+    if (isProduction) {
+      throw new Error(
+        "Production vector memory requires REDIS_URL or CHROMA_URL (in-memory vector fallback is not allowed)"
+      );
+    }
+    console.warn("[memory] vector backend: in-memory (dev fallback; set REDIS_URL for production)");
     vectorBackend = new InMemoryVectorBackend();
   }
 

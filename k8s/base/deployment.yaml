@@ -58,6 +58,8 @@ spec:
                   fieldPath: metadata.labels['app.kubernetes.io/version']
             - name: BUILD_ID
               value: "set-at-deploy-time"
+            - name: MEMORY_BACKEND
+              value: "vector"
             - name: REDIS_URL
               value: "redis://redis.ai-server.svc.cluster.local:6379"
           resources:
