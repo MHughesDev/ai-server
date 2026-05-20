@@ -82,6 +82,7 @@ describe("production preflight", () => {
     process.env.ROLLOUT_CANARY_SIGNOFF = "true";
     process.env.AUDIT_LOG_PATH = "/var/log/ai-server/audit.jsonl";
     process.env.OBSERVABILITY_EVENT_SINK_PATH = "/var/log/ai-server/events.ndjson";
+    process.env.OBSERVABILITY_REDACTION_LEVEL = "minimal";
 
     const config = loadConfigFromEnv();
     const report = await runProductionPreflight(config);

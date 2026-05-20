@@ -7,11 +7,10 @@ import { readFileSync } from "node:fs";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { bootstrap, getConfig } from "../bootstrap/index.js";
-import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { wirePersistentSinksFromConfig } from "../config/persistent-sinks.js";
+import { createConfiguredTelemetryEmitter } from "../config/telemetry-redaction.js";
 import {
   setObservability,
-  createEmitter,
   getTraceContext,
   getEventSink,
   safeLogError,
@@ -139,12 +138,8 @@ function main(): void {
   }
 
   wirePersistentSinksFromConfig(config);
-  if (resolveFeatureFlagEnabled("observability_required_events_v1", config)) {
-    const emitter = createEmitter({
-      redactionLevel: "minimal",
-      logToConsole: config.logLevel === "debug",
-      sampleRate: config.observability_trace_sample_rate,
-    });
+  const emitter = createConfiguredTelemetryEmitter(config);
+  if (emitter) {
     const obs: IObservability = {
       events: emitter,
       getContext: getTraceContext,

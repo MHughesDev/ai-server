@@ -1,7 +1,12 @@
 import type { Config } from "../config/schema.js";
 import { resolveFeatureFlagEnabled } from "../config/feature-flags.js";
 import { hasDurableTenantBudgetBackend } from "../controlplane/tenant-budget.js";
+import {
+  isToolExecutionEnvFlagEnabled,
+  isToolExecutionSecurityReviewSignoffAcknowledged,
+} from "../config/assert-production-tool-execution.js";
 import { isRolloutCanarySignoffAcknowledged } from "../rollout/policy.js";
+import { resolveTelemetryRedactionLevel } from "../observability/redact.js";
 import { checkOperationalDependenciesAsync } from "./dependencies.js";
 
 export type PreflightStatus = "pass" | "fail" | "warn";
@@ -140,6 +145,34 @@ export async function runProductionPreflight(config: Config): Promise<PreflightR
     id: "flags.security_controls",
     status: resolveFeatureFlagEnabled("security_hard_controls_enabled", config) ? "pass" : "fail",
     message: "SECURITY_HARD_CONTROLS_ENABLED is enabled",
+  });
+  const toolExecutionEnabled = isToolExecutionEnvFlagEnabled();
+  add({
+    id: "tools.security_review_signoff",
+    status:
+      !toolExecutionEnabled || isToolExecutionSecurityReviewSignoffAcknowledged()
+        ? "pass"
+        : "fail",
+    message:
+      "TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF=true when TOOL_EXECUTION_ENABLED=true",
+  });
+  add({
+    id: "tools.filesystem_root",
+    status:
+      !toolExecutionEnabled || !!process.env.TOOL_FILESYSTEM_ROOT?.trim()
+        ? "pass"
+        : "fail",
+    message: "TOOL_FILESYSTEM_ROOT set when executable tools are enabled",
+  });
+  add({
+    id: "observability.redaction_active",
+    status:
+      resolveFeatureFlagEnabled("observability_required_events_v1", config) &&
+      resolveTelemetryRedactionLevel() !== "none"
+        ? "pass"
+        : "fail",
+    message: "Telemetry redaction enabled (OBSERVABILITY_REDACTION_LEVEL not none)",
+    detail: { level: resolveTelemetryRedactionLevel() },
   });
   add({
     id: "security.secrets_backend",

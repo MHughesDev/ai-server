@@ -11,6 +11,8 @@ import { assertProductionSecretsBackend } from "../config/assert-production-secr
 import { assertProductionMemory } from "../config/assert-production-memory.js";
 import { assertProductionTenantBudget } from "../config/assert-production-tenant-budget.js";
 import { assertProductionPersistentSinks } from "../config/assert-production-persistent-sinks.js";
+import { assertProductionTelemetryRedaction } from "../config/assert-production-telemetry-redaction.js";
+import { assertProductionToolExecution } from "../config/assert-production-tool-execution.js";
 import { loadConfigFromEnv, type Config } from "../config/index.js";
 import { assertProductionSinkPathsWritable } from "../config/sink-paths.js";
 import { CONTRACT_VERSION } from "../contracts/index.js";
@@ -82,6 +84,8 @@ export function bootstrap(): Config {
   assertProductionMemory(config);
   assertProductionTenantBudget(config);
   assertProductionPersistentSinks(config);
+  assertProductionTelemetryRedaction(config);
+  assertProductionToolExecution(config);
   assertProductionSinkPathsWritable(config);
   if (
     config.env === "production" &&

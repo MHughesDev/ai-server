@@ -32,7 +32,7 @@ Provide end-to-end traceability for governance decisions, workflow execution, co
 - Prometheus exposition when `Accept: text/plain` or `?format=prometheus`.
 
 ## Privacy and Redaction
-- Redaction level is policy-driven and applied before log/event/audit sink writes.
+- Redaction level is policy-driven and applied before log/event/audit sink writes. **Production (PR-013):** bootstrap requires **`OBSERVABILITY_REDACTION_LEVEL`** `minimal` or `full` (not `none`), **`OBSERVABILITY_REQUIRED_EVENTS_V1=true`**, and **`SECURITY_HARD_CONTROLS_ENABLED=true`**; emitter uses `createConfiguredTelemetryEmitter` (`telemetry-redaction.ts`).
 - Raw secrets are never emitted.
 
 ## Production Requirements

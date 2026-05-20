@@ -58,6 +58,20 @@ function applyProductionSinksEnv(): void {
   process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-bootstrap-events.ndjson";
 }
 
+/** Production telemetry redaction (PR-013). */
+function applyProductionTelemetryRedactionEnv(): void {
+  process.env.OBSERVABILITY_REDACTION_LEVEL = "minimal";
+  process.env.OBSERVABILITY_REQUIRED_EVENTS_V1 = "true";
+  process.env.SECURITY_HARD_CONTROLS_ENABLED = "true";
+}
+
+/** Production executable tools after security review (PR-014). */
+function applyProductionToolExecutionEnv(): void {
+  process.env.TOOL_EXECUTION_ENABLED = "true";
+  process.env.TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF = "true";
+  process.env.TOOL_FILESYSTEM_ROOT = "/tmp/ai-server-tool-sandbox";
+}
+
 /** Production persistent memory (PR-006). */
 function applyProductionMemoryEnv(): void {
   process.env.MEMORY_BACKEND = "vector";
@@ -155,6 +169,7 @@ describe("bootstrap", () => {
     applyProductionModelEnv();
     applyProductionSecretsEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.MEMORY_BACKEND = "vector";
     process.env.CHROMA_URL = "http://chroma:8000";
     delete process.env.REDIS_URL;
@@ -205,6 +220,19 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(/scoped secrets material/);
   });
 
+  it("fails in production when OBSERVABILITY_REDACTION_LEVEL is none (PR-013)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
+    process.env.OBSERVABILITY_REDACTION_LEVEL = "none";
+    expect(() => bootstrap()).toThrow(/OBSERVABILITY_REDACTION_LEVEL=minimal/);
+  });
+
   it("fails in production when persistent sink paths are unset (PR-012)", () => {
     process.env.NODE_ENV = "production";
     process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
@@ -225,6 +253,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     const cfg = bootstrap();
     expect(cfg.requireAuthHeader).toBe(true);
     expect(cfg.auth.query_required_scopes).toContain("query:invoke");
@@ -244,6 +273,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.AUTH_AI_JWT_SECRET = "short-secret";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -264,6 +294,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.CORS_ALLOWED_ORIGINS = "*";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
     process.env.TLS_CERT_PATH = "/tmp/cert.pem";
@@ -301,6 +332,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.OBSERVABILITY_TRACE_SAMPLE_RATE = "0.1";
     delete process.env.TLS_KEY_PATH;
@@ -308,6 +340,33 @@ describe("bootstrap", () => {
     expect(() => bootstrap()).toThrow(
       "Production rollout requires TLS_KEY_PATH and TLS_CERT_PATH"
     );
+  });
+
+  it("fails in production when TOOL_EXECUTION_ENABLED without security review sign-off (PR-014)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
+    process.env.TOOL_EXECUTION_ENABLED = "true";
+    delete process.env.TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF;
+    expect(() => bootstrap()).toThrow(/TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF=true/);
+  });
+
+  it("bootstraps in production with signed-off executable tools (PR-014)", () => {
+    process.env.NODE_ENV = "production";
+    process.env.OPERATIONAL_BEARER_TOKEN = "ops-token";
+    applyProductionAuthEnv();
+    applyProductionModelEnv();
+    applyProductionSecretsEnv();
+    applyProductionMemoryEnv();
+    applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
+    applyProductionToolExecutionEnv();
+    expect(() => bootstrap()).not.toThrow();
   });
 
   it("fails production rollout when ROLLOUT_CANARY_SIGNOFF is not set (PR-010)", () => {
@@ -318,6 +377,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED = "true";
     process.env.CORS_ALLOWED_ORIGINS = "https://app.example.com";
     process.env.TLS_KEY_PATH = "/tmp/key.pem";
@@ -336,6 +396,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     applyProductionRolloutEnv();
     delete process.env.RELEASE_ID;
     delete process.env.BUILD_ID;
@@ -352,6 +413,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     applyProductionRolloutEnv();
     const cfg = bootstrap();
     expect(cfg.release?.release_id).toBe("rel-bootstrap-test");
@@ -365,6 +427,7 @@ describe("bootstrap", () => {
     applyProductionSecretsEnv();
     applyProductionMemoryEnv();
     applyProductionSinksEnv();
+    applyProductionTelemetryRedactionEnv();
     process.env.OBSERVABILITY_EVENT_SINK_PATH = "/tmp/ai-server-bootstrap-events.ndjson";
     process.env.AUDIT_LOG_PATH = "/nonexistent-sink-parent-xyz-99999/audit.jsonl";
     delete process.env.PLATFORM_PRODUCTION_ROLLOUT_ENABLED;

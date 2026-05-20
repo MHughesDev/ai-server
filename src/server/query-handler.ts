@@ -20,6 +20,7 @@ import { createNestedWorkflowPipeline } from "../pipelines/nested-workflow-pipel
 import type { WorkflowRunnerDeps } from "../workflows/runner.js";
 import { createEngineRegistry } from "../engines/registry.js";
 import { createProviderBackedModelGateway, ModelGatewayError } from "../gateways/model-gateway.js";
+import { resolveToolExecutionEnabled } from "../config/assert-production-tool-execution.js";
 import { getDefaultToolGateway, AllowlistToolGateway, ExecutableToolGateway } from "../gateways/tool-gateway.js";
 import type { ResponseEnvelope } from "../contracts/response-envelope.js";
 import {
@@ -319,7 +320,7 @@ export async function handleQuery(ingressResult: IngressResult): Promise<Respons
   const gateFlags = resolveQueryGovernanceGateFlags(ingressResult);
   const memoryRetrievalEnabled = isFlagEnabled("memory_retrieval_enabled");
   const costCapsEnabled = isFlagEnabled("enable_cost_caps");
-  const toolExecutionEnabled = process.env.TOOL_EXECUTION_ENABLED === "true";
+  const toolExecutionEnabled = resolveToolExecutionEnabled(config);
   const { observabilityEnabled, securityHardControlsEnabled } = gateFlags;
 
   return runWithContextAsync(ctx, async () => {

@@ -27,6 +27,8 @@ Secure, policy-gated, sandboxed tool execution boundary used only by Tool Engine
 - Enforce network/filesystem controls at runtime boundary (not metadata-only).
 - Bind invocation identity to audit payloads for attributable actions.
 
+**Security review sign-off (PR-014):** In production, `TOOL_EXECUTION_ENABLED=true` requires **`TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF=true`**, **`SECURITY_HARD_CONTROLS_ENABLED=true`**, and explicit **`TOOL_FILESYSTEM_ROOT`**. Bootstrap fails fast via `assertProductionToolExecution`; runtime uses `resolveToolExecutionEnabled` in `query-handler.ts`. Preflight exposes `tools.security_review_signoff` and `tools.filesystem_root` when tools are enabled.
+
 ## Observability and Audit
 - `TOOL_START` / `TOOL_END` / `TOOL_ACCESS` are emitted from **`tool_engine`** (central path for registry, workflows, and harnesses): payloads include `tool_id`, `invocation_id`, and **caller_org / caller_app / caller_user** (telemetry allowlist). Gateway **`invoke`** still receives full **`caller_identity`**.
 - **`EngineInvocation.metadata.audit_level`** / **`redaction_level`** (from policy when set by **`workflows/runner`** or **`coding-agent-pipeline`**) gate **`TOOL_ACCESS`** and redaction; default **`summary`** / **`minimal`** when omitted.

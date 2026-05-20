@@ -13,6 +13,7 @@ import {
   getTraceContext,
   createContext,
   runWithContextAsync,
+  payloadHasSensitiveKeys,
   type TelemetryEvent,
 } from "./index.js";
 import { resetMetrics, getCounterSnapshot, getHistogramSnapshot, METRIC_REQUESTS_TOTAL } from "./metrics.js";
@@ -48,19 +49,6 @@ const LIFECYCLE_ORDER = [
   "PIPELINE_END",
   "FINAL_SYNTH",
 ];
-
-const SENSITIVE_KEYS = new Set(["password", "secret", "token", "authorization", "cookie"]);
-
-function payloadHasSensitiveKeys(payload: unknown): boolean {
-  if (payload == null || typeof payload !== "object") return false;
-  const obj = payload as Record<string, unknown>;
-  for (const key of Object.keys(obj)) {
-    const lower = key.toLowerCase();
-    if (SENSITIVE_KEYS.has(lower)) return true;
-    if (typeof obj[key] === "object" && obj[key] !== null && payloadHasSensitiveKeys(obj[key])) return true;
-  }
-  return false;
-}
 
 const validEnvelope = {
   request_id: "550e8400-e29b-41d4-a716-446655440000",

@@ -2,7 +2,13 @@
  * Redaction utility tests – L2-04 Phase 0
  */
 
-import { redact, redactString, safeLogError } from "./redact.js";
+import {
+  payloadHasSensitiveKeys,
+  redact,
+  redactString,
+  resolveTelemetryRedactionLevel,
+  safeLogError,
+} from "./redact.js";
 
 describe("redact", () => {
   it("strips sensitive keys at minimal level", () => {
@@ -84,6 +90,42 @@ describe("redact", () => {
     const obj = { payload: { tags: ["hello", "world"] } };
     const out = redact(obj, "full") as { payload: { tags: unknown[] } };
     expect(out.payload.tags).toEqual(["[REDACTED]", "[REDACTED]"]);
+  });
+
+  it("strips PII keys inside payload root", () => {
+    const obj = {
+      payload: {
+        email: "user@corp.example",
+        content_b64: "aGVsbG8=",
+        stage: "ingress",
+      },
+    };
+    const out = redact(obj, "minimal", { payloadRoot: true }) as {
+      payload: Record<string, unknown>;
+    };
+    expect(out.payload).not.toHaveProperty("email");
+    expect(out.payload).not.toHaveProperty("content_b64");
+    expect(out.payload.stage).toBe("ingress");
+    expect(payloadHasSensitiveKeys(out.payload)).toBe(false);
+  });
+});
+
+describe("resolveTelemetryRedactionLevel", () => {
+  const original = process.env.OBSERVABILITY_REDACTION_LEVEL;
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.OBSERVABILITY_REDACTION_LEVEL;
+    else process.env.OBSERVABILITY_REDACTION_LEVEL = original;
+  });
+
+  it("defaults to minimal", () => {
+    delete process.env.OBSERVABILITY_REDACTION_LEVEL;
+    expect(resolveTelemetryRedactionLevel()).toBe("minimal");
+  });
+
+  it("falls back to minimal for invalid values", () => {
+    process.env.OBSERVABILITY_REDACTION_LEVEL = "invalid";
+    expect(resolveTelemetryRedactionLevel()).toBe("minimal");
   });
 });
 

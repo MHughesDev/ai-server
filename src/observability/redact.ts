@@ -81,6 +81,51 @@ const ALLOWLIST_MINIMAL = new Set([
 
 export type RedactionLevel = "none" | "minimal" | "full";
 
+const PRODUCTION_ALLOWED_LEVELS: RedactionLevel[] = ["minimal", "full"];
+
+function isSensitiveKey(key: string): boolean {
+  const keyLower = key.toLowerCase().replace(/[-_]/g, "_");
+  return (
+    SENSITIVE_KEYS.has(keyLower) ||
+    keyLower.includes("password") ||
+    keyLower.includes("secret") ||
+    keyLower.includes("credential")
+  );
+}
+
+/** Recursively detect sensitive key names (for tests and acceptance). */
+export function payloadHasSensitiveKeys(payload: unknown): boolean {
+  if (payload == null || typeof payload !== "object") return false;
+  if (Array.isArray(payload)) {
+    return payload.some((item) => payloadHasSensitiveKeys(item));
+  }
+  const record = payload as Record<string, unknown>;
+  for (const [key, value] of Object.entries(record)) {
+    if (isSensitiveKey(key)) return true;
+    if (value !== null && typeof value === "object" && payloadHasSensitiveKeys(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Resolve emitter redaction level from env (default minimal). */
+export function resolveTelemetryRedactionLevel(): RedactionLevel {
+  const raw = (process.env.OBSERVABILITY_REDACTION_LEVEL ?? "minimal").trim().toLowerCase();
+  if (raw === "none" || raw === "minimal" || raw === "full") return raw;
+  return "minimal";
+}
+
+/** Production must not disable telemetry redaction (PR-013). */
+export function assertProductionTelemetryRedactionLevel(): void {
+  const level = resolveTelemetryRedactionLevel();
+  if (!PRODUCTION_ALLOWED_LEVELS.includes(level)) {
+    throw new Error(
+      "Production requires OBSERVABILITY_REDACTION_LEVEL=minimal or full (none exposes PII/secrets in telemetry)"
+    );
+  }
+}
+
 export type RedactOptions = {
   /** When true, treat the object as a telemetry event `payload` body: allow non-allowlisted keys except sensitive. */
   payloadRoot?: boolean;
@@ -117,13 +162,7 @@ function redactRecord(
   const record = obj as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
-    const keyLower = key.toLowerCase().replace(/[-_]/g, "_");
-    if (
-      SENSITIVE_KEYS.has(keyLower) ||
-      keyLower.includes("password") ||
-      keyLower.includes("secret") ||
-      keyLower.includes("credential")
-    ) {
+    if (isSensitiveKey(key)) {
       continue;
     }
     const applyAllowlist = (level === "minimal" || level === "full") && !insideTelemetryPayload;

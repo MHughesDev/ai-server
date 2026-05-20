@@ -37,6 +37,8 @@ Only the following keys exist on `config.flags` (Zod `FeatureFlagsSchema`). Name
 
 **Canary sign-off (PR-010):** In production, `PLATFORM_PRODUCTION_ROLLOUT_ENABLED=true` requires **`ROLLOUT_CANARY_SIGNOFF=true`** first (`assertProductionRolloutCanarySignoff` in `src/rollout/policy.ts`). Preflight exposes `rollout.canary_signoff` when rollout is enabled.
 
+**Executable tools sign-off (PR-014):** In production, `TOOL_EXECUTION_ENABLED=true` requires **`TOOL_EXECUTION_SECURITY_REVIEW_SIGNOFF=true`**, **`SECURITY_HARD_CONTROLS_ENABLED=true`**, and **`TOOL_FILESYSTEM_ROOT`** (`assertProductionToolExecution` in `src/config/assert-production-tool-execution.ts`). Preflight exposes `tools.security_review_signoff` and `tools.filesystem_root` when tool execution is enabled.
+
 **Async jobs:** There is **no** `enable_async_jobs` flag. Job endpoints are available when `QUEUE_WORKERS_COUNT` (and related queue env) cause `bootstrap` to register a `JobQueueService` (`src/bootstrap/index.ts`); otherwise routes return **503** `ASYNC_NOT_AVAILABLE`.
 
 ---
