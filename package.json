@@ -21,7 +21,19 @@
     "start:dev": "tsx src/server/index.ts",
     "serve": "node dist/server/index.js",
     "serve:dev": "tsx src/server/index.ts",
-    "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test"
+    "verify:sow": "npm run lint && npm run typecheck && npm run build && npm test",
+    "queue:top-item": "python queue/scripts/queue_top_item.py",
+    "queue:peek": "python queue/scripts/queue_peek.py",
+    "queue:validate": "python queue/scripts/queue_validate.py",
+    "queue:archive": "python queue/scripts/queue_archive.py",
+    "queue:archive-top": "python queue/scripts/queue_archive.py --top",
+    "queue:graph": "python queue/scripts/queue_graph.py",
+    "queue:analyze": "python queue/scripts/queue_analyze.py",
+    "queue:test": "python queue/dev_mcp/queue_ops/test_queue_ops.py",
+    "queue:pr-merge": "python queue/scripts/queue_pr_merge.py",
+    "queue:audit": "python queue/scripts/audit_self.py",
+    "skills:list": "python queue/scripts/skills_list.py",
+    "idea:queue": "python queue/skills/queue-seeder.py --repo-root ."
   },
   "dependencies": {
     "zod": "^3.22.4"
